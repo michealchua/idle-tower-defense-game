@@ -11,7 +11,10 @@ export const mapConfig = {
   // ever-taller column. See layoutHeroPositions.
   heroColumns: 3,
   heroColSpacing: 44,
-  petRowOffset: 70,
+  // Pets trail the hero line toward the base (smaller x = further from the
+  // spawn side enemies march in from), not just below it - reads as
+  // "following the squad" instead of "parked under it".
+  petTrailOffset: 46,
   petRowSpacing: 24,
 };
 
@@ -34,12 +37,12 @@ export function layoutHeroPositions(count: number): Position[] {
   });
 }
 
-// Pets sit in their own row further out from the hero anchor so they read
-// as visually secondary to heroes.
+// Pets sit behind the hero anchor (toward the base, away from the spawn
+// side) so they read as following the squad rather than parked under it.
 export function layoutPetPositions(count: number): Position[] {
   const { x, y } = mapConfig.heroPosition;
   return Array.from({ length: count }, (_, index) => ({
-    x,
-    y: y + mapConfig.petRowOffset + (index - (count - 1) / 2) * mapConfig.petRowSpacing,
+    x: x - mapConfig.petTrailOffset,
+    y: y + (index - (count - 1) / 2) * mapConfig.petRowSpacing,
   }));
 }

@@ -236,13 +236,38 @@ function drawHero(ctx: CanvasRenderingContext2D, hero: HeroState, pulseScale: nu
 }
 
 // Pets are static-stat combatants with no evolution tier - one plain style
-// keeps them visually secondary to heroes.
+// keeps them visually secondary to heroes, used only as a fallback when no
+// dedicated sprite has been dropped in yet (see drawPet).
 const PET_VISUAL_COLOR = '#26a69a';
 
-function drawPet(ctx: CanvasRenderingContext2D, pet: PetState): void {
+// Gentle vertical bob so a following pet reads as "floating" rather than
+// glued in place - amplitude is small and per-pet phase (via bobSeed) keeps
+// a multi-pet squad from all bobbing in lockstep.
+const PET_BOB_AMPLITUDE = 3;
+const PET_BOB_SPEED = 2.4;
+
+// Looked up by petRosterConfig id, same convention as biome.backgroundImage
+// (served from public/, missing file just falls back silently - see
+// assetLoader.getImage). Drop pet-N.png into public/sprites/pets/ to
+// replace the placeholder circle with real pixel art, no code changes
+// needed.
+function getPetSpriteSrc(petId: string): string {
+  return `/sprites/pets/${petId}.png`;
+}
+
+function drawPet(ctx: CanvasRenderingContext2D, pet: PetState, bobSeed: number, nowSeconds: number): void {
+  const bobY = pet.position.y + Math.sin(nowSeconds * PET_BOB_SPEED + bobSeed) * PET_BOB_AMPLITUDE;
+  const sprite = getImage(getPetSpriteSrc(pet.id));
+
+  if (sprite) {
+    const size = PET_RADIUS * 2;
+    ctx.drawImage(sprite, pet.position.x - size / 2, bobY - size / 2, size, size);
+    return;
+  }
+
   ctx.fillStyle = PET_VISUAL_COLOR;
   ctx.beginPath();
-  ctx.arc(pet.position.x, pet.position.y, PET_RADIUS, 0, Math.PI * 2);
+  ctx.arc(pet.position.x, bobY, PET_RADIUS, 0, Math.PI * 2);
   ctx.fill();
 }
 
@@ -313,6 +338,37 @@ function drawEnemy(ctx: CanvasRenderingContext2D, enemy: EnemyState): void {
   drawHpBar(ctx, enemy.position.x, enemy.position.y - enemyRadius - 12, enemy.currentHp / enemy.maxHp);
 }
 
+// How fast (logical px/sec) the background pans left while the squad is
+// advancing (no enemies on field) - tuned to read as a brisk march, not a
+// blur, at the 400x300 logical resolution everything else here is authored
+// against.
+const BACKGROUND_SCROLL_SPEED = 36;
+
+// Module-level, not GameState - this is pure presentation (same "not worth
+// a state field" precedent as assetLoader's imageCache), and resetting it on
+// reload/biome-change is harmless since it's just a tiling phase.
+let backgroundScrollX = 0;
+let lastScrollTimestampMs: number | null = null;
+
+// Advances the shared scroll phase once per rendered frame - only when
+// nothing is fighting; a live encounter (state.enemies.length > 0) freezes
+// the world in place so the squad visibly "holds ground" instead of sliding
+// out from under the fight. Clamped delta guards against a huge jump after
+// the tab was backgrounded (rAF throttles/stops while hidden) or on the very
+// first frame (lastScrollTimestampMs still null).
+function advanceBackgroundScroll(hasActiveEncounter: boolean, nowMs: number): void {
+  if (lastScrollTimestampMs === null) {
+    lastScrollTimestampMs = nowMs;
+    return;
+  }
+  const deltaSeconds = Math.min((nowMs - lastScrollTimestampMs) / 1000, 0.1);
+  lastScrollTimestampMs = nowMs;
+
+  if (!hasActiveEncounter) {
+    backgroundScrollX += BACKGROUND_SCROLL_SPEED * deltaSeconds;
+  }
+}
+
 function drawBackground(ctx: CanvasRenderingContext2D, canvasWidth: number, canvasHeight: number, biome: BiomeDefinition): void {
   const image = getImage(biome.backgroundImage);
   if (!image) {
@@ -324,14 +380,22 @@ function drawBackground(ctx: CanvasRenderingContext2D, canvasWidth: number, canv
   // "Cover" fit (like CSS background-size: cover), not a plain stretch -
   // source art is 1920x1080 (16:9) while the logical canvas is 400x300
   // (4:3), so an independent x/y stretch would visibly squash it. Scale
-  // uniformly to fill the canvas completely and crop the overflow (the
-  // canvas already clips anything drawn past its own bounds) instead.
+  // uniformly to fill the canvas height completely; unlike the old static
+  // draw this no longer centers horizontally, since the tiling loop below
+  // needs the full drawWidth to repeat edge-to-edge.
   const scale = Math.max(canvasWidth / image.width, canvasHeight / image.height);
   const drawWidth = image.width * scale;
   const drawHeight = image.height * scale;
-  const offsetX = (canvasWidth - drawWidth) / 2;
   const offsetY = (canvasHeight - drawHeight) / 2;
-  ctx.drawImage(image, offsetX, offsetY, drawWidth, drawHeight);
+
+  // Seamless scroll: same image tiled left-to-right, panned by the shared
+  // scroll phase and wrapped modulo one tile's width. Starting one tile
+  // before the visible edge and walking right until past canvasWidth always
+  // covers the full canvas regardless of how drawWidth compares to it.
+  const wrappedOffset = ((backgroundScrollX % drawWidth) + drawWidth) % drawWidth;
+  for (let x = -wrappedOffset - drawWidth; x < canvasWidth; x += drawWidth) {
+    ctx.drawImage(image, x, offsetY, drawWidth, drawHeight);
+  }
 }
 
 // Drawn on top of everything else, only while a roster card is actively
@@ -404,6 +468,9 @@ export function renderScene(
   base: BaseState,
   visualEffects: VisualEffect[],
 ): void {
+  const nowMs = performance.now();
+  advanceBackgroundScroll(enemies.length > 0, nowMs);
+
   ctx.clearRect(0, 0, canvasWidth, canvasHeight);
   drawBackground(ctx, canvasWidth, canvasHeight, biome);
 
@@ -420,9 +487,10 @@ export function renderScene(
     drawHero(ctx, hero, pulseScale);
   }
 
-  for (const pet of pets) {
-    drawPet(ctx, pet);
-  }
+  const nowSeconds = nowMs / 1000;
+  pets.forEach((pet, index) => {
+    drawPet(ctx, pet, index * 1.7, nowSeconds);
+  });
 
   for (const enemy of enemies) {
     drawEnemy(ctx, enemy);
