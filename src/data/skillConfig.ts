@@ -1,10 +1,11 @@
 // Pure data - no engine imports. Adding a same-shaped skill (another
 // aoeDamage nuke, or another chainDamage skill) is just a new entry here
-// plus a milestone reward pointing at its id. A differently-shaped skill
-// (a duration-based debuff, etc.) needs a new `effectType` handled inside
-// SkillSystem, but never a change to this file's shape.
+// plus a hero's skillUnlocks entry pointing at its id (see
+// heroRosterConfig.ts). A differently-shaped skill (a duration-based debuff,
+// etc.) needs a new `effectType` handled inside SkillSystem, but never a
+// change to this file's shape.
 
-export type SkillEffectType = 'aoeDamage' | 'chainDamage';
+export type SkillEffectType = 'aoeDamage' | 'chainDamage' | 'healAlly';
 
 // Delivery/visual signature, orthogonal to effectType (what the skill does).
 // SkillSystem and the renderer don't branch on this yet, but the field
@@ -22,21 +23,33 @@ export type SkillTargetingStrategyKey =
 
 export interface SkillDefinition {
   id: string;
+  // i18n key for the skill's display name - looked up directly by
+  // HeroPanel instead of a separate hardcoded label map, since the roster
+  // now has ~18 skills spread across 100 heroes instead of 3 shared ones.
+  nameKey: string;
   cooldownSeconds: number;
   range: number;
   castType: SkillCastType;
   effectType: SkillEffectType;
+  // Enemy-targeting strategy, used by aoeDamage/chainDamage only.
+  // healAlly ignores this - it always targets the lowest-HP% deployed
+  // heroes in range (see SkillSystem.castHealAlly) - kept set to a
+  // placeholder value so every definition satisfies the same shape.
   targetingStrategy: SkillTargetingStrategyKey;
+  // aoeDamage/chainDamage: multiplies attackDamage into damage dealt.
+  // healAlly: multiplies attackDamage into HP restored per target instead.
   damageMultiplier: number;
   // Used by 'aoeDamage' only.
   aoeRadius?: number;
-  // Used by 'chainDamage' only.
+  // chainDamage: how many enemies it hits. healAlly: how many allies it heals.
   targetCount?: number;
 }
 
 export const skillDefinitions: Record<string, SkillDefinition> = {
+  // --- aoeDamage (6) ---
   'skill-fireball': {
     id: 'skill-fireball',
+    nameKey: 'skill.fireball',
     cooldownSeconds: 4,
     range: 250,
     castType: 'projectile',
@@ -50,6 +63,7 @@ export const skillDefinitions: Record<string, SkillDefinition> = {
   // both already scale off these numbers.
   'skill-meteor': {
     id: 'skill-meteor',
+    nameKey: 'skill.meteor',
     cooldownSeconds: 12,
     range: 300,
     castType: 'instant',
@@ -58,11 +72,58 @@ export const skillDefinitions: Record<string, SkillDefinition> = {
     aoeRadius: 100,
     damageMultiplier: 3,
   },
+  'skill-flameNova': {
+    id: 'skill-flameNova',
+    nameKey: 'skill.flameNova',
+    cooldownSeconds: 6,
+    range: 180,
+    castType: 'aura',
+    effectType: 'aoeDamage',
+    targetingStrategy: 'closestToHero',
+    aoeRadius: 70,
+    damageMultiplier: 1.2,
+  },
+  'skill-iceBurst': {
+    id: 'skill-iceBurst',
+    nameKey: 'skill.iceBurst',
+    cooldownSeconds: 7,
+    range: 220,
+    castType: 'projectile',
+    effectType: 'aoeDamage',
+    targetingStrategy: 'strongest',
+    aoeRadius: 80,
+    damageMultiplier: 1.7,
+  },
+  'skill-earthquake': {
+    id: 'skill-earthquake',
+    nameKey: 'skill.earthquake',
+    cooldownSeconds: 14,
+    range: 260,
+    castType: 'instant',
+    effectType: 'aoeDamage',
+    targetingStrategy: 'closestToBase',
+    aoeRadius: 120,
+    damageMultiplier: 3.4,
+  },
+  'skill-novaBlast': {
+    id: 'skill-novaBlast',
+    nameKey: 'skill.novaBlast',
+    cooldownSeconds: 5,
+    range: 200,
+    castType: 'aura',
+    effectType: 'aoeDamage',
+    targetingStrategy: 'heroDefault',
+    aoeRadius: 55,
+    damageMultiplier: 1.4,
+  },
+
+  // --- chainDamage (6) ---
   // First chainDamage skill - hits several distinct targets instead of one
   // AOE point. Uses lowestHp priority (mop up weakened stragglers) instead
   // of heroDefault, giving it a different tactical role from Fireball/Meteor.
   'skill-lightning': {
     id: 'skill-lightning',
+    nameKey: 'skill.lightning',
     cooldownSeconds: 3,
     range: 220,
     castType: 'beam',
@@ -70,5 +131,130 @@ export const skillDefinitions: Record<string, SkillDefinition> = {
     targetingStrategy: 'lowestHp',
     targetCount: 3,
     damageMultiplier: 0.8,
+  },
+  'skill-arrowRain': {
+    id: 'skill-arrowRain',
+    nameKey: 'skill.arrowRain',
+    cooldownSeconds: 5,
+    range: 260,
+    castType: 'projectile',
+    effectType: 'chainDamage',
+    targetingStrategy: 'closestToBase',
+    targetCount: 4,
+    damageMultiplier: 0.6,
+  },
+  'skill-chainBlade': {
+    id: 'skill-chainBlade',
+    nameKey: 'skill.chainBlade',
+    cooldownSeconds: 4,
+    range: 140,
+    castType: 'instant',
+    effectType: 'chainDamage',
+    targetingStrategy: 'closestToHero',
+    targetCount: 2,
+    damageMultiplier: 1.1,
+  },
+  'skill-thornWhip': {
+    id: 'skill-thornWhip',
+    nameKey: 'skill.thornWhip',
+    cooldownSeconds: 6,
+    range: 180,
+    castType: 'beam',
+    effectType: 'chainDamage',
+    targetingStrategy: 'highestHp',
+    targetCount: 2,
+    damageMultiplier: 1.3,
+  },
+  'skill-spiritLink': {
+    id: 'skill-spiritLink',
+    nameKey: 'skill.spiritLink',
+    cooldownSeconds: 8,
+    range: 240,
+    castType: 'beam',
+    effectType: 'chainDamage',
+    targetingStrategy: 'strongest',
+    targetCount: 3,
+    damageMultiplier: 1,
+  },
+  'skill-voidChain': {
+    id: 'skill-voidChain',
+    nameKey: 'skill.voidChain',
+    cooldownSeconds: 10,
+    range: 280,
+    castType: 'beam',
+    effectType: 'chainDamage',
+    targetingStrategy: 'random',
+    targetCount: 5,
+    damageMultiplier: 0.7,
+  },
+
+  // --- healAlly (6) - support-flavored heroes' answer to enemy Healer
+  // (EnemyAbilitySystem) - restores deployed heroes' currentHp instead of
+  // damaging enemies. See SkillSystem.castHealAlly.
+  'skill-healingLight': {
+    id: 'skill-healingLight',
+    nameKey: 'skill.healingLight',
+    cooldownSeconds: 6,
+    range: 200,
+    castType: 'aura',
+    effectType: 'healAlly',
+    targetingStrategy: 'lowestHp',
+    targetCount: 1,
+    damageMultiplier: 1.2,
+  },
+  'skill-natureBlessing': {
+    id: 'skill-natureBlessing',
+    nameKey: 'skill.natureBlessing',
+    cooldownSeconds: 9,
+    range: 220,
+    castType: 'aura',
+    effectType: 'healAlly',
+    targetingStrategy: 'lowestHp',
+    targetCount: 2,
+    damageMultiplier: 0.9,
+  },
+  'skill-sanctuary': {
+    id: 'skill-sanctuary',
+    nameKey: 'skill.sanctuary',
+    cooldownSeconds: 14,
+    range: 260,
+    castType: 'aura',
+    effectType: 'healAlly',
+    targetingStrategy: 'lowestHp',
+    targetCount: 5,
+    damageMultiplier: 0.6,
+  },
+  'skill-lifeSpring': {
+    id: 'skill-lifeSpring',
+    nameKey: 'skill.lifeSpring',
+    cooldownSeconds: 5,
+    range: 180,
+    castType: 'instant',
+    effectType: 'healAlly',
+    targetingStrategy: 'lowestHp',
+    targetCount: 1,
+    damageMultiplier: 1.6,
+  },
+  'skill-guardianPulse': {
+    id: 'skill-guardianPulse',
+    nameKey: 'skill.guardianPulse',
+    cooldownSeconds: 10,
+    range: 240,
+    castType: 'aura',
+    effectType: 'healAlly',
+    targetingStrategy: 'lowestHp',
+    targetCount: 3,
+    damageMultiplier: 0.8,
+  },
+  'skill-phoenixGrace': {
+    id: 'skill-phoenixGrace',
+    nameKey: 'skill.phoenixGrace',
+    cooldownSeconds: 18,
+    range: 300,
+    castType: 'instant',
+    effectType: 'healAlly',
+    targetingStrategy: 'lowestHp',
+    targetCount: 9,
+    damageMultiplier: 0.5,
   },
 };

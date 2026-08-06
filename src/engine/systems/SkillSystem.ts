@@ -1,7 +1,9 @@
 import { skillDefinitions, type SkillDefinition, type SkillTargetingStrategyKey } from '../../data/skillConfig';
+import { getHeroDefinition } from '../../data/heroRosterConfig';
 import { effectLifetimes } from '../../data/effectConfig';
 import {
   TargetingStrategies,
+  distance,
   getEnemiesInRange,
   heroDefaultStrategy,
   pickBestTarget,
@@ -33,8 +35,10 @@ export function tickSkills(state: GameState, deltaSeconds: number): void {
 }
 
 function tickHeroSkills(state: GameState, hero: HeroState, deltaSeconds: number): void {
-  for (const skillId of Object.keys(skillDefinitions)) {
-    if (!hero.unlockedMilestoneIds.includes(skillId)) {
+  const skillIds = getHeroDefinition(hero.id).skillUnlocks.map((unlock) => unlock.skillId);
+
+  for (const skillId of skillIds) {
+    if (!hero.unlockedSkillIds.includes(skillId)) {
       continue;
     }
 
@@ -67,6 +71,8 @@ function tryCastSkill(state: GameState, hero: HeroState, definition: SkillDefini
       return castAoeDamage(state, hero, definition);
     case 'chainDamage':
       return castChainDamage(state, hero, definition);
+    case 'healAlly':
+      return castHealAlly(state, hero, definition);
     default:
       return false;
   }
@@ -123,6 +129,37 @@ function castChainDamage(state: GameState, hero: HeroState, definition: SkillDef
 
     const damageResult = calculateDamage(hero.attackDamage * definition.damageMultiplier, 0);
     applyDamage(state, target, damageResult);
+  }
+
+  return true;
+}
+
+// Support-flavored skills (skillConfig.ts's healAlly entries) - always
+// targets the lowest-HP% deployed heroes in range, ignoring
+// definition.targetingStrategy entirely (that field only makes sense for
+// picking among enemies). This is the "补师" path referenced in
+// heroConfig.ts: HP lost to enemy attacks (CombatSystem.tickEnemyAttacksOnHeroes)
+// can be restored here instead of only on the next wave.
+function castHealAlly(state: GameState, hero: HeroState, definition: SkillDefinition): boolean {
+  const injured = getDeployedHeroes(state)
+    .filter((candidate) => distance(candidate.position, hero.position) <= definition.range && candidate.currentHp < candidate.maxHp)
+    .sort((a, b) => a.currentHp / a.maxHp - b.currentHp / b.maxHp);
+  const targets = injured.slice(0, definition.targetCount ?? 1);
+
+  if (targets.length === 0) {
+    return false;
+  }
+
+  const healAmount = hero.attackDamage * definition.damageMultiplier;
+  for (const target of targets) {
+    target.currentHp = Math.min(target.maxHp, target.currentHp + healAmount);
+    spawnVisualEffect(state, {
+      kind: 'healPulse',
+      x: target.position.x,
+      y: target.position.y,
+      radius: 30,
+      lifetime: effectLifetimes.healPulse,
+    });
   }
 
   return true;

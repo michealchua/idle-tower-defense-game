@@ -1,8 +1,10 @@
 import { spawnVisualEffect } from './EffectsSystem';
-import { getEnemiesInRange, heroDefaultStrategy, pickBestTarget } from './TargetingSystem';
-import { calculateDamage, applyDamage } from './DamageSystem';
+import { distance, getEnemiesInRange, heroDefaultStrategy, pickBestTarget } from './TargetingSystem';
+import { calculateDamage, applyDamage, applyDamageToHero } from './DamageSystem';
 import { getDeployedHeroes } from './HeroStatsSystem';
 import { effectLifetimes } from '../../data/effectConfig';
+import { enemyHeroAttackIntervalSeconds } from '../../data/enemyConfig';
+import { heroBaseConfig } from '../../data/heroConfig';
 import type { GameState, Position } from '../types';
 
 interface Attacker {
@@ -52,5 +54,33 @@ function tickAttackerCombat(state: GameState, attacker: Attacker, deltaSeconds: 
 export function tickCombat(state: GameState, deltaSeconds: number): void {
   for (const hero of getDeployedHeroes(state)) {
     tickAttackerCombat(state, hero, deltaSeconds);
+  }
+}
+
+// Mirror of tickAttackerCombat, enemy-side - an enemy inside a hero's attack
+// range chips away at a random in-range deployed hero on its own cooldown.
+// Deliberately simple (no priority targeting) since this is supplementary
+// attrition on the squad, not the primary lose condition (see
+// applyDamageToHero) - MovementSystem/base HP remains the real threat.
+export function tickEnemyAttacksOnHeroes(state: GameState, deltaSeconds: number): void {
+  const heroes = getDeployedHeroes(state);
+  if (heroes.length === 0) {
+    return;
+  }
+
+  for (const enemy of state.enemies) {
+    enemy.heroAttackCooldownRemaining = Math.max(0, enemy.heroAttackCooldownRemaining - deltaSeconds);
+    if (enemy.heroAttackCooldownRemaining > 0) {
+      continue;
+    }
+
+    const inRange = heroes.filter((hero) => distance(hero.position, enemy.position) <= heroBaseConfig.attackRange);
+    if (inRange.length === 0) {
+      continue;
+    }
+
+    const target = inRange[Math.floor(Math.random() * inRange.length)];
+    applyDamageToHero(state, target, enemy.heroDamage);
+    enemy.heroAttackCooldownRemaining = enemyHeroAttackIntervalSeconds;
   }
 }

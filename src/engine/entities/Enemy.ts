@@ -21,6 +21,8 @@ export function createEnemy(archetypeId: EnemyArchetypeId, difficultyScore: numb
     // engagement-window math (whether there's time to land hits in range).
     speed: enemyBaseStats.speed * archetype.speedMultiplier,
     damageToBase: Math.round(enemyBaseStats.damageToBase * archetype.damageToBaseMultiplier * scale),
+    heroDamage: Math.round(enemyBaseStats.heroDamage * archetype.damageToBaseMultiplier * scale),
+    heroAttackCooldownRemaining: 0,
     position: { ...mapConfig.spawnPosition },
     shieldActive: archetype.hasShield ?? false,
     abilityCooldownRemaining: 0,

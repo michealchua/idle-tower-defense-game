@@ -4,6 +4,7 @@ import { skillDefinitions } from '../data/skillConfig';
 import { getMaxDeployedHeroes } from '../data/castleConfig';
 import { heroUpgradeConfig, type UpgradeableStat } from '../data/heroConfig';
 import { MAX_STAR_LEVEL, gachaRarityConfig, getStarUpCost, type GachaRarity } from '../data/gachaConfig';
+import { getActiveBondCounts, type BondId } from '../data/bondConfig';
 import { isHeroUpgradeMaxed, previewHeroUpgradeBulk } from '../engine/systems/UpgradeSystem';
 import type { HeroState } from '../engine/types';
 import { t } from '../locales/i18n';
@@ -77,10 +78,13 @@ function HeroUpgradeSection({ hero, gold }: { hero: HeroState; gold: number }) {
   );
 }
 
-const SKILL_LABEL_KEYS: Record<string, string> = {
-  'skill-fireball': 'skill.fireball',
-  'skill-meteor': 'skill.meteor',
-  'skill-lightning': 'skill.lightning',
+const BOND_LABEL_KEYS: Record<BondId, string> = {
+  warrior: 'bond.warrior',
+  mage: 'bond.mage',
+  archer: 'bond.archer',
+  guardian: 'bond.guardian',
+  support: 'bond.support',
+  assassin: 'bond.assassin',
 };
 
 const RARITY_LABEL_KEYS: Record<GachaRarity, string> = {
@@ -139,6 +143,7 @@ function HeroPanel({ gameScreenRef }: { gameScreenRef: RefObject<HTMLDivElement>
   const maxDeployedHeroes = getMaxDeployedHeroes(castleLevel);
   const squadFull = deployedHeroIds.length >= maxDeployedHeroes;
   const ownedHeroes = heroRosterConfig.filter((definition) => unlockedHeroIds.includes(definition.id));
+  const activeBondCounts = getActiveBondCounts(deployedHeroIds);
 
   const { drag, registerGameScreen, handlePointerDown, handlePointerMove, handlePointerUp, handlePointerCancel } = useDeploySlotDrag({
     onToggle: (id) => {
@@ -208,17 +213,24 @@ function HeroPanel({ gameScreenRef }: { gameScreenRef: RefObject<HTMLDivElement>
                   onPointerCancel={handlePointerCancel}
                 >
                   <div className={`item-name ${RARITY_CLASS[definition.rarity]}`}>
-                    ⠿ {rarityLabel}·{definition.id} Lv.{hero.level} ★{currentStar}/{MAX_STAR_LEVEL}
+                    ⠿ {rarityLabel}
+                    {definition.id.split('-')[1]} Lv.{hero.level} ★{currentStar}/{MAX_STAR_LEVEL}
                   </div>
                   <div className="item-detail">
                     {t('hero.attackDamage')} {Math.round(hero.attackDamage)} · {t('hero.hp')} {Math.round(hero.currentHp)}/
                     {Math.round(hero.maxHp)}
                   </div>
                   <div className="bar-track" style={{ marginTop: 4 }}>
+                    <div className="bar-fill bar-fill-hp" style={{ width: `${Math.max(0, hero.currentHp / hero.maxHp) * 100}%` }} />
+                  </div>
+                  <div className="bar-track" style={{ marginTop: 4 }}>
                     <div className="bar-fill bar-fill-exp" style={{ width: `${expRatio * 100}%` }} />
                   </div>
                   <div className="item-detail">
                     {t('hero.exp')} {hero.exp}/{hero.expToNextLevel}
+                  </div>
+                  <div className="item-detail">
+                    {t('hero.bond')}: {t(BOND_LABEL_KEYS[definition.bondId])} ({activeBondCounts[definition.bondId] ?? 0})
                   </div>
                   <div className="item-detail">
                     {isDeployed ? t('squad.deployed') : squadFull ? t('squad.full') : t('squad.tapToDeploy')}
@@ -244,16 +256,18 @@ function HeroPanel({ gameScreenRef }: { gameScreenRef: RefObject<HTMLDivElement>
                         : t('star.maxed')}
                     </button>
                   </div>
-                  {Object.keys(skillDefinitions)
-                    .filter((skillId) => hero.unlockedMilestoneIds.includes(skillId))
-                    .map((skillId) => {
-                      const cooldownRemaining = hero.skills[skillId]?.cooldownRemaining ?? 0;
-                      return (
-                        <div key={skillId} className="text-faint" style={{ marginTop: 2 }}>
-                          {t(SKILL_LABEL_KEYS[skillId])}: {cooldownRemaining > 0 ? `${cooldownRemaining.toFixed(1)}s` : t('skill.ready')}
-                        </div>
-                      );
-                    })}
+                  {definition.skillUnlocks.map((unlock) => {
+                    const skillDef = skillDefinitions[unlock.skillId];
+                    const isUnlocked = hero.unlockedSkillIds.includes(unlock.skillId);
+                    const cooldownRemaining = hero.skills[unlock.skillId]?.cooldownRemaining ?? 0;
+                    return (
+                      <div key={unlock.skillId} className="text-faint" style={{ marginTop: 2 }}>
+                        {isUnlocked
+                          ? `${t(skillDef.nameKey)}: ${cooldownRemaining > 0 ? `${cooldownRemaining.toFixed(1)}s` : t('skill.ready')}`
+                          : `${t(skillDef.nameKey)} (Lv.${unlock.level})`}
+                      </div>
+                    );
+                  })}
                   <HeroUpgradeSection hero={hero} gold={gold} />
                 </div>
               );
@@ -264,7 +278,8 @@ function HeroPanel({ gameScreenRef }: { gameScreenRef: RefObject<HTMLDivElement>
 
       {draggingDefinition && (
         <div className="drag-ghost" style={{ left: drag.pointerX, top: drag.pointerY }}>
-          {t(RARITY_LABEL_KEYS[draggingDefinition.rarity])}·{draggingDefinition.id}
+          {t(RARITY_LABEL_KEYS[draggingDefinition.rarity])}
+          {draggingDefinition.id.split('-')[1]}
         </div>
       )}
     </div>

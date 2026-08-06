@@ -30,9 +30,14 @@ export function createInitialWaveState(): WaveState {
 
 // Resets the battlefield for a fresh wave attempt - shared by both
 // advancing and retrying, since both start the wave "clean" (see plan: base
-// full-heals each wave rather than carrying chip damage over).
+// full-heals each wave rather than carrying chip damage over). Heroes get
+// the same treatment - chip damage from CombatSystem.tickEnemyAttacksOnHeroes
+// doesn't carry across waves, only within one.
 function resetBattlefieldForWave(state: GameState): void {
   state.base.currentHp = state.base.maxHp;
+  for (const hero of state.heroes) {
+    hero.currentHp = hero.maxHp;
+  }
   state.enemies = [];
   state.spawnCooldownRemaining = 0;
 }

@@ -5,7 +5,7 @@ import { effectLifetimes } from '../../data/effectConfig';
 import { getTalentMultiplier, talentPointRewardConfig } from '../../data/talentConfig';
 import { getAscensionShopMultiplier } from '../../data/ascensionShopConfig';
 import { diamondRewardConfig } from '../../data/diamondConfig';
-import type { EnemyState, GameState } from '../types';
+import type { EnemyState, GameState, HeroState } from '../types';
 
 export interface DamageResult {
   amount: number;
@@ -48,6 +48,26 @@ export function applyDamage(state: GameState, target: EnemyState, damage: Damage
   if (target.currentHp <= 0) {
     handleDeath(state, target);
   }
+}
+
+// Chip damage from CombatSystem.tickEnemyAttacksOnHeroes - clamped to a
+// minimum of 1 rather than letting it reach 0, since there's no hero
+// death/revival state built yet (same clamp precedent as
+// HeroStatsSystem.recomputeHeroStats' post-levelup/equip heal). Heroes stay
+// on the field and keep fighting even at 1 HP; a wave transition
+// (WaveSystem.resetBattlefieldForWave) or a healAlly skill is what brings
+// them back up.
+export function applyDamageToHero(state: GameState, hero: HeroState, amount: number): void {
+  hero.currentHp = Math.max(1, hero.currentHp - amount);
+
+  spawnVisualEffect(state, {
+    kind: 'damageNumber',
+    x: hero.position.x,
+    y: hero.position.y,
+    amount,
+    isCritical: false,
+    lifetime: effectLifetimes.damageNumber,
+  });
 }
 
 export function handleDeath(state: GameState, target: EnemyState): void {

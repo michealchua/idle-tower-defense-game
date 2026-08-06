@@ -74,7 +74,8 @@ function CodexPanel() {
       return (
         <div key={definition.id} className={`item-card ${RARITY_BORDER_CLASS[definition.rarity]}`}>
           <span className={RARITY_CLASS[definition.rarity]}>
-            {rarityLabel}·{definition.id}
+            {rarityLabel}
+            {definition.id.split('-')[1]}
           </span>
           <span className="text-muted"> ({t('codex.obtained')})</span>
         </div>
@@ -88,7 +89,8 @@ function CodexPanel() {
       return (
         <div key={definition.id} className={`item-card locked ${RARITY_BORDER_CLASS[definition.rarity]}`}>
           <span className={RARITY_CLASS[definition.rarity]}>
-            {rarityLabel}·{definition.id}
+            {rarityLabel}
+            {definition.id.split('-')[1]}
           </span>
           <span className="text-muted"> ({t('unlock.conditionLocked')})</span>
           {statuses.map((status, index) => (
@@ -108,7 +110,8 @@ function CodexPanel() {
     return (
       <div key={definition.id} className={`item-card locked ${RARITY_BORDER_CLASS[definition.rarity]}`}>
         <span className={RARITY_CLASS[definition.rarity]}>
-          {rarityLabel}·{definition.id}
+          {rarityLabel}
+          {definition.id.split('-')[1]}
         </span>
         <span className="text-muted"> ({t('heroRoster.locked')})</span>
         <div className="item-detail">{t('codex.gachaSource')}</div>
@@ -127,7 +130,8 @@ function CodexPanel() {
       return (
         <div key={definition.id} className={`item-card ${RARITY_BORDER_CLASS[definition.rarity]}`}>
           <span className={RARITY_CLASS[definition.rarity]}>
-            {rarityLabel}·{definition.id}
+            {rarityLabel}
+            {definition.id.split('-')[1]}
           </span>
           <span className="text-muted"> ({t('codex.obtained')})</span>
           <div className="item-detail">
@@ -144,7 +148,8 @@ function CodexPanel() {
       return (
         <div key={definition.id} className={`item-card locked ${RARITY_BORDER_CLASS[definition.rarity]}`}>
           <span className={RARITY_CLASS[definition.rarity]}>
-            {rarityLabel}·{definition.id}
+            {rarityLabel}
+            {definition.id.split('-')[1]}
           </span>
           <span className="text-muted"> ({t('unlock.conditionLocked')})</span>
           <div className="item-detail">
@@ -167,7 +172,8 @@ function CodexPanel() {
     return (
       <div key={definition.id} className={`item-card locked ${RARITY_BORDER_CLASS[definition.rarity]}`}>
         <span className={RARITY_CLASS[definition.rarity]}>
-          {rarityLabel}·{definition.id}
+          {rarityLabel}
+          {definition.id.split('-')[1]}
         </span>
         <span className="text-muted"> ({t('petRoster.locked')})</span>
         <div className="item-detail">

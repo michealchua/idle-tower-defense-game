@@ -2,8 +2,7 @@ import { create } from 'zustand';
 import { createInitialGameState } from '../engine/core/GameState';
 import { GameLoop } from '../engine/core/GameLoop';
 import { heroUpgradeConfig, type UpgradeableStat } from '../data/heroConfig';
-import { skillDefinitions } from '../data/skillConfig';
-import { heroRosterConfig } from '../data/heroRosterConfig';
+import { heroRosterConfig, getHeroDefinition } from '../data/heroRosterConfig';
 import { petRosterConfig } from '../data/petRosterConfig';
 import { applyHeroUpgrade } from '../engine/systems/UpgradeSystem';
 import { getDifficultyScore } from '../engine/systems/DifficultySystem';
@@ -22,18 +21,13 @@ import {
   undeployHero as undeployHeroInEngine,
   swapDeployedHeroes as swapDeployedHeroesInEngine,
 } from '../engine/systems/HeroSystem';
-import {
-  unlockPet as unlockPetInEngine,
-  deployPet as deployPetInEngine,
-  undeployPet as undeployPetInEngine,
-  swapDeployedPets as swapDeployedPetsInEngine,
-} from '../engine/systems/PetSystem';
+import { unlockPet as unlockPetInEngine } from '../engine/systems/PetSystem';
 import { upgradeCastle as upgradeCastleInEngine, setCastleType as setCastleTypeInEngine } from '../engine/systems/CastleSystem';
 import { upgradeTalent as upgradeTalentInEngine } from '../engine/systems/TalentSystem';
 import { upgradeAscensionShopNode as upgradeAscensionShopNodeInEngine } from '../engine/systems/AscensionShopSystem';
 import { ascend as ascendInEngine, canAscend } from '../engine/systems/AscensionSystem';
 import { ascensionConfig } from '../data/ascensionConfig';
-import { recomputeHeroStats, getDeployedHeroes, getDeployedPets } from '../engine/systems/HeroStatsSystem';
+import { recomputeHeroStats, getDeployedHeroes } from '../engine/systems/HeroStatsSystem';
 import { advanceToNextWave, retryCurrentWave, tickWaveProgress } from '../engine/systems/WaveSystem';
 import {
   pullHero as pullHeroInEngine,
@@ -80,11 +74,11 @@ function snapshotGameState(state: GameState) {
     unlockedHeroIds: [...state.unlockedHeroIds],
     unlockedPetIds: [...state.unlockedPetIds],
     deployedHeroIds: [...state.deployedHeroIds],
-    deployedPetIds: [...state.deployedPetIds],
-    // Pre-filtered read-only views for rendering - only the active squad
-    // gets drawn, a benched unit's stale position would otherwise render.
+    // Pre-filtered read-only view for rendering - only the active hero
+    // squad gets drawn, a benched hero's stale position would otherwise
+    // render. Every pet is always active, so `pets` above already is that
+    // view for pets.
     deployedHeroes: getDeployedHeroes(state).map((hero) => ({ ...hero })),
-    deployedPets: getDeployedPets(state).map((pet) => ({ ...pet })),
     castleLevel: state.castleLevel,
     castleType: state.castleType,
     skillPoints: state.skillPoints,
@@ -120,9 +114,7 @@ interface GameStore {
   unlockedHeroIds: string[];
   unlockedPetIds: string[];
   deployedHeroIds: string[];
-  deployedPetIds: string[];
   deployedHeroes: HeroState[];
-  deployedPets: PetState[];
   castleLevel: number;
   castleType: CastleTypeId;
   skillPoints: number;
@@ -163,9 +155,6 @@ interface GameStore {
   deployHero: (heroId: string) => void;
   undeployHero: (heroId: string) => void;
   swapDeployedHeroes: (heroIdA: string, heroIdB: string) => void;
-  deployPet: (petId: string) => void;
-  undeployPet: (petId: string) => void;
-  swapDeployedPets: (petIdA: string, petIdB: string) => void;
   unlockHeroByCondition: (heroId: string) => void;
   unlockPetByCondition: (petId: string) => void;
   ascend: () => void;
@@ -182,11 +171,13 @@ interface GameStore {
   starUpPet: (petId: string) => void;
   isPaused: boolean;
   speedMultiplier: number;
-  // UI-only, not part of gameState - which roster is mid-drag over the
-  // battle canvas, so BattleScreen knows whether/what deploy-slot grid to
-  // overlay. Null whenever nothing is being dragged.
-  dragPreviewKind: 'hero' | 'pet' | null;
-  setDragPreviewKind: (kind: 'hero' | 'pet' | null) => void;
+  // UI-only, not part of gameState - whether a hero roster card is mid-drag
+  // over the battle canvas, so BattleScreen knows whether to overlay the
+  // deploy-slot grid. Null whenever nothing is being dragged. Pets have no
+  // deploy-drag interaction anymore (see PetSystem.ts), so this is
+  // hero-only now.
+  dragPreviewKind: 'hero' | null;
+  setDragPreviewKind: (kind: 'hero' | null) => void;
 }
 
 export const useGameStore = create<GameStore>((set) => ({
@@ -238,21 +229,6 @@ export const useGameStore = create<GameStore>((set) => ({
   },
   swapDeployedHeroes: (heroIdA, heroIdB) => {
     if (swapDeployedHeroesInEngine(gameState, heroIdA, heroIdB)) {
-      set(snapshotGameState(gameState));
-    }
-  },
-  deployPet: (petId) => {
-    if (deployPetInEngine(gameState, petId)) {
-      set(snapshotGameState(gameState));
-    }
-  },
-  undeployPet: (petId) => {
-    if (undeployPetInEngine(gameState, petId)) {
-      set(snapshotGameState(gameState));
-    }
-  },
-  swapDeployedPets: (petIdA, petIdB) => {
-    if (swapDeployedPetsInEngine(gameState, petIdA, petIdB)) {
       set(snapshotGameState(gameState));
     }
   },
@@ -409,9 +385,9 @@ export function debugSpawnMany(count: number): void {
 
 export function debugUnlockAllSkills(): void {
   for (const hero of gameState.heroes) {
-    for (const skillId of Object.keys(skillDefinitions)) {
-      if (!hero.unlockedMilestoneIds.includes(skillId)) {
-        hero.unlockedMilestoneIds.push(skillId);
+    for (const unlock of getHeroDefinition(hero.id).skillUnlocks) {
+      if (!hero.unlockedSkillIds.includes(unlock.skillId)) {
+        hero.unlockedSkillIds.push(unlock.skillId);
       }
     }
   }

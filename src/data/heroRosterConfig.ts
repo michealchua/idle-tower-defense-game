@@ -1,6 +1,12 @@
 import type { UpgradeableStat } from './heroConfig';
 import type { GachaRarity } from './gachaConfig';
 import type { UnlockCondition } from './unlockConditionConfig';
+import { bondIds, type BondId } from './bondConfig';
+
+export interface HeroSkillUnlock {
+  level: number;
+  skillId: string;
+}
 
 export interface HeroDefinition {
   id: string;
@@ -12,83 +18,159 @@ export interface HeroDefinition {
   // Multiplies heroBaseConfig per stat, giving each hero a distinct flavor
   // (glass cannon, tanky, balanced) without a separate stat table per hero.
   statMultiplier: Record<UpgradeableStat, number>;
+  // Class/theme tag - see bondConfig.ts. Fielding several heroes sharing a
+  // bond grants a team-wide bonus (HeroStatsSystem.recomputeHeroStats).
+  bondId: BondId;
+  // This hero's own skill unlock schedule - unlike the old shared
+  // milestoneConfig skillUnlock rewards, every hero now has an independent
+  // set of skills (from skillConfig.ts's pool) coming online at these
+  // levels. See LevelSystem.tickHeroLevelUp/SkillSystem.tickHeroSkills.
+  skillUnlocks: HeroSkillUnlock[];
   // Undefined = normal gacha pull. Present = condition-locked: excluded from
   // the pull pool (see GachaSystem) and only obtainable through
   // UnlockSystem.unlockHeroByCondition once every entry here is satisfied.
   unlockConditions?: UnlockCondition[];
 }
 
-// Placeholder ids only - the user will swap these for real names/art later.
-// Rarity assignment here is also a placeholder distribution just to exercise
-// all five tiers, plus a couple of condition-locked heroes (see
-// unlockConditionConfig.ts) to exercise that path too. All numeric
-// thresholds below are placeholders, tune later.
-export const heroRosterConfig: HeroDefinition[] = [
-  {
-    id: 'hero-1',
-    rarity: 'white',
-    statMultiplier: { attackDamage: 1, maxHp: 1, attackSpeed: 1, criticalChance: 1 },
-  },
-  {
-    id: 'hero-2',
-    rarity: 'blue',
-    statMultiplier: { attackDamage: 1.4, maxHp: 0.75, attackSpeed: 1, criticalChance: 1.5 },
-  },
-  {
-    id: 'hero-3',
-    rarity: 'purple',
-    statMultiplier: { attackDamage: 0.75, maxHp: 1.7, attackSpeed: 0.9, criticalChance: 1 },
-  },
-  {
-    id: 'hero-4',
-    rarity: 'green',
-    statMultiplier: { attackDamage: 1.1, maxHp: 1.1, attackSpeed: 1, criticalChance: 1.1 },
-  },
-  {
-    id: 'hero-5',
-    rarity: 'gold',
-    statMultiplier: { attackDamage: 1.2, maxHp: 1.3, attackSpeed: 0.85, criticalChance: 1.2 },
-  },
-  // Condition-locked: any owned hero reaches 20 purchased levels of their
-  // own attackDamage upgrade. Never appears in the gacha pool.
-  {
-    id: 'hero-6',
-    rarity: 'purple',
-    statMultiplier: { attackDamage: 1.6, maxHp: 0.9, attackSpeed: 1, criticalChance: 1 },
-    unlockConditions: [{ type: 'heroUpgradeLevel', stat: 'attackDamage', level: 20 }],
-  },
-  // Condition-locked: spend 50,000 lifetime gold. Never appears in the gacha pool.
-  {
-    id: 'hero-7',
-    rarity: 'purple',
-    statMultiplier: { attackDamage: 1, maxHp: 2, attackSpeed: 0.8, criticalChance: 0.8 },
-    unlockConditions: [{ type: 'goldSpent', amount: 50000 }],
-  },
-  // Chained: hero-7 must already be unlocked AND reach level 15. Two
-  // conditions in one array, both required.
-  {
-    id: 'hero-8',
-    rarity: 'gold',
-    statMultiplier: { attackDamage: 1.5, maxHp: 1.5, attackSpeed: 1, criticalChance: 1.3 },
-    unlockConditions: [
-      { type: 'requiresHero', heroId: 'hero-7' },
-      { type: 'heroLevel', heroId: 'hero-7', level: 15 },
-    ],
-  },
-  // Gacha-obtainable red/rainbow - this is what makes the diamond premium
-  // pool's premiumPullWeight boost (see gachaConfig.ts) actually mean
-  // something instead of silently falling back to the gold-tier pool.
-  {
-    id: 'hero-9',
-    rarity: 'red',
-    statMultiplier: { attackDamage: 1.9, maxHp: 1.7, attackSpeed: 1.1, criticalChance: 1.4 },
-  },
-  {
-    id: 'hero-10',
-    rarity: 'rainbow',
-    statMultiplier: { attackDamage: 2.4, maxHp: 2.2, attackSpeed: 1.2, criticalChance: 1.6 },
-  },
+interface RoleProfile {
+  attackDamage: number;
+  maxHp: number;
+  attackSpeed: number;
+  criticalChance: number;
+}
+
+// Cycled by global roster index so heroes within the same rarity still read
+// as different builds instead of clones - same shape hero-1..hero-10 used to
+// hand-author (glass cannon/tanky/balanced/crit-focused examples), just
+// generated instead of copy-pasted.
+const roleProfiles: RoleProfile[] = [
+  { attackDamage: 1, maxHp: 1, attackSpeed: 1, criticalChance: 1 }, // balanced
+  { attackDamage: 1.35, maxHp: 0.7, attackSpeed: 1, criticalChance: 1.3 }, // glass cannon
+  { attackDamage: 0.7, maxHp: 1.6, attackSpeed: 0.9, criticalChance: 0.8 }, // tank
+  { attackDamage: 1.1, maxHp: 0.9, attackSpeed: 1, criticalChance: 1.6 }, // crit-focused
+  { attackDamage: 0.95, maxHp: 0.85, attackSpeed: 1.35, criticalChance: 1 }, // fast attacker
 ];
+
+interface RarityTierConfig {
+  rarity: GachaRarity;
+  count: number;
+  // Overall power baseline for this rarity - multiplied by a roleProfile
+  // above to get the hero's actual per-stat statMultiplier. Continues the
+  // curve the old hero-1..hero-10 placeholders already established (white
+  // ~1.0 up through rainbow ~2.4-2.7).
+  powerMultiplier: number;
+  // How many skillUnlocks entries a hero of this rarity gets (levels are
+  // always the first N of skillUnlockLevels below).
+  skillCount: number;
+}
+
+// Rarity counts confirmed with the user: white20/green20/blue25/purple20/
+// gold10/red4/rainbow1 = 100.
+const rarityTiers: RarityTierConfig[] = [
+  { rarity: 'white', count: 20, powerMultiplier: 1.0, skillCount: 1 },
+  { rarity: 'green', count: 20, powerMultiplier: 1.15, skillCount: 1 },
+  { rarity: 'blue', count: 25, powerMultiplier: 1.35, skillCount: 2 },
+  { rarity: 'purple', count: 20, powerMultiplier: 1.6, skillCount: 2 },
+  { rarity: 'gold', count: 10, powerMultiplier: 1.9, skillCount: 2 },
+  { rarity: 'red', count: 4, powerMultiplier: 2.3, skillCount: 3 },
+  { rarity: 'rainbow', count: 1, powerMultiplier: 2.7, skillCount: 3 },
+];
+
+const skillUnlockLevels = [5, 10, 15];
+
+// Every skillConfig.ts id, aoeDamage/chainDamage/healAlly grouped together -
+// see buildSkillUnlocks for how heroes draw from this shared pool.
+const skillPool = [
+  'skill-fireball',
+  'skill-meteor',
+  'skill-flameNova',
+  'skill-iceBurst',
+  'skill-earthquake',
+  'skill-novaBlast',
+  'skill-lightning',
+  'skill-arrowRain',
+  'skill-chainBlade',
+  'skill-thornWhip',
+  'skill-spiritLink',
+  'skill-voidChain',
+  'skill-healingLight',
+  'skill-natureBlessing',
+  'skill-sanctuary',
+  'skill-lifeSpring',
+  'skill-guardianPulse',
+  'skill-phoenixGrace',
+];
+
+// Deterministic (no Math.random) - the same globalIndex always produces the
+// same skill loadout across reloads. Stride 7 is coprime with the pool's
+// length (18), so a single hero never draws the same skill twice even at
+// skillCount 3, while different heroes' starting offsets (globalIndex) still
+// spread combinations across the whole pool instead of every hero drawing
+// from the same few entries.
+function buildSkillUnlocks(globalIndex: number, count: number): HeroSkillUnlock[] {
+  const stride = 7;
+  const unlocks: HeroSkillUnlock[] = [];
+  for (let k = 0; k < count; k += 1) {
+    const skillId = skillPool[(globalIndex + k * stride) % skillPool.length];
+    unlocks.push({ level: skillUnlockLevels[k], skillId });
+  }
+  return unlocks;
+}
+
+function buildStatMultiplier(power: number, role: RoleProfile): Record<UpgradeableStat, number> {
+  return {
+    attackDamage: Math.round(power * role.attackDamage * 1000) / 1000,
+    maxHp: Math.round(power * role.maxHp * 1000) / 1000,
+    attackSpeed: Math.round(power * role.attackSpeed * 1000) / 1000,
+    criticalChance: Math.round(power * role.criticalChance * 1000) / 1000,
+  };
+}
+
+// The old hand-authored chain-unlock example (hero-6/7/8: a heroUpgradeLevel
+// gate, a goldSpent gate, and a requiresHero+heroLevel chain built on top of
+// the goldSpent one) re-pointed at three generated ids instead. Same
+// "excluded from the gacha pool, only reachable via UnlockSystem" behavior -
+// see GachaSystem.pickRosterEntryByRarity.
+const unlockConditionOverrides: Record<string, UnlockCondition[]> = {
+  'purple-19': [{ type: 'heroUpgradeLevel', stat: 'attackDamage', level: 20 }],
+  'purple-20': [{ type: 'goldSpent', amount: 50000 }],
+  'gold-10': [
+    { type: 'requiresHero', heroId: 'purple-20' },
+    { type: 'heroLevel', heroId: 'purple-20', level: 15 },
+  ],
+};
+
+// Placeholder ids/numbers only - real names/art come later, same precedent
+// as the old hero-1..hero-10 stand-ins this generator replaces. 100 heroes
+// generated from the compact tables above instead of hand-authored, so the
+// per-rarity power curve and role variety stay consistent across all of
+// them instead of drifting the way 100 hand-written literals would.
+function generateHeroRoster(): HeroDefinition[] {
+  const roster: HeroDefinition[] = [];
+  let globalIndex = 0;
+
+  for (const tier of rarityTiers) {
+    for (let n = 1; n <= tier.count; n += 1) {
+      const id = `${tier.rarity}-${n}`;
+      const role = roleProfiles[globalIndex % roleProfiles.length];
+
+      roster.push({
+        id,
+        rarity: tier.rarity,
+        statMultiplier: buildStatMultiplier(tier.powerMultiplier, role),
+        bondId: bondIds[globalIndex % bondIds.length],
+        skillUnlocks: buildSkillUnlocks(globalIndex, tier.skillCount),
+        unlockConditions: unlockConditionOverrides[id],
+      });
+
+      globalIndex += 1;
+    }
+  }
+
+  return roster;
+}
+
+export const heroRosterConfig: HeroDefinition[] = generateHeroRoster();
 
 export function getHeroDefinition(heroId: string): HeroDefinition {
   const definition = heroRosterConfig.find((hero) => hero.id === heroId);

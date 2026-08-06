@@ -8,21 +8,20 @@ import { getVisualTierForLevel } from '../../data/milestoneConfig';
 import { getTalentFlatBonus, getTalentMultiplier } from '../../data/talentConfig';
 import { getAscensionShopFlatBonus, getAscensionShopMultiplier } from '../../data/ascensionShopConfig';
 import { getCastleAttackMultiplier, getCastleCriticalChanceBonus } from '../../data/castleTypeConfig';
-import type { GameState, HeroState, PetState } from '../types';
+import { getBondMultiplier } from '../../data/bondConfig';
+import type { GameState, HeroState } from '../types';
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(value, max));
 }
 
 // The active squad - combat, skills, exp gain, and rendering all read this
-// subset instead of the full collection (state.heroes/state.pets), which
-// also holds benched units. See HeroSystem.deployHero/PetSystem.deployPet.
+// subset instead of the full collection (state.heroes), which also holds
+// benched heroes. See HeroSystem.deployHero. Pets have no such
+// deployed/benched split - every owned pet is always active, see
+// computePetPassiveBonuses below.
 export function getDeployedHeroes(state: GameState): HeroState[] {
   return state.heroes.filter((hero) => state.deployedHeroIds.includes(hero.id));
-}
-
-export function getDeployedPets(state: GameState): PetState[] {
-  return state.pets.filter((pet) => state.deployedPetIds.includes(pet.id));
 }
 
 // Shared by DifficultySystem/SpawnSystem (use the strongest hero as "how far
@@ -50,11 +49,11 @@ function computeEquipmentBonuses(state: GameState): Partial<Record<UpgradeableSt
   return bonuses;
 }
 
-// Only deployed pets contribute their passive bonus team-wide - a benched
-// pet is just sitting in the collection.
+// Every owned pet contributes its passive bonus team-wide - pets don't need
+// to be "deployed" (no such concept for pets anymore, see PetSystem.ts).
 function computePetPassiveBonuses(state: GameState): Partial<Record<UpgradeableStat, number>> {
   const bonuses: Partial<Record<UpgradeableStat, number>> = {};
-  for (const pet of getDeployedPets(state)) {
+  for (const pet of state.pets) {
     const definition = getPetDefinition(pet.id);
     for (const [stat, value] of Object.entries(definition.passiveBonus)) {
       const key = stat as UpgradeableStat;
@@ -101,6 +100,10 @@ export function recomputeHeroStats(state: GameState): void {
   // 1/0-inert unless that's the currently selected type.
   const castleAttackMultiplier = getCastleAttackMultiplier(state.castleType, state.castleLevel);
   const castleCritBonus = getCastleCriticalChanceBonus(state.castleType, state.castleLevel);
+  // Bond (羁绊) synergy (bondConfig.ts) - only counts currently-deployed
+  // heroes, same "1 + sum" multiplier shape as the talent tree, applied
+  // alongside it below.
+  const bondMultiplier = getBondMultiplier(state.deployedHeroIds);
 
   for (const hero of state.heroes) {
     const template = getHeroDefinition(hero.id);
@@ -143,8 +146,8 @@ export function recomputeHeroStats(state: GameState): void {
         ? criticalChanceBeforeTalent + critBonus
         : Math.min(criticalChanceBeforeTalent + critBonus, criticalChanceMax);
 
-    const finalAttackDamage = attackDamage * talentAttackMultiplier * ascensionAttackMultiplier * castleAttackMultiplier;
-    const finalMaxHp = maxHp * talentMaxHpMultiplier * ascensionMaxHpMultiplier;
+    const finalAttackDamage = attackDamage * talentAttackMultiplier * ascensionAttackMultiplier * castleAttackMultiplier * bondMultiplier;
+    const finalMaxHp = maxHp * talentMaxHpMultiplier * ascensionMaxHpMultiplier * bondMultiplier;
 
     hero.attackDamage = finalAttackDamage;
     hero.maxHp = finalMaxHp;

@@ -35,6 +35,7 @@ export function ascend(state: GameState): boolean {
     hero.exp = 0;
     hero.expToNextLevel = getExpToNextLevel(1);
     hero.unlockedMilestoneIds = [];
+    hero.unlockedSkillIds = [];
     hero.skills = {};
     hero.upgrades = createInitialHeroUpgrades();
   }

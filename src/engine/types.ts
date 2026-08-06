@@ -38,6 +38,11 @@ export interface HeroState {
   exp: number;
   expToNextLevel: number;
   unlockedMilestoneIds: string[];
+  // Which of this hero's own heroRosterConfig.skillUnlocks entries have
+  // fired - separate from unlockedMilestoneIds (visual evolution tiers
+  // only) since the two are no longer unlocked by the same shared table,
+  // see milestoneConfig.ts.
+  unlockedSkillIds: string[];
   skills: Record<string, SkillRuntimeState>;
   // Gold-purchased per-hero upgrade levels (see UpgradeSystem.ts) - each
   // hero has its own independent track now, replacing the old GameState-
@@ -73,6 +78,10 @@ export interface EnemyState {
   expReward: number;
   speed: number;
   damageToBase: number;
+  // Chip damage dealt to a hero while in range - see
+  // CombatSystem.tickEnemyAttacksOnHeroes/enemyConfig.ts.heroDamage.
+  heroDamage: number;
+  heroAttackCooldownRemaining: number;
   position: Position;
   // Absorbs exactly one hit while true - see DamageSystem.applyDamage.
   // Always present (false for archetypes without hasShield), set at spawn
@@ -157,15 +166,16 @@ export interface VisualEffect {
 
 export interface GameState {
   // The full collection: every unlocked hero/pet, regardless of whether it's
-  // currently fielded. deployedHeroIds/deployedPetIds (a subset, capped by
-  // squadConfig) is who actually fights - see CombatSystem/SkillSystem/
-  // LevelSystem/DamageSystem, all of which filter to the deployed subset.
+  // currently fielded. deployedHeroIds (a subset, capped by squadConfig) is
+  // who actually fights - see CombatSystem/SkillSystem/LevelSystem/
+  // DamageSystem, all of which filter to the deployed subset. Pets have no
+  // such split - every entry in `pets` is always active, see
+  // HeroStatsSystem.computePetPassiveBonuses.
   heroes: HeroState[];
   pets: PetState[];
   unlockedHeroIds: string[];
   unlockedPetIds: string[];
   deployedHeroIds: string[];
-  deployedPetIds: string[];
   // Gold-purchased castle upgrade level (see castleConfig.ts/CastleSystem.ts)
   // - grows base maxHp and unlocks more hero/pet deploy slots over
   // squadConfig's level-1 baseline, and scales whichever castleType bonus is

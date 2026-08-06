@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
 import { ensureGameLoopStarted, useGameStore } from '../store/useGameStore';
-import { renderScene, drawDeploySlots, drawSwapHighlight, drawSwapGhost, HERO_RADIUS, PET_RADIUS } from '../render/CanvasRenderer';
-import type { HeroState, PetState } from '../engine/types';
+import { renderScene, drawDeploySlots, drawSwapHighlight, drawSwapGhost, HERO_RADIUS } from '../render/CanvasRenderer';
 import { t } from '../locales/i18n';
 import { getNormalWaveEnemyCount } from '../data/waveConfig';
-import { getBiomeForChapter } from '../data/biomeConfig';
-import { layoutHeroPositions, layoutPetPositions } from '../data/mapConfig';
-import { getMaxDeployedHeroes, getMaxDeployedPets } from '../data/castleConfig';
+import { getBiomeForChapter, bossMusicTracks } from '../data/biomeConfig';
+import { layoutHeroPositions } from '../data/mapConfig';
+import { getMaxDeployedHeroes } from '../data/castleConfig';
 import { audioManager } from '../audio/AudioManager';
 import EquipmentPanel from './EquipmentPanel';
 import HeroPanel from './HeroPanel';
@@ -27,14 +26,14 @@ import TalentPanel from './TalentPanel';
 const CANVAS_WIDTH = 400;
 const CANVAS_HEIGHT = 300;
 
-// How far (in logical canvas units) a pointer can be from a unit's center
-// and still grab/target it - wider than the drawn radius so pets (drawn
-// small) stay easy to hit.
+// How far (in logical canvas units) a pointer can be from a hero's center
+// and still grab/target it - wider than the drawn radius for an easier
+// grab. Pets have no canvas drag interaction (see PetSystem.ts - every
+// owned pet is always active, nothing to deploy/swap).
 const HERO_HIT_RADIUS = HERO_RADIUS * 1.4;
-const PET_HIT_RADIUS = PET_RADIUS * 1.8;
 
 interface CanvasDragState {
-  kind: 'hero' | 'pet';
+  kind: 'hero';
   id: string;
   // Logical canvas coordinates (same space as entity positions), not screen
   // pixels - lets the draw effect place the ghost/highlights directly.
@@ -43,8 +42,8 @@ interface CanvasDragState {
   hoverTargetId: string | null;
 }
 
-// Shared by hero/pet hit-testing - nearest unit within radius, excluding the
-// one currently being dragged so you can't "swap" a unit with itself.
+// Nearest hero within radius, excluding the one currently being dragged so
+// you can't "swap" a hero with itself.
 function findNearestUnit<T extends { id: string; position: { x: number; y: number } }>(
   units: T[],
   point: { x: number; y: number },
@@ -90,7 +89,7 @@ function renderPanel(id: TabId, gameScreenRef: RefObject<HTMLDivElement>) {
     case 'hero':
       return <HeroPanel gameScreenRef={gameScreenRef} />;
     case 'pet':
-      return <PetPanel gameScreenRef={gameScreenRef} />;
+      return <PetPanel />;
     case 'equipment':
       return <EquipmentPanel />;
     case 'gacha':
@@ -112,7 +111,7 @@ function BattleScreen() {
   const [displaySize, setDisplaySize] = useState({ width: CANVAS_WIDTH, height: CANVAS_HEIGHT });
   const [openPanel, setOpenPanel] = useState<TabId | null>(null);
   const heroes = useGameStore((state) => state.deployedHeroes);
-  const pets = useGameStore((state) => state.deployedPets);
+  const pets = useGameStore((state) => state.pets);
   const enemies = useGameStore((state) => state.enemies);
   const base = useGameStore((state) => state.base);
   const visualEffects = useGameStore((state) => state.visualEffects);
@@ -124,9 +123,8 @@ function BattleScreen() {
   const castleLevel = useGameStore((state) => state.castleLevel);
   const dragPreviewKind = useGameStore((state) => state.dragPreviewKind);
   const swapDeployedHeroes = useGameStore((state) => state.swapDeployedHeroes);
-  const swapDeployedPets = useGameStore((state) => state.swapDeployedPets);
   const [isMuted, setIsMuted] = useState(() => audioManager.isMuted());
-  // Dragging an already-deployed hero/pet directly on the canvas to swap its
+  // Dragging an already-deployed hero directly on the canvas to swap its
   // slot with another - separate from dragPreviewKind, which is for
   // dragging a fresh unit in from the roster panel.
   const [canvasDrag, setCanvasDrag] = useState<CanvasDragState | null>(null);
@@ -162,9 +160,7 @@ function BattleScreen() {
       return;
     }
     const hero = findNearestUnit(heroes, point, HERO_HIT_RADIUS);
-    const pet = hero ? undefined : findNearestUnit(pets, point, PET_HIT_RADIUS);
-    const grabbed = hero ? { kind: 'hero' as const, id: hero.id } : pet ? { kind: 'pet' as const, id: pet.id } : null;
-    if (!grabbed) {
+    if (!hero) {
       return;
     }
     try {
@@ -173,7 +169,7 @@ function BattleScreen() {
       // Some pointer sessions reject capture - degrade gracefully, same as
       // useDeploySlotDrag's identical guard.
     }
-    setCanvasDrag({ ...grabbed, pointerX: point.x, pointerY: point.y, hoverTargetId: null });
+    setCanvasDrag({ kind: 'hero', id: hero.id, pointerX: point.x, pointerY: point.y, hoverTargetId: null });
   }
 
   function handleCanvasPointerMove(event: ReactPointerEvent<HTMLCanvasElement>): void {
@@ -184,19 +180,13 @@ function BattleScreen() {
     if (!point) {
       return;
     }
-    const pool: (HeroState | PetState)[] = canvasDrag.kind === 'hero' ? heroes : pets;
-    const hitRadius = canvasDrag.kind === 'hero' ? HERO_HIT_RADIUS : PET_HIT_RADIUS;
-    const target = findNearestUnit(pool, point, hitRadius, canvasDrag.id);
+    const target = findNearestUnit(heroes, point, HERO_HIT_RADIUS, canvasDrag.id);
     setCanvasDrag((prev) => (prev ? { ...prev, pointerX: point.x, pointerY: point.y, hoverTargetId: target?.id ?? null } : prev));
   }
 
   function handleCanvasPointerUp(): void {
     if (canvasDrag?.hoverTargetId) {
-      if (canvasDrag.kind === 'hero') {
-        swapDeployedHeroes(canvasDrag.id, canvasDrag.hoverTargetId);
-      } else {
-        swapDeployedPets(canvasDrag.id, canvasDrag.hoverTargetId);
-      }
+      swapDeployedHeroes(canvasDrag.id, canvasDrag.hoverTargetId);
     }
     setCanvasDrag(null);
   }
@@ -218,9 +208,14 @@ function BattleScreen() {
     return () => window.removeEventListener('pointerdown', unlock);
   }, []);
 
+  // Boss waves swap in a dedicated theme instead of the biome's ambient
+  // track, reverting automatically once the wave clears (wave.isBossWave
+  // goes false, musicTrack recalculates back to biome.musicTrack below).
+  const musicTrack = wave.isBossWave && wave.bossKind ? bossMusicTracks[wave.bossKind] : biome.musicTrack;
+
   useEffect(() => {
-    audioManager.setTrack(biome.musicTrack);
-  }, [biome.musicTrack]);
+    audioManager.setTrack(musicTrack);
+  }, [musicTrack]);
 
   // Auto-detects available screen space instead of staying pinned at a
   // fixed 400x300 - the canvas-stage element's CSS (width:100%, 4:3
@@ -278,21 +273,17 @@ function BattleScreen() {
 
     if (dragPreviewKind === 'hero') {
       drawDeploySlots(ctx, layoutHeroPositions(getMaxDeployedHeroes(castleLevel)), heroes.length);
-    } else if (dragPreviewKind === 'pet') {
-      drawDeploySlots(ctx, layoutPetPositions(getMaxDeployedPets(castleLevel)), pets.length);
     }
 
     if (canvasDrag) {
-      const pool: (HeroState | PetState)[] = canvasDrag.kind === 'hero' ? heroes : pets;
-      const radius = canvasDrag.kind === 'hero' ? HERO_RADIUS : PET_RADIUS;
-      const draggedUnit = pool.find((unit) => unit.id === canvasDrag.id);
+      const draggedUnit = heroes.find((unit) => unit.id === canvasDrag.id);
       if (draggedUnit) {
-        drawSwapHighlight(ctx, draggedUnit.position, radius, 'rgba(255, 235, 59, 0.9)');
+        drawSwapHighlight(ctx, draggedUnit.position, HERO_RADIUS, 'rgba(255, 235, 59, 0.9)');
       }
       if (canvasDrag.hoverTargetId) {
-        const targetUnit = pool.find((unit) => unit.id === canvasDrag.hoverTargetId);
+        const targetUnit = heroes.find((unit) => unit.id === canvasDrag.hoverTargetId);
         if (targetUnit) {
-          drawSwapHighlight(ctx, targetUnit.position, radius, 'rgba(76, 255, 133, 0.95)');
+          drawSwapHighlight(ctx, targetUnit.position, HERO_RADIUS, 'rgba(76, 255, 133, 0.95)');
         }
       }
       drawSwapGhost(ctx, canvasDrag.kind, canvasDrag.pointerX, canvasDrag.pointerY);

@@ -14,9 +14,9 @@ export const castleConfig = {
   // baseConfig.maxHp baseline, no bonus yet).
   maxHpPerLevel: 40,
   // +1 slot every N castle levels beyond 1, added on top of squadConfig's
-  // level-1 baseline - existing squad caps only ever grow, never shrink.
+  // level-1 baseline - existing squad caps only ever grow, never shrink
+  // (until maxDeployedHeroesCap below).
   heroSlotEveryNLevels: 2,
-  petSlotEveryNLevels: 3,
 };
 
 export function getCastleUpgradeCost(currentLevel: number): number {
@@ -27,10 +27,14 @@ export function getBaseMaxHpForCastleLevel(level: number): number {
   return baseConfig.maxHp + (level - 1) * castleConfig.maxHpPerLevel;
 }
 
-export function getMaxDeployedHeroes(castleLevel: number): number {
-  return squadConfig.maxDeployedHeroes + Math.floor((castleLevel - 1) / castleConfig.heroSlotEveryNLevels);
-}
+// Hard-capped at 9 - the deploy grid/bond system are both designed around a
+// 9-hero squad ceiling, so castle-level growth stops adding slots once it
+// gets there instead of growing without bound.
+export const maxDeployedHeroesCap = 9;
 
-export function getMaxDeployedPets(castleLevel: number): number {
-  return squadConfig.maxDeployedPets + Math.floor((castleLevel - 1) / castleConfig.petSlotEveryNLevels);
+export function getMaxDeployedHeroes(castleLevel: number): number {
+  return Math.min(
+    maxDeployedHeroesCap,
+    squadConfig.maxDeployedHeroes + Math.floor((castleLevel - 1) / castleConfig.heroSlotEveryNLevels),
+  );
 }

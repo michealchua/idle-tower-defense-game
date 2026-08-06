@@ -1,4 +1,4 @@
-import { tickCombat } from '../systems/CombatSystem';
+import { tickCombat, tickEnemyAttacksOnHeroes } from '../systems/CombatSystem';
 import { tickSpawn } from '../systems/SpawnSystem';
 import { tickMovement } from '../systems/MovementSystem';
 import { tickEnemyAbilities } from '../systems/EnemyAbilitySystem';
@@ -54,6 +54,7 @@ export class GameLoop {
       tickMovement(this.state, FIXED_TIMESTEP_SECONDS);
       tickEnemyAbilities(this.state, FIXED_TIMESTEP_SECONDS);
       tickCombat(this.state, FIXED_TIMESTEP_SECONDS);
+      tickEnemyAttacksOnHeroes(this.state, FIXED_TIMESTEP_SECONDS);
       tickSkills(this.state, FIXED_TIMESTEP_SECONDS);
       tickLevelUp(this.state);
       tickWaveProgress(this.state, FIXED_TIMESTEP_SECONDS);

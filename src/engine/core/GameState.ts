@@ -40,7 +40,6 @@ export function createInitialGameState(): GameState {
     unlockedHeroIds: [starterHeroId],
     unlockedPetIds: [],
     deployedHeroIds: [starterHeroId],
-    deployedPetIds: [],
     castleLevel: 1,
     castleType: defaultCastleTypeId,
     skillPoints: 0,

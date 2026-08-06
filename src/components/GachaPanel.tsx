@@ -23,24 +23,31 @@ function formatPitySuffix(pityHits: number): string {
   return pityHits > 0 ? ` (${t('gacha.pityTriggered')}${pityHits > 1 ? ` ×${pityHits}` : ''})` : '';
 }
 
+// Roster ids are `<rarity>-<n>` (see heroRosterConfig.ts/petRosterConfig.ts) -
+// this renders as e.g. "白12" instead of the raw id, matching HeroPanel/
+// PetPanel/CodexPanel's display convention.
+function formatRosterLabel(rarity: GachaRarity, id: string): string {
+  return `${t(RARITY_LABEL_KEYS[rarity])}${id.split('-')[1]}`;
+}
+
 function formatResult(result: GachaPullResult): string {
-  const rarityLabel = t(RARITY_LABEL_KEYS[result.rarity]);
+  const label = formatRosterLabel(result.rarity, result.id);
   const pitySuffix = formatPitySuffix(result.pityTriggered ? 1 : 0);
   if (result.isNewUnlock) {
-    return `${t('gacha.lastResultNew')} ${rarityLabel}·${result.id}!${pitySuffix}`;
+    return `${t('gacha.lastResultNew')} ${label}!${pitySuffix}`;
   }
   const shards = gachaRarityConfig[result.rarity].shardsPerDuplicate;
-  return `${rarityLabel}·${result.id} ${t('gacha.lastResultDuplicate')} ${shards} ${t('gacha.shardsUnit')}${pitySuffix}`;
+  return `${label} ${t('gacha.lastResultDuplicate')} ${shards} ${t('gacha.shardsUnit')}${pitySuffix}`;
 }
 
 function formatMultiResult(results: GachaPullResult[]): string {
   const counts: Record<GachaRarity, number> = { white: 0, green: 0, blue: 0, purple: 0, gold: 0, red: 0, rainbow: 0 };
-  const newUnlockIds: string[] = [];
+  const newUnlockLabels: string[] = [];
   let pityHits = 0;
   for (const result of results) {
     counts[result.rarity] += 1;
     if (result.isNewUnlock) {
-      newUnlockIds.push(result.id);
+      newUnlockLabels.push(formatRosterLabel(result.rarity, result.id));
     }
     if (result.pityTriggered) {
       pityHits += 1;
@@ -51,7 +58,7 @@ function formatMultiResult(results: GachaPullResult[]): string {
     .map((rarity) => `${t(RARITY_LABEL_KEYS[rarity])}×${counts[rarity]}`)
     .join(' ');
   const newLabel =
-    newUnlockIds.length > 0 ? `${t('gacha.multiResultNew')}: ${newUnlockIds.join(', ')}` : t('gacha.multiResultNone');
+    newUnlockLabels.length > 0 ? `${t('gacha.multiResultNew')}: ${newUnlockLabels.join(', ')}` : t('gacha.multiResultNone');
 
   return `${breakdown} · ${newLabel}${formatPitySuffix(pityHits)}`;
 }

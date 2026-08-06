@@ -267,12 +267,23 @@ function drawEnemy(ctx: CanvasRenderingContext2D, enemy: EnemyState): void {
 
 function drawBackground(ctx: CanvasRenderingContext2D, canvasWidth: number, canvasHeight: number, biome: BiomeDefinition): void {
   const image = getImage(biome.backgroundImage);
-  if (image) {
-    ctx.drawImage(image, 0, 0, canvasWidth, canvasHeight);
+  if (!image) {
+    ctx.fillStyle = biome.fallbackColor;
+    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
     return;
   }
-  ctx.fillStyle = biome.fallbackColor;
-  ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+  // "Cover" fit (like CSS background-size: cover), not a plain stretch -
+  // source art is 1920x1080 (16:9) while the logical canvas is 400x300
+  // (4:3), so an independent x/y stretch would visibly squash it. Scale
+  // uniformly to fill the canvas completely and crop the overflow (the
+  // canvas already clips anything drawn past its own bounds) instead.
+  const scale = Math.max(canvasWidth / image.width, canvasHeight / image.height);
+  const drawWidth = image.width * scale;
+  const drawHeight = image.height * scale;
+  const offsetX = (canvasWidth - drawWidth) / 2;
+  const offsetY = (canvasHeight - drawHeight) / 2;
+  ctx.drawImage(image, offsetX, offsetY, drawWidth, drawHeight);
 }
 
 // Drawn on top of everything else, only while a roster card is actively

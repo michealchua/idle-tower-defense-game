@@ -22,6 +22,7 @@ export function createHero(heroId: string, position: Position): HeroState {
     exp: 0,
     expToNextLevel: getExpToNextLevel(heroBaseConfig.level),
     unlockedMilestoneIds: [],
+    unlockedSkillIds: [],
     skills: {},
     upgrades: createInitialHeroUpgrades(),
     position: { ...position },

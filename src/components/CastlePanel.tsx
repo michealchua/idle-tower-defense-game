@@ -1,4 +1,4 @@
-import { getBaseMaxHpForCastleLevel, getCastleUpgradeCost, getMaxDeployedHeroes, getMaxDeployedPets } from '../data/castleConfig';
+import { getBaseMaxHpForCastleLevel, getCastleUpgradeCost, getMaxDeployedHeroes } from '../data/castleConfig';
 import {
   castleTypeConfig,
   castleTypeIds,
@@ -51,10 +51,6 @@ function CastlePanel() {
         <div className="row">
           <span className="text-muted">{t('castle.heroSlots')}</span>
           <span>{getMaxDeployedHeroes(castleLevel)}</span>
-        </div>
-        <div className="row">
-          <span className="text-muted">{t('castle.petSlots')}</span>
-          <span>{getMaxDeployedPets(castleLevel)}</span>
         </div>
       </div>
       <button className="btn btn-primary btn-block" style={{ marginTop: 8 }} onClick={() => upgradeCastle()} disabled={!canAfford}>
