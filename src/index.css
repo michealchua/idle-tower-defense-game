@@ -26,12 +26,11 @@
   --rarity-rainbow-3: #69f0ae;
   --rarity-rainbow-4: #40c4ff;
   --rarity-rainbow-5: #b388ff;
-  /* How wide the game shell (HUD + canvas) is allowed to grow on large
+  /* How wide the app shell (HUD + canvas) is allowed to grow on large
      screens - the canvas itself then fills whatever width that resolves to
      (see .canvas-stage), capped by viewport height too so it never grows
-     absurdly tall on an ultrawide monitor. Menus (.bottom-nav-inner,
-     .sheet-panel) stay at the original mobile-derived width - only the
-     battle view itself needs to "fill the screen". */
+     absurdly tall on an ultrawide monitor. .modal-container sizes itself
+     independently (min(900px, 90vw)) rather than tracking this. */
   --shell-max-width: 1600px;
 }
 
@@ -60,11 +59,14 @@ select {
   font-family: inherit;
 }
 
-/* Mobile-game shell: the canvas fills the entire viewport edge-to-edge, and
-   everything else (HUD, quick-upgrade box, bottom nav, sheet panels) is an
-   absolutely/fixed-positioned overlay on top of it - there's no separate
-   "battle screen" vs "menu" area, matching how a phone idle game reads. */
-.game-shell {
+/* Full-screen HUD shell: the canvas fills the entire viewport edge-to-edge
+   (.battle-layer), corner-anchored HUD widgets float on top
+   (.hud-layer/.hud-corner), and every panel opens as a large centered
+   frosted-glass modal instead of a bottom-sheet or docked console - see
+   App.tsx. .stage-column stays the name for BattleScreen's own root (it
+   used to be a flex child of a two-column layout; now it's just "the
+   battle stage", full width/height inside .battle-layer). */
+.app-container {
   position: fixed;
   inset: 0;
   max-width: var(--shell-max-width);
@@ -72,13 +74,9 @@ select {
   overflow: hidden;
 }
 
-/* Wide/landscape shell: canvas stage docked on the left, a permanent
-   tabbed console on the right, instead of the mobile bottom-nav +
-   sheet-overlay pattern below. Toggled by BattleScreen's isDocked state
-   (matchMedia), which also swaps in different JSX for the nav/panel. */
-.game-shell.docked {
-  display: flex;
-  flex-direction: row;
+.battle-layer {
+  position: absolute;
+  inset: 0;
 }
 
 .stage-column {
@@ -88,98 +86,115 @@ select {
   overflow: hidden;
 }
 
-.game-shell.docked .stage-column {
-  flex: 0 0 65%;
-  max-width: 65%;
-  border-right: 1px solid var(--border);
-}
-
-.console-column {
-  flex: 0 0 35%;
-  max-width: 35%;
-  height: 100%;
-  display: flex;
-  background: var(--bg);
-}
-
-.console-nav {
-  flex: 0 0 68px;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 2px;
-  padding: 10px 4px;
-  background: var(--surface);
-  border-right: 1px solid var(--border);
-  overflow-y: auto;
-}
-
-.console-nav-btn {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  padding: 8px 2px;
-  border-radius: var(--radius-sm);
-  font-size: 9px;
-  cursor: pointer;
-}
-
-.console-nav-btn.active {
-  color: var(--accent-strong);
-  background: var(--surface-hover);
-}
-
-.console-nav-icon {
-  font-size: 18px;
-  line-height: 1;
-}
-
-.console-content {
-  flex: 1;
-  min-width: 0;
-  overflow-y: auto;
-  padding: 14px;
-}
-
-.console-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-}
-
-/* HUD */
-.hud-compact {
+/* HUD layer sits above the canvas; pointer-events:none on the layer itself
+   so clicks fall through to the canvas everywhere except inside an actual
+   widget (each widget opts back in). */
+.hud-layer {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
+  inset: 0;
   z-index: 15;
-  background: rgba(28, 33, 46, 0.78);
-  backdrop-filter: blur(6px);
-  border-bottom: 1px solid var(--border);
-  padding: 8px 10px;
+  padding: 16px;
+  pointer-events: none;
 }
 
-.hud-currency-row {
+.hud-corner {
+  position: absolute;
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.hud-corner.top-left {
+  top: 16px;
+  left: 16px;
+}
+
+.hud-corner.top-center {
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
   align-items: center;
-  font-size: 13px;
+  width: min(360px, 60vw);
+}
+
+.hud-corner.top-right {
+  top: 16px;
+  right: 16px;
+  align-items: flex-end;
+}
+
+.hud-corner.bottom-left {
+  bottom: 16px;
+  left: 16px;
+}
+
+.hud-corner.bottom-right {
+  bottom: 16px;
+  right: 16px;
+  align-items: flex-end;
+}
+
+/* The frosted-glass HUD chrome - lets the battle scene read through behind
+   every widget instead of a flat opaque panel. */
+.hud-widget {
+  background: var(--surface-hover);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+}
+
+.hud-widget-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
   font-weight: 600;
 }
 
-.hud-sub-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.hud-label {
   font-size: 11px;
   color: var(--text-muted);
-  margin-top: 4px;
+}
+
+.hud-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.hud-corner.bottom-right .hud-actions {
+  justify-content: flex-end;
+}
+
+.hud-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: var(--surface-hover);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.12s ease;
+}
+
+.hud-btn:hover {
+  border-color: var(--accent-strong);
+  transform: translateY(-2px);
+}
+
+.hud-btn-icon {
+  font-size: 18px;
+  line-height: 1;
 }
 
 .hud-gold {
@@ -221,7 +236,7 @@ select {
   background: var(--accent-strong);
 }
 
-/* Fills the entire game-shell (i.e. the entire viewport) edge-to-edge - no
+/* Fills the entire battle layer (i.e. the entire viewport) edge-to-edge - no
    aspect-ratio constraint here anymore. The game world is still authored
    against a fixed 4:3 logical resolution (CANVAS_WIDTH/HEIGHT in
    BattleScreen.tsx), so BattleScreen's draw effect letterboxes it (uniform
@@ -256,104 +271,90 @@ select {
   letter-spacing: 1px;
 }
 
-/* Bottom icon nav - replaces the old top tab bar. Tapping an icon opens the
-   matching panel as a bottom sheet (see .sheet-*) instead of swapping inline
-   content. */
-.bottom-nav {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  display: flex;
-  justify-content: center;
-  background: var(--surface);
-  border-top: 1px solid var(--border);
-  padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
-  z-index: 20;
-  overflow-x: auto;
-}
-
-.bottom-nav-inner {
-  display: flex;
-  gap: 2px;
-  max-width: 480px;
-  width: 100%;
-}
-
-.bottom-nav-btn {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  padding: 4px 2px;
-  border-radius: var(--radius-sm);
-  font-size: 9px;
-  cursor: pointer;
-}
-
-.bottom-nav-btn.active {
-  color: var(--accent-strong);
-  background: var(--surface-hover);
-}
-
-.bottom-nav-icon {
-  font-size: 18px;
-  line-height: 1;
-}
-
-/* Bottom-sheet overlay panel - same content as the old inline tab-panel,
-   just presented as a modal sheet instead of always-inline. */
-.sheet-backdrop {
+/* Centered frosted-glass modal - every panel (Hero/Equipment/Talent/Pet/
+   Gacha/Castle/Ascension/AscensionShop/Codex) opens here instead of a
+   bottom-sheet or docked console. Backdrop blur pulls focus off the battle
+   scene without hiding it entirely. */
+.modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(6, 7, 11, 0.55);
+  background: rgba(6, 7, 11, 0.6);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: modal-fade-in 0.15s ease-out;
 }
 
-.sheet-panel {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  max-width: 480px;
-  margin: 0 auto;
-  max-height: 78vh;
+.modal-container {
+  position: relative;
+  width: min(900px, 90vw);
+  height: 85vh;
+  display: flex;
+  flex-direction: column;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-bottom: none;
-  border-radius: 16px 16px 0 0;
+  border-radius: 16px;
   z-index: 31;
-  overflow-y: auto;
-  padding: 12px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+  animation: modal-slide-up 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.sheet-header {
+.modal-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
 }
 
-.sheet-title {
+.modal-title {
   font-weight: 700;
-  font-size: 14px;
+  font-size: 15px;
 }
 
-.sheet-close {
+.modal-close {
   background: var(--surface-hover);
   border: 1px solid var(--border);
   color: var(--text);
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   font-size: 14px;
   line-height: 1;
   cursor: pointer;
+}
+
+.modal-close:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.modal-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+}
+
+@keyframes modal-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modal-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 /* Cards */

@@ -7,15 +7,6 @@ import { getBiomeForChapter, bossMusicTracks } from '../data/biomeConfig';
 import { layoutHeroPositions } from '../data/mapConfig';
 import { getMaxDeployedHeroes } from '../data/castleConfig';
 import { audioManager } from '../audio/AudioManager';
-import EquipmentPanel from './EquipmentPanel';
-import HeroPanel from './HeroPanel';
-import PetPanel from './PetPanel';
-import AscensionPanel from './AscensionPanel';
-import AscensionShopPanel from './AscensionShopPanel';
-import GachaPanel from './GachaPanel';
-import CodexPanel from './CodexPanel';
-import CastlePanel from './CastlePanel';
-import TalentPanel from './TalentPanel';
 
 // Logical simulation/coordinate space - every entity position in
 // mapConfig.ts and every fixed pixel size in CanvasRenderer.ts is authored
@@ -65,77 +56,28 @@ function findNearestUnit<T extends { id: string; position: { x: number; y: numbe
   return closest;
 }
 
-type TabId = 'castle' | 'hero' | 'pet' | 'equipment' | 'gacha' | 'codex' | 'talent' | 'ascension' | 'ascensionShop';
-
-// Bottom icon-nav order - each opens the same, unmodified panel component as
-// an overlay sheet instead of an inline tab. Icons are decorative only; the
-// label text is unchanged from the old tab bar.
-const TABS: { id: TabId; labelKey: string; icon: string }[] = [
-  { id: 'castle', labelKey: 'castle.title', icon: '🏰' },
-  { id: 'hero', labelKey: 'heroRoster.title', icon: '⚔️' },
-  { id: 'pet', labelKey: 'petRoster.title', icon: '🐾' },
-  { id: 'equipment', labelKey: 'equipment.title', icon: '🎒' },
-  { id: 'gacha', labelKey: 'gacha.title', icon: '🎰' },
-  { id: 'codex', labelKey: 'codex.title', icon: '📖' },
-  { id: 'talent', labelKey: 'talent.title', icon: '✨' },
-  { id: 'ascension', labelKey: 'ascension.title', icon: '🌟' },
-  { id: 'ascensionShop', labelKey: 'ascensionShop.title', icon: '💎' },
-];
-
-function renderPanel(id: TabId, gameScreenRef: RefObject<HTMLDivElement>) {
-  switch (id) {
-    case 'castle':
-      return <CastlePanel />;
-    case 'hero':
-      return <HeroPanel gameScreenRef={gameScreenRef} />;
-    case 'pet':
-      return <PetPanel />;
-    case 'equipment':
-      return <EquipmentPanel />;
-    case 'gacha':
-      return <GachaPanel />;
-    case 'codex':
-      return <CodexPanel />;
-    case 'talent':
-      return <TalentPanel />;
-    case 'ascension':
-      return <AscensionPanel />;
-    case 'ascensionShop':
-      return <AscensionShopPanel />;
-  }
-}
-
-function BattleScreen() {
+// stageRef is owned by App.tsx (not created here) - App also hands the same
+// ref to HeroPanel (rendered inside its centered modal, a sibling of this
+// component, not a child) so hero-card drags can hit-test against this
+// element's bounding rect regardless of which component actually renders
+// the drag source.
+function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const stageRef = useRef<HTMLDivElement>(null);
   const [displaySize, setDisplaySize] = useState({ width: CANVAS_WIDTH, height: CANVAS_HEIGHT });
-  const [openPanel, setOpenPanel] = useState<TabId | null>(null);
   const heroes = useGameStore((state) => state.deployedHeroes);
   const pets = useGameStore((state) => state.pets);
   const enemies = useGameStore((state) => state.enemies);
   const base = useGameStore((state) => state.base);
   const visualEffects = useGameStore((state) => state.visualEffects);
-  const gold = useGameStore((state) => state.gold);
-  const diamonds = useGameStore((state) => state.diamonds);
   const isGameOver = useGameStore((state) => state.isGameOver);
-  const difficultyScore = useGameStore((state) => state.difficultyScore);
   const wave = useGameStore((state) => state.wave);
   const castleLevel = useGameStore((state) => state.castleLevel);
   const dragPreviewKind = useGameStore((state) => state.dragPreviewKind);
   const swapDeployedHeroes = useGameStore((state) => state.swapDeployedHeroes);
-  const [isMuted, setIsMuted] = useState(() => audioManager.isMuted());
   // Dragging an already-deployed hero directly on the canvas to swap its
   // slot with another - separate from dragPreviewKind, which is for
   // dragging a fresh unit in from the roster panel.
   const [canvasDrag, setCanvasDrag] = useState<CanvasDragState | null>(null);
-  // Wide/landscape viewports (desktop, Electron window) get a permanent
-  // left-stage/right-console split instead of the mobile bottom-nav +
-  // sheet-overlay pattern - same TABS/openPanel state either way, just a
-  // different shell around it. Tracked via matchMedia rather than a fixed
-  // React breakpoint constant so it stays in sync if the window is resized.
-  const [isDocked, setIsDocked] = useState(
-    () => typeof window !== 'undefined' && window.matchMedia('(min-width: 860px) and (orientation: landscape)').matches,
-  );
 
   const biome = getBiomeForChapter(wave.chapter);
 
@@ -207,22 +149,6 @@ function BattleScreen() {
     ensureGameLoopStarted();
   }, []);
 
-  useEffect(() => {
-    const query = window.matchMedia('(min-width: 860px) and (orientation: landscape)');
-    const handleChange = (event: MediaQueryListEvent) => setIsDocked(event.matches);
-    query.addEventListener('change', handleChange);
-    return () => query.removeEventListener('change', handleChange);
-  }, []);
-
-  // Browsers block audio.play() until a user gesture happens anywhere on the
-  // page - this listens once for the first pointer interaction and unlocks
-  // whatever biome track is already loaded.
-  useEffect(() => {
-    const unlock = () => audioManager.unlock();
-    window.addEventListener('pointerdown', unlock, { once: true });
-    return () => window.removeEventListener('pointerdown', unlock);
-  }, []);
-
   // Boss waves swap in a dedicated theme instead of the biome's ambient
   // track, reverting automatically once the wave clears (wave.isBossWave
   // goes false, musicTrack recalculates back to biome.musicTrack below).
@@ -233,9 +159,9 @@ function BattleScreen() {
   }, [musicTrack]);
 
   // Auto-detects available screen space instead of staying pinned at a
-  // fixed 400x300 - the canvas-stage element's CSS (width:100%, 4:3
-  // aspect-ratio, capped by viewport height) decides the actual size, this
-  // just measures whatever that resolves to on this screen.
+  // fixed 400x300 - the canvas-stage element's CSS (width:100%, height:100%)
+  // decides the actual size, this just measures whatever that resolves to
+  // on this screen.
   useEffect(() => {
     const stage = stageRef.current;
     if (!stage) {
@@ -249,7 +175,7 @@ function BattleScreen() {
     });
     observer.observe(stage);
     return () => observer.disconnect();
-  }, []);
+  }, [stageRef]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -260,7 +186,7 @@ function BattleScreen() {
 
     // Render at native device resolution (crisp on high-DPI screens) while
     // every draw call still targets the fixed CANVAS_WIDTH/CANVAS_HEIGHT
-    // coordinate space. .canvas-stage now fills the whole viewport (see
+    // coordinate space. .canvas-stage fills the whole viewport (see
     // index.css) instead of a 4:3 letterboxed box, so its aspect ratio can
     // differ wildly from the game world's - a uniform scale (not
     // independent x/y stretch) plus centering keeps the world undistorted,
@@ -306,7 +232,6 @@ function BattleScreen() {
   }, [heroes, pets, enemies, base, visualEffects, displaySize, biome, dragPreviewKind, castleLevel, canvasDrag]);
 
   const hpRatio = base.maxHp > 0 ? Math.max(0, Math.min(1, base.currentHp / base.maxHp)) : 0;
-  const activeTab = TABS.find((tab) => tab.id === openPanel);
 
   // Derived, not stored - WaveState only tracks the spawn countdown, so
   // "killed so far" is total minus what's left to spawn minus what's still
@@ -320,40 +245,23 @@ function BattleScreen() {
   const killRatio = totalWaveEnemies > 0 ? killedCount / totalWaveEnemies : 0;
 
   return (
-    <div className={`game-shell${isDocked ? ' docked' : ''}`}>
-      <div className="stage-column">
-        <div className="hud-compact">
-          <div className="hud-currency-row">
-            <span className="hud-gold">
-              {t('battle.gold')}: {gold}
-            </span>
-            <span className="hud-diamond">
-              {t('battle.diamonds')}: {diamonds}
-            </span>
-            <span>
-              {t('difficulty.tier')}: {Math.floor(difficultyScore)}
-            </span>
-            <button
-              className="btn btn-sm mute-toggle-btn"
-              onClick={() => setIsMuted(audioManager.toggleMute())}
-              title={t(isMuted ? 'battle.unmuteMusic' : 'battle.muteMusic')}
-            >
-              {isMuted ? '🔇' : '🔊'}
-            </button>
-          </div>
-          <div className="hud-sub-row">
+    <div className="stage-column">
+      {/* Combat-status readout - kept here (not lifted to App's HUD) since
+          it's derived from enemies/wave state this component already
+          computes for its own render loop. Uses the same .hud-corner/
+          .hud-widget classes as App's chrome so it reads as one system. */}
+      <div className="hud-corner top-center">
+        <div className="hud-widget" style={{ width: '100%' }}>
+          <div className="hud-widget-row" style={{ justifyContent: 'space-between', fontSize: 11 }}>
             <span>
               {t('wave.stage')} {wave.chapter}-{wave.waveInChapter} · {t(biome.labelKey)}
               {wave.isBossWave ? ` · ${t(wave.bossKind === 'boss' ? 'wave.boss' : 'wave.miniboss')}` : ''}
             </span>
-            {wave.isBossWave && wave.timeRemaining !== undefined && (
+            {wave.isBossWave && wave.timeRemaining !== undefined ? (
+              <span>{Math.ceil(wave.timeRemaining)}s</span>
+            ) : (
               <span>
-                {t('wave.timeRemaining')}: {Math.ceil(wave.timeRemaining)}s
-              </span>
-            )}
-            {!wave.isBossWave && (
-              <span>
-                {t('wave.killProgress')}: {killedCount}/{totalWaveEnemies}
+                {killedCount}/{totalWaveEnemies}
               </span>
             )}
           </div>
@@ -362,96 +270,26 @@ function BattleScreen() {
               <div className="bar-fill bar-fill-kill" style={{ width: `${killRatio * 100}%` }} />
             </div>
           )}
-          <div className="hud-sub-row">
-            <span>
-              {t('base.hp')}: {Math.round(base.currentHp)} / {Math.round(base.maxHp)}
-            </span>
+          <div className="hud-label" style={{ marginTop: 4 }}>
+            {t('base.hp')} {Math.round(base.currentHp)}/{Math.round(base.maxHp)}
           </div>
           <div className="bar-track">
             <div className="bar-fill bar-fill-hp" style={{ width: `${hpRatio * 100}%` }} />
           </div>
         </div>
-
-        <div className="canvas-stage" ref={stageRef}>
-          <canvas
-            ref={canvasRef}
-            style={{ width: '100%', height: '100%', display: 'block', touchAction: 'none' }}
-            onPointerDown={handleCanvasPointerDown}
-            onPointerMove={handleCanvasPointerMove}
-            onPointerUp={handleCanvasPointerUp}
-            onPointerCancel={handleCanvasPointerCancel}
-          />
-          {isGameOver && <div className="game-over-overlay">{t('battle.gameOver')}</div>}
-        </div>
       </div>
 
-      {isDocked ? (
-        <div className="console-column">
-          <div className="console-nav">
-            {TABS.map((tab) => (
-              <button
-                key={tab.id}
-                className={`console-nav-btn${openPanel === tab.id ? ' active' : ''}`}
-                onClick={() => setOpenPanel(tab.id)}
-              >
-                <span className="console-nav-icon">{tab.icon}</span>
-                <span>{t(tab.labelKey)}</span>
-              </button>
-            ))}
-          </div>
-          <div className="console-content">
-            {activeTab ? (
-              <>
-                <div className="console-header">
-                  <span className="sheet-title">
-                    {activeTab.icon} {t(activeTab.labelKey)}
-                  </span>
-                  <button className="sheet-close" onClick={() => setOpenPanel(null)}>
-                    ×
-                  </button>
-                </div>
-                {renderPanel(activeTab.id, stageRef)}
-              </>
-            ) : (
-              <div className="empty-state">{t('battle.selectPanel')}</div>
-            )}
-          </div>
-        </div>
-      ) : (
-        <>
-          <div className="bottom-nav">
-            <div className="bottom-nav-inner">
-              {TABS.map((tab) => (
-                <button
-                  key={tab.id}
-                  className={`bottom-nav-btn${openPanel === tab.id ? ' active' : ''}`}
-                  onClick={() => setOpenPanel(tab.id)}
-                >
-                  <span className="bottom-nav-icon">{tab.icon}</span>
-                  <span>{t(tab.labelKey)}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {activeTab && (
-            <>
-              <div className="sheet-backdrop" onClick={() => setOpenPanel(null)} />
-              <div className="sheet-panel">
-                <div className="sheet-header">
-                  <span className="sheet-title">
-                    {activeTab.icon} {t(activeTab.labelKey)}
-                  </span>
-                  <button className="sheet-close" onClick={() => setOpenPanel(null)}>
-                    ×
-                  </button>
-                </div>
-                {renderPanel(activeTab.id, stageRef)}
-              </div>
-            </>
-          )}
-        </>
-      )}
+      <div className="canvas-stage" ref={stageRef}>
+        <canvas
+          ref={canvasRef}
+          style={{ width: '100%', height: '100%', display: 'block', touchAction: 'none' }}
+          onPointerDown={handleCanvasPointerDown}
+          onPointerMove={handleCanvasPointerMove}
+          onPointerUp={handleCanvasPointerUp}
+          onPointerCancel={handleCanvasPointerCancel}
+        />
+        {isGameOver && <div className="game-over-overlay">{t('battle.gameOver')}</div>}
+      </div>
     </div>
   );
 }
