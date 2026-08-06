@@ -16,7 +16,7 @@ export function spawnEnemyNow(state: GameState, archetypeId?: EnemyArchetypeId, 
   const difficultyScore = getDifficultyScore(state);
   const resolvedArchetypeId = archetypeId ?? pickArchetypeForScore(difficultyScore);
 
-  const enemy = createEnemy(resolvedArchetypeId, difficultyScore, state.nextEnemyInstanceId);
+  const enemy = createEnemy(resolvedArchetypeId, difficultyScore, state.ascensionLevel, state.nextEnemyInstanceId);
   if (position) {
     enemy.position = position;
   }

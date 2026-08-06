@@ -101,6 +101,7 @@ function snapshotGameState(state: GameState) {
     base: { ...state.base },
     visualEffects: state.visualEffects.map((effect) => ({ ...effect })),
     gold: state.gold,
+    buildMaterials: state.buildMaterials,
     isGameOver: state.isGameOver,
     difficultyScore: getDifficultyScore(state),
     inventory: state.inventory.map((item) => ({ ...item })),
@@ -141,6 +142,7 @@ interface GameStore {
   base: BaseState;
   visualEffects: VisualEffect[];
   gold: number;
+  buildMaterials: number;
   isGameOver: boolean;
   difficultyScore: number;
   upgradeHeroStat: (heroId: string, stat: UpgradeableStat, count: number) => void;
@@ -415,6 +417,11 @@ export function debugUnlockAllPets(): void {
 
 export function debugGrantGold(amount: number): void {
   gameState.gold += amount;
+  useGameStore.setState(snapshotGameState(gameState));
+}
+
+export function debugGrantBuildMaterials(amount: number): void {
+  gameState.buildMaterials += amount;
   useGameStore.setState(snapshotGameState(gameState));
 }
 

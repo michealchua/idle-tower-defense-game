@@ -2,6 +2,7 @@ const zhCN = {
   battle: {
     gold: '金币',
     diamonds: '钻石',
+    buildMaterials: '建材',
     upgrade: '升级',
     maxed: '已满级',
     gameOver: '游戏结束',

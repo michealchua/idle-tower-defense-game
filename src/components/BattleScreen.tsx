@@ -6,6 +6,7 @@ import { getNormalWaveEnemyCount } from '../data/waveConfig';
 import { getBiomeForChapter, bossMusicTracks } from '../data/biomeConfig';
 import { layoutHeroPositions } from '../data/mapConfig';
 import { getMaxDeployedHeroes } from '../data/castleConfig';
+import { formatBigNumber } from '../data/scaling';
 import { audioManager } from '../audio/AudioManager';
 
 // Logical simulation/coordinate space - every entity position in
@@ -271,7 +272,7 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
             </div>
           )}
           <div className="hud-label" style={{ marginTop: 4 }}>
-            {t('base.hp')} {Math.round(base.currentHp)}/{Math.round(base.maxHp)}
+            {t('base.hp')} {formatBigNumber(base.currentHp)}/{formatBigNumber(base.maxHp)}
           </div>
           <div className="bar-track">
             <div className="bar-fill bar-fill-hp" style={{ width: `${hpRatio * 100}%` }} />

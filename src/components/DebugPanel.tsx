@@ -5,6 +5,7 @@ import {
   debugForceClearWave,
   debugForceFailWave,
   debugGrantAscensionPoints,
+  debugGrantBuildMaterials,
   debugGrantDiamonds,
   debugGrantGold,
   debugGrantMaterials,
@@ -99,6 +100,7 @@ function DebugPanel() {
         <button onClick={() => debugGrantGold(1000)}>+1000 Gold</button>
         <button onClick={() => debugGrantGold(100000)}>+100000 Gold</button>
         <button onClick={() => debugGrantMaterials()}>+20 Materials</button>
+        <button onClick={() => debugGrantBuildMaterials(500)}>+500 Build Materials</button>
         <button onClick={() => debugGrantSkillPoints(10)}>+10 Skill Points</button>
         <button onClick={() => debugGrantAscensionPoints(10)}>+10 Ascension Points</button>
         <button onClick={() => debugGrantDiamonds(100)}>+100 Diamonds</button>

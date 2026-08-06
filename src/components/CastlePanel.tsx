@@ -3,9 +3,9 @@ import {
   castleTypeConfig,
   castleTypeIds,
   getCastleAttackMultiplier,
+  getCastleBuildMaterialsPerSecond,
   getCastleCriticalChanceBonus,
   getCastleDamageReductionBonus,
-  getCastleGoldPerSecond,
   type CastleTypeId,
 } from '../data/castleTypeConfig';
 import { t } from '../locales/i18n';
@@ -27,7 +27,7 @@ function formatCastleTypeBonus(id: CastleTypeId, castleLevel: number): string {
     case 'military':
       return `+${Math.round((getCastleAttackMultiplier(id, castleLevel) - 1) * 100)}%`;
     case 'economic':
-      return `+${getCastleGoldPerSecond(id, castleLevel).toFixed(1)}/s`;
+      return `+${getCastleBuildMaterialsPerSecond(id, castleLevel).toFixed(1)}/s`;
     case 'defense':
       return `+${Math.round(getCastleDamageReductionBonus(id, castleLevel) * 100)}%`;
     case 'arcane':
@@ -38,12 +38,12 @@ function formatCastleTypeBonus(id: CastleTypeId, castleLevel: number): string {
 function CastlePanel() {
   const castleLevel = useGameStore((state) => state.castleLevel);
   const castleType = useGameStore((state) => state.castleType);
-  const gold = useGameStore((state) => state.gold);
+  const buildMaterials = useGameStore((state) => state.buildMaterials);
   const upgradeCastle = useGameStore((state) => state.upgradeCastle);
   const setCastleType = useGameStore((state) => state.setCastleType);
 
   const cost = getCastleUpgradeCost(castleLevel);
-  const canAfford = gold >= cost;
+  const canAfford = buildMaterials >= cost;
 
   return (
     <div className="card">
@@ -63,7 +63,7 @@ function CastlePanel() {
       </div>
 
       <button className="btn btn-primary btn-block" onClick={() => upgradeCastle()} disabled={!canAfford}>
-        {t('castle.upgrade')} → Lv.{castleLevel + 1} ({cost} {t('battle.gold')})
+        {t('castle.upgrade')} → Lv.{castleLevel + 1} ({cost} {t('battle.buildMaterials')})
       </button>
 
       <div className="card-subtitle" style={{ marginTop: 12 }}>

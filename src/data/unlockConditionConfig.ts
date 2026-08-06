@@ -21,3 +21,34 @@ export type UnlockCondition =
   | { type: 'goldSpent'; amount: number }
   // Account ascension level must reach this value.
   | { type: 'ascensionLevel'; level: number };
+
+// Distinct from UnlockCondition above (that gates individual roster
+// entries) - this gates entire peripheral-system panels behind the global
+// wave count (see WaveSystem.getGlobalWaveNumber), so the front end reveals
+// one system at a time instead of dumping every tab on the player at wave 1.
+// 'hero' is deliberately absent from panelUnlockWave: it's the only panel
+// open from wave 1, everything else "剥洋葱"-reveals afterward:
+//   wave 1-10  -> only HeroPanel (pure tower-defense/upgrade loop)
+//   wave 11    -> first chapter's boss (wave 10) just died -> EquipmentPanel
+//   wave 20    -> second chapter's boss down -> GachaPanel
+//   wave 50    -> fifth chapter's boss down -> PetPanel + CastlePanel
+//   wave 100   -> tenth chapter's boss down -> AscensionPanel becomes
+//                 visible (a *reveal* gate only - actually ascending still
+//                 requires ascensionConfig.requiredChapter's own, later gate,
+//                 see AscensionSystem.canAscend). Panels not listed here
+//                 (talent/ascensionShop/codex) are ungated - out of scope for
+//                 this pass.
+export type PanelId = 'hero' | 'equipment' | 'gacha' | 'pet' | 'castle' | 'ascension' | 'talent' | 'ascensionShop' | 'codex';
+
+export const panelUnlockWave: Partial<Record<PanelId, number>> = {
+  equipment: 11,
+  gacha: 20,
+  pet: 50,
+  castle: 50,
+  ascension: 100,
+};
+
+export function isPanelUnlocked(panelId: PanelId, globalWave: number): boolean {
+  const requiredWave = panelUnlockWave[panelId];
+  return requiredWave === undefined || globalWave >= requiredWave;
+}

@@ -77,8 +77,12 @@ export function getCastleAttackMultiplier(castleType: CastleTypeId, castleLevel:
   return 1 + (castleLevel - 1) * castleTypeConfig.military.valuePerLevel;
 }
 
-// economic - flat passive gold/second, consumed by CastleSystem.tickCastleIncome.
-export function getCastleGoldPerSecond(castleType: CastleTypeId, castleLevel: number): number {
+// economic - flat passive buildMaterials/second, consumed by
+// CastleSystem.tickCastleIncome. Deliberately produces the castle's own
+// currency, not gold - see the resource-isolation doc comment at the top of
+// resourceConfig.ts (gold is kill-only income, spent only on hero
+// progression; the castle's own upkeep/upgrades run on buildMaterials).
+export function getCastleBuildMaterialsPerSecond(castleType: CastleTypeId, castleLevel: number): number {
   if (castleType !== 'economic') {
     return 0;
   }

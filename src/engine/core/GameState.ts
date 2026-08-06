@@ -60,6 +60,7 @@ export function createInitialGameState(): GameState {
     enemies: [],
     base: createBase(),
     gold: 0,
+    buildMaterials: 0,
     nextEnemyInstanceId: 1,
     isGameOver: false,
     visualEffects: [],

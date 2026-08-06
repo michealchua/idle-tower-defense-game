@@ -35,7 +35,7 @@ function runSummonAbility(state: GameState, witch: EnemyState, ability: SummonAb
     return;
   }
 
-  const minion = createEnemy(ability.minionArchetypeId, getDifficultyScore(state), state.nextEnemyInstanceId);
+  const minion = createEnemy(ability.minionArchetypeId, getDifficultyScore(state), state.ascensionLevel, state.nextEnemyInstanceId);
   state.nextEnemyInstanceId += 1;
   minion.position = { ...witch.position };
   minion.summonedByInstanceId = witch.instanceId;

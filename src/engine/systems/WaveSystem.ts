@@ -16,6 +16,14 @@ function configureWaveShape(wave: WaveState): void {
   wave.bossSpawned = false;
 }
 
+// Flattens chapter/waveInChapter into one monotonically-increasing counter -
+// the unit unlockConditionConfig.panelUnlockWave gates panels on, since
+// "Wave 11/20/50/100" reads as a single running count, not a chapter-
+// relative one that resets every 10 waves.
+export function getGlobalWaveNumber(wave: WaveState): number {
+  return (wave.chapter - 1) * waveConfig.wavesPerChapter + wave.waveInChapter;
+}
+
 export function createInitialWaveState(): WaveState {
   const wave: WaveState = {
     chapter: 1,

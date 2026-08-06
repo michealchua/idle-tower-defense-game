@@ -242,6 +242,13 @@ export interface GameState {
   enemies: EnemyState[];
   base: BaseState;
   gold: number;
+  // Castle's own currency - produced only by the economic castle type's
+  // passive income (castleTypeConfig.getCastleBuildMaterialsPerSecond) and
+  // spent only on castle upgrades (castleConfig.getCastleUpgradeCost). Kept
+  // isolated from gold so castle progression doesn't compete with hero
+  // upgrades for the same pool - see the resource-isolation doc comment at
+  // the top of resourceConfig.ts.
+  buildMaterials: number;
   nextEnemyInstanceId: number;
   isGameOver: boolean;
   visualEffects: VisualEffect[];

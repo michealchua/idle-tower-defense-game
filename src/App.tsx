@@ -11,11 +11,12 @@ import CastlePanel from './components/CastlePanel';
 import AscensionPanel from './components/AscensionPanel';
 import AscensionShopPanel from './components/AscensionShopPanel';
 import { getBiomeForChapter } from './data/biomeConfig';
+import { formatBigNumber } from './data/scaling';
+import { isPanelUnlocked, type PanelId } from './data/unlockConditionConfig';
+import { getGlobalWaveNumber } from './engine/systems/WaveSystem';
 import { t } from './locales/i18n';
 import { audioManager } from './audio/AudioManager';
 import { useGameStore } from './store/useGameStore';
-
-type PanelId = 'castle' | 'hero' | 'pet' | 'equipment' | 'gacha' | 'codex' | 'talent' | 'ascension' | 'ascensionShop';
 
 interface TabDef {
   id: PanelId;
@@ -54,10 +55,17 @@ function App() {
 
   const gold = useGameStore((state) => state.gold);
   const diamonds = useGameStore((state) => state.diamonds);
+  const buildMaterials = useGameStore((state) => state.buildMaterials);
   const difficultyScore = useGameStore((state) => state.difficultyScore);
   const castleLevel = useGameStore((state) => state.castleLevel);
   const wave = useGameStore((state) => state.wave);
   const biome = getBiomeForChapter(wave.chapter);
+  // "剥洋葱" pacing (unlockConditionConfig.panelUnlockWave) - only render tab
+  // buttons for panels the run has actually reached, instead of exposing
+  // every system from wave 1.
+  const globalWave = getGlobalWaveNumber(wave);
+  const visibleGrowthTabs = GROWTH_TABS.filter((tab) => isPanelUnlocked(tab.id, globalWave));
+  const visibleCoreTabs = CORE_TABS.filter((tab) => isPanelUnlocked(tab.id, globalWave));
 
   // Browsers block audio.play() until a user gesture happens anywhere on the
   // page - this listens once for the first pointer interaction and unlocks
@@ -107,6 +115,7 @@ function App() {
           <div className="hud-widget">
             <div className="hud-widget-row">
               <span>🏰 {t('castle.level')} {castleLevel}</span>
+              <span>🧱 {formatBigNumber(buildMaterials)}</span>
             </div>
             <div className="hud-label">
               {t('wave.stage')} {wave.chapter}-{wave.waveInChapter} · {t(biome.labelKey)}
@@ -117,8 +126,8 @@ function App() {
         <div className="hud-corner top-right">
           <div className="hud-widget">
             <div className="hud-widget-row">
-              <span className="hud-gold">💰 {gold.toLocaleString()}</span>
-              <span className="hud-diamond">💎 {diamonds.toLocaleString()}</span>
+              <span className="hud-gold">💰 {formatBigNumber(gold)}</span>
+              <span className="hud-diamond">💎 {formatBigNumber(diamonds)}</span>
               <button
                 className="btn btn-sm mute-toggle-btn"
                 onClick={() => setIsMuted(audioManager.toggleMute())}
@@ -135,7 +144,7 @@ function App() {
 
         <div className="hud-corner bottom-left">
           <div className="hud-actions">
-            {GROWTH_TABS.map((tab) => (
+            {visibleGrowthTabs.map((tab) => (
               <button key={tab.id} className="hud-btn" onClick={() => setActivePanel(tab.id)}>
                 <span className="hud-btn-icon">{tab.icon}</span>
                 <span>{t(tab.labelKey)}</span>
@@ -146,7 +155,7 @@ function App() {
 
         <div className="hud-corner bottom-right">
           <div className="hud-actions">
-            {CORE_TABS.map((tab) => (
+            {visibleCoreTabs.map((tab) => (
               <button key={tab.id} className="hud-btn" onClick={() => setActivePanel(tab.id)}>
                 <span className="hud-btn-icon">{tab.icon}</span>
                 <span>{t(tab.labelKey)}</span>

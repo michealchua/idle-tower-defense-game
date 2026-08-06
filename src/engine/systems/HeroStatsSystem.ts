@@ -2,6 +2,7 @@ import { heroBaseConfig, heroLevelConfig, heroUpgradeConfig, type UpgradeableSta
 import { getHeroDefinition } from '../../data/heroRosterConfig';
 import { getPetDefinition } from '../../data/petRosterConfig';
 import { evolutionConfig } from '../../data/evolutionConfig';
+import { getAscensionPowerMultiplier } from '../../data/ascensionConfig';
 import { starBonusPerStar } from '../../data/gachaConfig';
 import { getEquipmentMainStatValue } from '../../data/equipmentConfig';
 import { getVisualTierForLevel } from '../../data/milestoneConfig';
@@ -104,6 +105,10 @@ export function recomputeHeroStats(state: GameState): void {
   // heroes, same "1 + sum" multiplier shape as the talent tree, applied
   // alongside it below.
   const bondMultiplier = getBondMultiplier(state.deployedHeroIds);
+  // "升华相对论" (ascensionConfig.ts) - the exponential factor that keeps
+  // TTK constant across ascensions by scaling hero damage output and enemy
+  // maxHp (see Enemy.createEnemy) by the same amount.
+  const ascensionPowerMultiplier = getAscensionPowerMultiplier(state.ascensionLevel);
 
   for (const hero of state.heroes) {
     const template = getHeroDefinition(hero.id);
@@ -146,7 +151,8 @@ export function recomputeHeroStats(state: GameState): void {
         ? criticalChanceBeforeTalent + critBonus
         : Math.min(criticalChanceBeforeTalent + critBonus, criticalChanceMax);
 
-    const finalAttackDamage = attackDamage * talentAttackMultiplier * ascensionAttackMultiplier * castleAttackMultiplier * bondMultiplier;
+    const finalAttackDamage =
+      attackDamage * talentAttackMultiplier * ascensionAttackMultiplier * castleAttackMultiplier * bondMultiplier * ascensionPowerMultiplier;
     const finalMaxHp = maxHp * talentMaxHpMultiplier * ascensionMaxHpMultiplier * bondMultiplier;
 
     hero.attackDamage = finalAttackDamage;
@@ -173,11 +179,16 @@ export function recomputePetStats(state: GameState): void {
   const talentAttackMultiplier = getTalentMultiplier(state.talentLevels, 'attackDamage');
   const ascensionAttackMultiplier = getAscensionShopMultiplier(state.ascensionShopLevels, 'attackDamage');
   const castleAttackMultiplier = getCastleAttackMultiplier(state.castleType, state.castleLevel);
+  const ascensionPowerMultiplier = getAscensionPowerMultiplier(state.ascensionLevel);
 
   for (const pet of state.pets) {
     const template = getPetDefinition(pet.id);
     const powerMultiplier =
-      getStarMultiplier(state.petStars, pet.id) * talentAttackMultiplier * ascensionAttackMultiplier * castleAttackMultiplier;
+      getStarMultiplier(state.petStars, pet.id) *
+      talentAttackMultiplier *
+      ascensionAttackMultiplier *
+      castleAttackMultiplier *
+      ascensionPowerMultiplier;
     pet.attackDamage = template.attackDamage * powerMultiplier;
     pet.attackSpeed = template.attackSpeed;
     pet.attackRange = template.attackRange;

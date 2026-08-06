@@ -6,6 +6,7 @@ import { heroUpgradeConfig, type UpgradeableStat } from '../data/heroConfig';
 import { MAX_STAR_LEVEL, gachaRarityConfig, getStarUpCost, type GachaRarity } from '../data/gachaConfig';
 import { getActiveBondCounts, type BondId } from '../data/bondConfig';
 import { isHeroUpgradeMaxed, previewHeroUpgradeBulk } from '../engine/systems/UpgradeSystem';
+import { formatBigNumber } from '../data/scaling';
 import type { HeroState } from '../engine/types';
 import { t } from '../locales/i18n';
 import { upgradeableStats, useGameStore } from '../store/useGameStore';
@@ -189,7 +190,7 @@ function HeroDetail({
         <div className="bar-fill bar-fill-hp" style={{ width: `${Math.max(0, hero.currentHp / hero.maxHp) * 100}%` }} />
       </div>
       <div className="item-detail">
-        {t('hero.hp')} {Math.round(hero.currentHp)}/{Math.round(hero.maxHp)}
+        {t('hero.hp')} {formatBigNumber(hero.currentHp)}/{formatBigNumber(hero.maxHp)}
       </div>
       <div className="bar-track" style={{ marginTop: 4 }}>
         <div className="bar-fill bar-fill-exp" style={{ width: `${expRatio * 100}%` }} />
@@ -201,7 +202,7 @@ function HeroDetail({
       <div className="stat-grid">
         <div className="stat-tile">
           <div className="stat-tile-label">{t('hero.attackDamage')}</div>
-          <div className="stat-tile-value">{Math.round(hero.attackDamage)}</div>
+          <div className="stat-tile-value">{formatBigNumber(hero.attackDamage)}</div>
         </div>
         <div className="stat-tile">
           <div className="stat-tile-label">{t('hero.bond')}</div>
@@ -362,7 +363,7 @@ function HeroPanel({ gameScreenRef }: { gameScreenRef: RefObject<HTMLDivElement>
                       Lv.{hero.level} · ★{heroStars[definition.id] ?? 0}
                     </div>
                     <div className="mini-card-sub">
-                      {t('hero.attackDamage')} {Math.round(hero.attackDamage)}
+                      {t('hero.attackDamage')} {formatBigNumber(hero.attackDamage)}
                     </div>
                   </div>
                 );
