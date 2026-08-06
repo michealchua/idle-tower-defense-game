@@ -20,10 +20,11 @@ export const enemyScalingConfig = {
   // player leveling roughly in step with the wave they're on). Mirrors the
   // classic idle/TD pacing: gentle linear early game, a light exponential
   // ramp, a sudden "wall" spike that's meant to be unbeatable by raw
-  // upgrades alone, then a steep compound-exponential late game. See
-  // ascensionConfig.requiredChapter (~stage 450, chapter 45) - it's placed
-  // just past the wall on purpose, so ascending is the intended way through
-  // it rather than pure idle grinding.
+  // upgrades alone, then a steep compound-exponential late game. Note
+  // ascensionConfig.requiredWave (100, ~stage 15) unlocks well *before* this
+  // wall (chapter ~40, stage ~400) - ascension is an early rescue valve a
+  // struggling run can reach for, not specifically "the way through" this
+  // particular wall.
   curve: {
     // score ~= stage * stage.weight, so these line up with roughly:
     // phase1End -> stage 150 (chapter 15), phase2End -> stage 400 (chapter

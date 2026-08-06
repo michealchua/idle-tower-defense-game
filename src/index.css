@@ -560,6 +560,17 @@ select {
   font-weight: 700;
 }
 
+/* GachaPanel's one-time "首次必出SSR!" tag on the guaranteed first 10-pull -
+   gold-tinted like the rarity it promises, not a generic accent color. */
+.badge-highlight {
+  background: var(--rarity-gold);
+  color: #2a1a00;
+}
+
+.first-ten-pull-highlight {
+  box-shadow: 0 0 0 2px var(--rarity-gold);
+}
+
 .rarity-white {
   color: var(--rarity-white);
 }

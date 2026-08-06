@@ -230,6 +230,19 @@ export interface GameState {
   // incremented on every pull that isn't itself a hit, reset to 0 on one
   // (natural or forced). Never reset by ascension, same as goldSpentTotal.
   pityCounters: Record<PityPoolId, number>;
+  // "新手绝对福利" - the player's very first ever 10-pull (whichever of the
+  // four pools they spend it on) is guaranteed at least one gold-or-better
+  // hit, see GachaSystem.pullMulti. Flips true the moment that pull
+  // resolves and never resets - separate from hasGrantedFirstGachaBonus
+  // below, which only tracks whether the *free diamonds* funding that pull
+  // have been handed out yet.
+  isFirstTenPullDone: boolean;
+  // One-shot latch for GachaSystem.tickGachaWelcomeBonus - without this,
+  // the "grant free diamonds once GachaPanel unlocks" check (which reruns
+  // every GameLoop tick) would re-grant every tick until the player
+  // actually spends them. Not surfaced to the UI, so it isn't mirrored into
+  // the useGameStore snapshot the way isFirstTenPullDone is.
+  hasGrantedFirstGachaBonus: boolean;
   // Rare star-up materials for purple/gold rarity only - no real income
   // source built yet, granted via debug tools for now.
   epicSourceStone: number;

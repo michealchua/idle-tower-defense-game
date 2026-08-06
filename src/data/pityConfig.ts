@@ -16,15 +16,17 @@ export interface PityRule {
   pullsUntilGuarantee: number;
 }
 
-// Placeholder thresholds, tune later - same precedent as every other
-// unspecified number in this project. The premium pool's guarantee is
-// tighter than the gold pool's: premiumPullWeight already skews toward
-// red/rainbow (see gachaConfig.ts), so its pity is a shorter backstop on
-// top of already-decent odds, while the gold pool's is a longer "so a long
-// run never feels completely dry" floor.
+// Hard pity thresholds - the gold pool's 80 is the "祈愿抽卡" spec's number
+// (80 pulls without an SSR-or-better forces the 80th), reusing the same
+// "rarities: X or above resets/satisfies the counter" mechanism this pool
+// already had rather than adding a parallel SSR-only concept. The premium
+// pool's guarantee stays tighter (30): premiumPullWeight already skews
+// toward red/rainbow (see gachaConfig.ts), so its pity is a shorter backstop
+// on top of already-decent odds, while the gold pool's 80 is the longer "so
+// a long free-to-play run never feels completely dry" floor.
 export const gachaPityConfig: Record<PityPoolId, PityRule> = {
-  heroGold: { rarities: ['gold', 'red', 'rainbow'], pullsUntilGuarantee: 50 },
-  petGold: { rarities: ['gold', 'red', 'rainbow'], pullsUntilGuarantee: 50 },
+  heroGold: { rarities: ['gold', 'red', 'rainbow'], pullsUntilGuarantee: 80 },
+  petGold: { rarities: ['gold', 'red', 'rainbow'], pullsUntilGuarantee: 80 },
   heroPremium: { rarities: ['red', 'rainbow'], pullsUntilGuarantee: 30 },
   petPremium: { rarities: ['red', 'rainbow'], pullsUntilGuarantee: 30 },
 };

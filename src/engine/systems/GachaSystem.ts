@@ -2,10 +2,12 @@ import { weightedPick } from '../../data/scaling';
 import { gachaPullConfig, gachaRarityConfig, type GachaRarity } from '../../data/gachaConfig';
 import { diamondExchangeConfig } from '../../data/diamondConfig';
 import { gachaPityConfig, type PityPoolId } from '../../data/pityConfig';
+import { panelUnlockWave } from '../../data/unlockConditionConfig';
 import { heroRosterConfig } from '../../data/heroRosterConfig';
 import { petRosterConfig } from '../../data/petRosterConfig';
 import { unlockHero } from './HeroSystem';
 import { unlockPet } from './PetSystem';
+import { getGlobalWaveNumber } from './WaveSystem';
 import type { GameState } from '../types';
 
 export interface GachaPullResult {
@@ -114,10 +116,24 @@ function pullMulti(
   count: number,
   totalCost: number,
   currency: 'gold' | 'diamonds',
+  pityPoolId: PityPoolId,
   pullOneOfKind: (state: GameState) => GachaPullResult | null,
 ): GachaPullResult[] {
   if (state[currency] < totalCost) {
     return [];
+  }
+
+  // "新手绝对福利" - the player's very first ever 10-pull, on whichever of
+  // the four pools they use it on, is guaranteed at least one gold-or-
+  // better hit. Reuses this pool's own pity mechanism instead of a
+  // parallel forced-rarity path: pre-arming the counter to one pull short
+  // of its guarantee makes the very first pull in this batch trigger
+  // resolveForcedRarities naturally, complete with the same rarity-reset
+  // bookkeeping a normal pity hit gets.
+  const isFirstTenPullGuarantee = count === 10 && !state.isFirstTenPullDone;
+  if (isFirstTenPullGuarantee) {
+    const rule = gachaPityConfig[pityPoolId];
+    state.pityCounters[pityPoolId] = Math.max(state.pityCounters[pityPoolId], rule.pullsUntilGuarantee - 1);
   }
 
   const results: GachaPullResult[] = [];
@@ -127,23 +143,47 @@ function pullMulti(
       results.push(result);
     }
   }
+
+  if (isFirstTenPullGuarantee) {
+    state.isFirstTenPullDone = true;
+  }
+
   return results;
 }
 
 export function pullHeroMulti(state: GameState, count: number): GachaPullResult[] {
-  return pullMulti(state, count, gachaPullConfig.pullCostGold * count, 'gold', pullHero);
+  return pullMulti(state, count, gachaPullConfig.pullCostGold * count, 'gold', 'heroGold', pullHero);
 }
 
 export function pullPetMulti(state: GameState, count: number): GachaPullResult[] {
-  return pullMulti(state, count, gachaPullConfig.pullCostGold * count, 'gold', pullPet);
+  return pullMulti(state, count, gachaPullConfig.pullCostGold * count, 'gold', 'petGold', pullPet);
 }
 
 export function pullHeroPremiumMulti(state: GameState, count: number): GachaPullResult[] {
-  return pullMulti(state, count, gachaPullConfig.pullCostDiamonds * count, 'diamonds', pullHeroPremium);
+  return pullMulti(state, count, gachaPullConfig.pullCostDiamonds * count, 'diamonds', 'heroPremium', pullHeroPremium);
 }
 
 export function pullPetPremiumMulti(state: GameState, count: number): GachaPullResult[] {
-  return pullMulti(state, count, gachaPullConfig.pullCostDiamonds * count, 'diamonds', pullPetPremium);
+  return pullMulti(state, count, gachaPullConfig.pullCostDiamonds * count, 'diamonds', 'petPremium', pullPetPremium);
+}
+
+// Called every GameLoop tick (see GameLoop.ts) - grants enough diamonds for
+// exactly one free premium 10-pull the moment the run's global wave count
+// reaches GachaPanel's own reveal gate (unlockConditionConfig.
+// panelUnlockWave.gacha), so the "首次十连必出" promise above has something
+// funded to trigger on. hasGrantedFirstGachaBonus makes this a one-shot -
+// see its doc comment in engine/types.ts for why a second flag is needed
+// alongside isFirstTenPullDone.
+export function tickGachaWelcomeBonus(state: GameState): void {
+  if (state.hasGrantedFirstGachaBonus) {
+    return;
+  }
+  const requiredWave = panelUnlockWave.gacha;
+  if (requiredWave === undefined || getGlobalWaveNumber(state.wave) < requiredWave) {
+    return;
+  }
+  state.diamonds += gachaPullConfig.pullCostDiamonds * 10;
+  state.hasGrantedFirstGachaBonus = true;
 }
 
 // Fixed-chunk exchange (see diamondConfig.ts) - the "universal fallback" use

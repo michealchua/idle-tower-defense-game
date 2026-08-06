@@ -80,6 +80,7 @@ function PullCard({
   onResult,
   pityPoolId,
   pityCurrent,
+  showFirstTenPullBadge,
 }: {
   icon: string;
   label: string;
@@ -91,6 +92,12 @@ function PullCard({
   onResult: (text: string) => void;
   pityPoolId: PityPoolId;
   pityCurrent: number;
+  // "新手绝对福利" - true until the player's very first ever 10-pull (on
+  // any of the four pools) resolves, see GameState.isFirstTenPullDone.
+  // Purely cosmetic here (the guarantee itself lives in GachaSystem.
+  // pullMulti) - just tells the player which x10 button is the guaranteed
+  // one before they click it.
+  showFirstTenPullBadge: boolean;
 }) {
   const canAfford = (count: number) => balance >= costPerPull * count;
   const pityRule = gachaPityConfig[pityPoolId];
@@ -125,7 +132,7 @@ function PullCard({
           x1 ({costPerPull} {currencyLabel})
         </button>
         <button
-          className="btn btn-sm"
+          className={`btn btn-sm${showFirstTenPullBadge ? ' btn-primary first-ten-pull-highlight' : ''}`}
           disabled={!canAfford(10)}
           onClick={() => {
             const results = pullMulti(10);
@@ -135,6 +142,7 @@ function PullCard({
           }}
         >
           x10
+          {showFirstTenPullBadge && <span className="badge badge-highlight"> {t('gacha.firstTenPullBadge')}</span>}
         </button>
         {canAfford(100) && (
           <button
@@ -158,6 +166,7 @@ function GachaPanel() {
   const gold = useGameStore((state) => state.gold);
   const diamonds = useGameStore((state) => state.diamonds);
   const pityCounters = useGameStore((state) => state.pityCounters);
+  const isFirstTenPullDone = useGameStore((state) => state.isFirstTenPullDone);
   const pullHero = useGameStore((state) => state.pullHero);
   const pullPet = useGameStore((state) => state.pullPet);
   const pullHeroMulti = useGameStore((state) => state.pullHeroMulti);
@@ -185,6 +194,7 @@ function GachaPanel() {
           onResult={setLastResult}
           pityPoolId="heroGold"
           pityCurrent={pityCounters.heroGold}
+          showFirstTenPullBadge={!isFirstTenPullDone}
         />
         <PullCard
           icon="🐾"
@@ -197,6 +207,7 @@ function GachaPanel() {
           onResult={setLastResult}
           pityPoolId="petGold"
           pityCurrent={pityCounters.petGold}
+          showFirstTenPullBadge={!isFirstTenPullDone}
         />
       </div>
 
@@ -215,6 +226,7 @@ function GachaPanel() {
           onResult={setLastResult}
           pityPoolId="heroPremium"
           pityCurrent={pityCounters.heroPremium}
+          showFirstTenPullBadge={!isFirstTenPullDone}
         />
         <PullCard
           icon="💎🐾"
@@ -227,6 +239,7 @@ function GachaPanel() {
           onResult={setLastResult}
           pityPoolId="petPremium"
           pityCurrent={pityCounters.petPremium}
+          showFirstTenPullBadge={!isFirstTenPullDone}
         />
       </div>
 

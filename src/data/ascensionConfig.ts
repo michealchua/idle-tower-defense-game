@@ -1,16 +1,20 @@
 // Ascension becomes available once your strongest hero reaches
-// unlockHeroLevel AND the run has cleared chapter (requiredChapter - 1)'s
-// final wave and stepped into requiredChapter wave 1 (e.g. requiredChapter
-// 45 means "beat 44-10, standing in 45-1" - see AscensionSystem.canAscend).
-// Deliberately placed just past enemyScalingConfig's difficulty wall
-// (chapter ~40, where score crosses curve.phase2EndScore and HP spikes) -
-// ascending is meant to be the intended way through the wall, not something
-// you reach long after already grinding past it. Each ascend grants
-// pointsPerAscend, spent in the ascension shop (ascensionShopConfig.ts) for
-// permanent bonuses that make the next run's climb to chapter 45 faster.
+// unlockHeroLevel AND the run's global wave count (see
+// WaveSystem.getGlobalWaveNumber) reaches requiredWave - see
+// AscensionSystem.canAscend. requiredWave is deliberately kept equal to
+// unlockConditionConfig.panelUnlockWave.ascension (both 100) on purpose:
+// "所见即所得" - the moment the AscensionPanel tab reveals itself, the
+// ascend button inside it is already pressable, mid-fight against wave
+// 100's boss. This sits well *before* enemyScalingConfig's difficulty wall
+// (chapter ~40 / global wave ~400) - ascension is now an early rescue valve
+// a struggling run can reach for, not "the intended way through the wall"
+// (see enemyScalingConfig.ts's curve comment for that system's own pacing).
+// Each ascend grants pointsPerAscend, spent in the ascension shop
+// (ascensionShopConfig.ts) for permanent bonuses that make the next run's
+// climb back to wave 100 faster.
 export const ascensionConfig = {
   unlockHeroLevel: 50,
-  requiredChapter: 45,
+  requiredWave: 100,
   pointsPerAscend: 1,
   // "升华相对论" - each ascension multiplies hero attack damage AND enemy
   // maxHp by the same factor (see getAscensionPowerMultiplier), so

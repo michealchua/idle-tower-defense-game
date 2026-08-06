@@ -1,4 +1,5 @@
 import { ascensionConfig } from '../data/ascensionConfig';
+import { getGlobalWaveNumber } from '../engine/systems/WaveSystem';
 import { t } from '../locales/i18n';
 import { useGameStore } from '../store/useGameStore';
 import Accordion from './Accordion';
@@ -29,8 +30,8 @@ function AscensionPanel() {
       </div>
 
       <div className="card-subtitle">
-        {t('ascension.requirement')} {ascensionConfig.unlockHeroLevel} · {t('ascension.requirementChapter')} {ascensionConfig.requiredChapter}
-        {' '}({t('ascension.currentChapter')} {wave.chapter}-{wave.waveInChapter})
+        {t('ascension.requirement')} {ascensionConfig.unlockHeroLevel} · {t('ascension.requirementWave')} {ascensionConfig.requiredWave}
+        {' '}({t('ascension.currentWave')} {getGlobalWaveNumber(wave)})
       </div>
 
       <button className="btn btn-primary btn-block" style={{ marginTop: 8 }} onClick={() => ascend()} disabled={!eligible}>

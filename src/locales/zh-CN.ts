@@ -141,8 +141,8 @@ const zhCN = {
     points: '升华点数',
     ascend: '升华',
     requirement: '需要任意英雄等级达到',
-    requirementChapter: '且通关至',
-    currentChapter: '当前进度',
+    requirementWave: '且波次达到',
+    currentWave: '当前波次',
     resetNotice: '升华会重置等级、金币、升级点数与关卡进度,但保留已解锁的英雄/宠物、装备背包、城堡等级、防御塔、天赋与升华商店加成,并获得升华点数',
     details: '重置说明',
   },
@@ -175,6 +175,7 @@ const zhCN = {
     pityProgress: '保底进度',
     pityOrAbove: '及以上',
     pityTriggered: '保底触发',
+    firstTenPullBadge: '首次必出SSR!',
   },
   rarity: {
     white: '白',

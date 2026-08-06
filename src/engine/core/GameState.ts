@@ -53,6 +53,8 @@ export function createInitialGameState(): GameState {
     petShards: createInitialCounters(petRosterConfig.map((pet) => pet.id)),
     petStars: createInitialCounters(petRosterConfig.map((pet) => pet.id)),
     pityCounters: createInitialPityCounters(),
+    isFirstTenPullDone: false,
+    hasGrantedFirstGachaBonus: false,
     epicSourceStone: 0,
     legendarySourceStone: 0,
     goldSpentTotal: 0,

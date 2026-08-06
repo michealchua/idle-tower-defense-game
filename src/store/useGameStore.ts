@@ -28,7 +28,8 @@ import { upgradeAscensionShopNode as upgradeAscensionShopNodeInEngine } from '..
 import { ascend as ascendInEngine, canAscend } from '../engine/systems/AscensionSystem';
 import { ascensionConfig } from '../data/ascensionConfig';
 import { recomputeHeroStats, getDeployedHeroes } from '../engine/systems/HeroStatsSystem';
-import { advanceToNextWave, retryCurrentWave, tickWaveProgress } from '../engine/systems/WaveSystem';
+import { advanceToNextWave, getGlobalWaveNumber, retryCurrentWave, tickWaveProgress } from '../engine/systems/WaveSystem';
+import { waveConfig } from '../data/waveConfig';
 import {
   pullHero as pullHeroInEngine,
   pullPet as pullPetInEngine,
@@ -93,6 +94,7 @@ function snapshotGameState(state: GameState) {
     petShards: { ...state.petShards },
     petStars: { ...state.petStars },
     pityCounters: { ...state.pityCounters },
+    isFirstTenPullDone: state.isFirstTenPullDone,
     epicSourceStone: state.epicSourceStone,
     legendarySourceStone: state.legendarySourceStone,
     goldSpentTotal: state.goldSpentTotal,
@@ -134,6 +136,7 @@ interface GameStore {
   petShards: Record<string, number>;
   petStars: Record<string, number>;
   pityCounters: Record<PityPoolId, number>;
+  isFirstTenPullDone: boolean;
   epicSourceStone: number;
   legendarySourceStone: number;
   goldSpentTotal: number;
@@ -449,7 +452,10 @@ export function debugForceAscend(): void {
   for (const hero of gameState.heroes) {
     hero.level = Math.max(hero.level, ascensionConfig.unlockHeroLevel);
   }
-  gameState.wave.chapter = Math.max(gameState.wave.chapter, ascensionConfig.requiredChapter);
+  if (getGlobalWaveNumber(gameState.wave) < ascensionConfig.requiredWave) {
+    gameState.wave.chapter = Math.ceil(ascensionConfig.requiredWave / waveConfig.wavesPerChapter);
+    gameState.wave.waveInChapter = ascensionConfig.requiredWave - (gameState.wave.chapter - 1) * waveConfig.wavesPerChapter;
+  }
   recomputeHeroStats(gameState);
   ascendInEngine(gameState);
   useGameStore.setState(snapshotGameState(gameState));

@@ -31,9 +31,15 @@ export interface GachaRarityDefinition {
 // units. Pull odds and per-star stat bonus are NOT in those tables - see
 // gachaPullConfig below, defaulted the same way every other unspecified
 // number in this project has been.
+// pullWeight (the gold-cost pool's odds) is tuned to the "祈愿抽卡" spec's
+// four buckets - N 50% (white+green) / R 30% (blue) / SR 18% (purple) /
+// SSR 2% (gold+red+rainbow combined, split between the three the same
+// ~81:17:2 ratio the tiers already had) - summing to exactly 100. Only the
+// gold pool was retuned; premiumPullWeight (the diamond pool) is
+// deliberately left alone, it's a separate, already-more-generous curve.
 export const gachaRarityConfig: Record<GachaRarity, GachaRarityDefinition> = {
   white: {
-    pullWeight: 55,
+    pullWeight: 34,
     premiumPullWeight: 20,
     shardsPerDuplicate: 10,
     starUpCosts: [
@@ -45,7 +51,7 @@ export const gachaRarityConfig: Record<GachaRarity, GachaRarityDefinition> = {
     ],
   },
   green: {
-    pullWeight: 27,
+    pullWeight: 16,
     premiumPullWeight: 20,
     shardsPerDuplicate: 20,
     starUpCosts: [
@@ -57,7 +63,7 @@ export const gachaRarityConfig: Record<GachaRarity, GachaRarityDefinition> = {
     ],
   },
   blue: {
-    pullWeight: 12,
+    pullWeight: 30,
     premiumPullWeight: 20,
     shardsPerDuplicate: 30,
     starUpCosts: [
@@ -69,7 +75,7 @@ export const gachaRarityConfig: Record<GachaRarity, GachaRarityDefinition> = {
     ],
   },
   purple: {
-    pullWeight: 5,
+    pullWeight: 18,
     premiumPullWeight: 20,
     shardsPerDuplicate: 40,
     breakthroughMaterial: 'epicSourceStone',
@@ -82,7 +88,7 @@ export const gachaRarityConfig: Record<GachaRarity, GachaRarityDefinition> = {
     ],
   },
   gold: {
-    pullWeight: 1,
+    pullWeight: 1.63,
     premiumPullWeight: 12,
     shardsPerDuplicate: 60,
     breakthroughMaterial: 'legendarySourceStone',
@@ -98,7 +104,7 @@ export const gachaRarityConfig: Record<GachaRarity, GachaRarityDefinition> = {
   // gachaPullConfig), meaningfully more common from the diamond premium pool
   // (gachaPullConfig.premiumPullWeight).
   red: {
-    pullWeight: 0.2,
+    pullWeight: 0.33,
     premiumPullWeight: 6,
     shardsPerDuplicate: 80,
     breakthroughMaterial: 'diamonds',
@@ -111,7 +117,7 @@ export const gachaRarityConfig: Record<GachaRarity, GachaRarityDefinition> = {
     ],
   },
   rainbow: {
-    pullWeight: 0.03,
+    pullWeight: 0.04,
     premiumPullWeight: 2,
     shardsPerDuplicate: 100,
     breakthroughMaterial: 'diamonds',

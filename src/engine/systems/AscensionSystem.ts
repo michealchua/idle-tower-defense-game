@@ -3,15 +3,14 @@ import { ascensionConfig } from '../../data/ascensionConfig';
 import { diamondsPerAscend } from '../../data/diamondConfig';
 import { createInitialHeroUpgrades } from '../entities/Hero';
 import { getStrongestHeroLevel, recomputeHeroStats } from './HeroStatsSystem';
-import { createInitialWaveState } from './WaveSystem';
+import { createInitialWaveState, getGlobalWaveNumber } from './WaveSystem';
 import type { GameState } from '../types';
 
-// Reaching requiredChapter means the run has already beaten
-// (requiredChapter - 1)'s wave 10 boss and advanced into requiredChapter's
-// wave 1 - see WaveSystem.advanceToNextWave, which is what bumps
-// wave.chapter.
+// requiredWave is a global wave count (see WaveSystem.getGlobalWaveNumber),
+// not chapter-relative - reaching it can (and by design, does) happen
+// mid-fight against a boss wave, not only at a fresh chapter's wave 1.
 export function canAscend(state: GameState): boolean {
-  return getStrongestHeroLevel(state) >= ascensionConfig.unlockHeroLevel && state.wave.chapter >= ascensionConfig.requiredChapter;
+  return getStrongestHeroLevel(state) >= ascensionConfig.unlockHeroLevel && getGlobalWaveNumber(state.wave) >= ascensionConfig.requiredWave;
 }
 
 // Resets the run (level/exp/per-hero upgrades/gold/stage progress) in
