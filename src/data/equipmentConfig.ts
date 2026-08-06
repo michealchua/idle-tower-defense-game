@@ -31,93 +31,103 @@ export interface RarityDefinition {
   // multiplier is baseMultiplier * (1 + starLevel * starGrowthRate) - higher
   // rarities both start higher and climb faster per star.
   starGrowthRate: number;
-  // How many secondary affixes an item of this rarity rolls.
-  affixCount: number;
-  // [min, max] multiplier applied to affixBaseValueByStat when rolling each
-  // affix's value - the "词条数值品质" quality band.
-  affixRollRange: [number, number];
-  // Purple+ always rolls at least one affix at the top of affixRollRange
-  // ("必出1条极品词条").
-  guaranteesPremiumAffix: boolean;
+  // How many 副词条 (substats) an item of this rarity rolls - white/green: 1,
+  // blue/purple: 2, gold/red: 3, rainbow: 4. Only 3 UpgradeableStats remain
+  // once the item's own main stat is excluded, so rainbow's 4th substat
+  // wraps back around and stacks a repeated stat - see rollSubstats.
+  substatCount: number;
+  // [min, max] multiplier applied to substatBaseValueByStat when rolling
+  // each substat's value - the "词条数值品质" quality band.
+  substatRollRange: [number, number];
+  // Purple+ always rolls at least one substat at the top of
+  // substatRollRange ("必出1条极品词条").
+  guaranteesPremiumSubstat: boolean;
   // Gold only - see legendaryEffects above.
   hasLegendaryEffect: boolean;
   dropWeight: number;
   sellValue: number;
+  // reforgeDust returned by EquipmentSystem.salvageEquipment when this
+  // rarity's item is broken down - see resourceConfig.ts's ledger.
+  reforgeDustValue: number;
 }
 
 export const equipmentRarities: Record<EquipmentRarity, RarityDefinition> = {
   white: {
     baseMultiplier: 1,
     starGrowthRate: 0.1,
-    affixCount: 0,
-    affixRollRange: [0, 0],
-    guaranteesPremiumAffix: false,
+    substatCount: 1,
+    substatRollRange: [0.2, 0.4],
+    guaranteesPremiumSubstat: false,
     hasLegendaryEffect: false,
     dropWeight: 55,
     sellValue: 5,
+    reforgeDustValue: 3,
   },
   green: {
     baseMultiplier: 1.2,
     starGrowthRate: 0.12,
-    affixCount: 1,
-    affixRollRange: [0.5, 1.5],
-    guaranteesPremiumAffix: false,
+    substatCount: 1,
+    substatRollRange: [0.5, 1.5],
+    guaranteesPremiumSubstat: false,
     hasLegendaryEffect: false,
     dropWeight: 27,
     sellValue: 15,
+    reforgeDustValue: 8,
   },
   blue: {
     baseMultiplier: 1.5,
     starGrowthRate: 0.15,
-    affixCount: 2,
-    affixRollRange: [1.5, 3],
-    guaranteesPremiumAffix: false,
+    substatCount: 2,
+    substatRollRange: [1.5, 3],
+    guaranteesPremiumSubstat: false,
     hasLegendaryEffect: false,
     dropWeight: 12,
     sellValue: 40,
+    reforgeDustValue: 20,
   },
   purple: {
     baseMultiplier: 2,
     starGrowthRate: 0.2,
-    affixCount: 3,
-    affixRollRange: [3, 6],
-    guaranteesPremiumAffix: true,
+    substatCount: 2,
+    substatRollRange: [3, 6],
+    guaranteesPremiumSubstat: true,
     hasLegendaryEffect: false,
     dropWeight: 5,
     sellValue: 120,
+    reforgeDustValue: 50,
   },
-  // affixCount stays capped at 3 (there are only 4 UpgradeableStats total,
-  // one of which is always the item's own primary stat) - gold/red/rainbow
-  // differentiate via baseMultiplier/starGrowthRate/affixRollRange instead.
   gold: {
     baseMultiplier: 3,
     starGrowthRate: 0.3,
-    affixCount: 3,
-    affixRollRange: [5, 10],
-    guaranteesPremiumAffix: true,
+    substatCount: 3,
+    substatRollRange: [5, 10],
+    guaranteesPremiumSubstat: true,
     hasLegendaryEffect: true,
     dropWeight: 1,
     sellValue: 400,
+    reforgeDustValue: 130,
   },
   red: {
     baseMultiplier: 4.5,
     starGrowthRate: 0.4,
-    affixCount: 3,
-    affixRollRange: [8, 16],
-    guaranteesPremiumAffix: true,
+    substatCount: 3,
+    substatRollRange: [8, 16],
+    guaranteesPremiumSubstat: true,
     hasLegendaryEffect: true,
     dropWeight: 0.3,
     sellValue: 1200,
+    reforgeDustValue: 350,
   },
   rainbow: {
     baseMultiplier: 6.5,
     starGrowthRate: 0.55,
-    affixCount: 3,
-    affixRollRange: [12, 24],
-    guaranteesPremiumAffix: true,
+    substatCount: 4,
+    substatRollRange: [12, 24],
+    guaranteesPremiumSubstat: true,
     hasLegendaryEffect: true,
     dropWeight: 0.05,
     sellValue: 4000,
+    reforgeDustValue: 900,
   },
 };
 
@@ -147,10 +157,10 @@ export const equipmentSlots: Record<EquipmentSlot, SlotDefinition> = {
   },
 };
 
-// Smaller reference pool an item's *affixes* roll against - deliberately
-// lower than equipmentSlots.baseValueByStat so a secondary stat never
-// outshines a slot's own primary roll.
-export const affixBaseValueByStat: Record<UpgradeableStat, number> = {
+// Smaller reference pool an item's *substats* (副词条) roll against -
+// deliberately lower than equipmentSlots.baseValueByStat so a secondary
+// stat never outshines a slot's own primary roll.
+export const substatBaseValueByStat: Record<UpgradeableStat, number> = {
   attackDamage: 2,
   attackSpeed: 0.02,
   maxHp: 8,
@@ -175,7 +185,7 @@ function roundStatValue(stat: UpgradeableStat, value: number): number {
   return Math.max(1, Math.round(value));
 }
 
-export interface EquipmentAffix {
+export interface EquipmentSubstat {
   stat: UpgradeableStat;
   value: number;
 }
@@ -185,7 +195,7 @@ export interface EquipmentRoll {
   rarity: EquipmentRarity;
   stat: UpgradeableStat;
   value: number;
-  affixes: EquipmentAffix[];
+  substats: EquipmentSubstat[];
   legendaryEffectId?: string;
   setId?: EquipmentSetId;
 }
@@ -249,8 +259,8 @@ function pickSetId(): EquipmentSetId {
 
 // Structural subset of engine/types.ts's EquipmentItem - defined locally
 // instead of imported to avoid a circular dependency (types.ts imports
-// EquipmentSlot/EquipmentRarity/EquipmentAffix from this file already). Any
-// real EquipmentItem satisfies this shape.
+// EquipmentSlot/EquipmentRarity/EquipmentSubstat from this file already).
+// Any real EquipmentItem satisfies this shape.
 interface SetTaggedItem {
   setId?: EquipmentSetId;
 }
@@ -304,21 +314,29 @@ export function getEquipmentMainStatValue(rarity: EquipmentRarity, baseValue: nu
   return baseValue * (1 + starLevel * def.starGrowthRate);
 }
 
-function rollAffixes(rarity: EquipmentRarity, excludeStat: UpgradeableStat): EquipmentAffix[] {
+// Exported for EquipmentSystem.reforgeEquipment, which re-rolls just an
+// existing item's substats (kind/value) without touching its slot/rarity/
+// main stat/set/legendary effect.
+export function rollSubstats(rarity: EquipmentRarity, excludeStat: UpgradeableStat): EquipmentSubstat[] {
   const def = equipmentRarities[rarity];
-  if (def.affixCount === 0) {
+  if (def.substatCount === 0) {
     return [];
   }
 
   const pool = ALL_STATS.filter((stat) => stat !== excludeStat);
-  const stats = pool.sort(() => Math.random() - 0.5).slice(0, def.affixCount);
-  const [minMult, maxMult] = def.affixRollRange;
+  const shuffledPool = [...pool].sort(() => Math.random() - 0.5);
+  const [minMult, maxMult] = def.substatRollRange;
 
-  return stats.map((stat, index) => {
+  return Array.from({ length: def.substatCount }, (_, index) => {
+    // Cycles back through the pool once a rarity rolls more substats than
+    // there are non-main stats to draw from (rainbow's 4th line, since only
+    // 3 UpgradeableStats remain once the main stat is excluded) - a
+    // repeated stat just stacks, same net effect as if it had rolled twice.
+    const stat = shuffledPool[index % shuffledPool.length];
     // Force one roll to the top of the band on rarities that guarantee a
-    // premium affix ("极品词条").
-    const mult = def.guaranteesPremiumAffix && index === 0 ? maxMult : minMult + Math.random() * (maxMult - minMult);
-    return { stat, value: roundStatValue(stat, affixBaseValueByStat[stat] * mult) };
+    // premium substat ("必出1条极品词条").
+    const mult = def.guaranteesPremiumSubstat && index === 0 ? maxMult : minMult + Math.random() * (maxMult - minMult);
+    return { stat, value: roundStatValue(stat, substatBaseValueByStat[stat] * mult) };
   });
 }
 
@@ -347,7 +365,7 @@ export function rollEquipment(): EquipmentRoll {
     rarity,
     stat,
     value: roundStatValue(stat, baseValue * def.baseMultiplier * variance),
-    affixes: rollAffixes(rarity, stat),
+    substats: rollSubstats(rarity, stat),
     legendaryEffectId: def.hasLegendaryEffect ? pickLegendaryEffect() : undefined,
     setId: rollsSet ? pickSetId() : undefined,
   };
@@ -364,4 +382,13 @@ export function getEquipmentStarUpCost(rarity: EquipmentRarity, currentStar: num
   const def = equipmentRarities[rarity];
   const growth = 1.6;
   return Math.round(def.sellValue * 20 * growth ** currentStar);
+}
+
+// Reforging re-rolls an item's substats in place (kind and value both) - the
+// cost is pegged to that same rarity's own reforgeDustValue (what one such
+// item returns on salvage), scaled up so reforging one item costs more dust
+// than breaking down a single same-rarity item gives back - the player has
+// to actually farm/salvage a few to afford it.
+export function getReforgeCost(rarity: EquipmentRarity): number {
+  return Math.round(equipmentRarities[rarity].reforgeDustValue * 2.5);
 }

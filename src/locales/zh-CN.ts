@@ -106,6 +106,13 @@ const zhCN = {
     setStormbladeEffect: '专属效果:攻击有几率触发额外一次攻击',
     setShadowVeil: '暗影帷幕套装',
     setShadowVeilEffect: '专属效果:暴击时短暂提升攻速',
+    mainStat: '主属性',
+    substats: '副词条',
+    reforge: '洗练',
+    reforgeDust: '洗练尘',
+    reforgeDustShort: '洗练尘',
+    salvage: '分解',
+    salvageLowRarity: '一键分解低级装备',
   },
   heroRoster: {
     title: '英雄',

@@ -1,4 +1,11 @@
-import { equipmentDropConfig, equipmentRarities, getEquipmentStarUpCost, rollEquipment } from '../../data/equipmentConfig';
+import {
+  equipmentDropConfig,
+  equipmentRarities,
+  getEquipmentStarUpCost,
+  getReforgeCost,
+  rollEquipment,
+  rollSubstats,
+} from '../../data/equipmentConfig';
 import { MAX_STAR_LEVEL } from '../../data/gachaConfig';
 import { recomputeHeroStats } from './HeroStatsSystem';
 import type { EquipmentItem, GameState } from '../types';
@@ -29,8 +36,8 @@ export function debugForceDropEquipment(state: GameState): EquipmentItem {
 }
 
 // Equip/unequip are per-hero now - see HeroSystem.equipItemToHero/
-// unequipHeroSlot. Sell/star-up stay here since they don't care which hero
-// (if any) currently wears the item.
+// unequipHeroSlot. Sell/salvage/star-up/reforge stay here since they don't
+// care which hero (if any) currently wears the item.
 export function sellItem(state: GameState, instanceId: number): boolean {
   const index = state.inventory.findIndex((item) => item.instanceId === instanceId);
   if (index === -1) {
@@ -39,6 +46,20 @@ export function sellItem(state: GameState, instanceId: number): boolean {
 
   const [item] = state.inventory.splice(index, 1);
   state.gold += equipmentRarities[item.rarity].sellValue;
+  return true;
+}
+
+// Alternative disposal path to sellItem - breaks the item down into
+// reforgeDust (see resourceConfig.ts's ledger) instead of gold. Inventory
+// only, same as sellItem - unequip a piece first if you want to salvage it.
+export function salvageEquipment(state: GameState, instanceId: number): boolean {
+  const index = state.inventory.findIndex((item) => item.instanceId === instanceId);
+  if (index === -1) {
+    return false;
+  }
+
+  const [item] = state.inventory.splice(index, 1);
+  state.reforgeDust += equipmentRarities[item.rarity].reforgeDustValue;
   return true;
 }
 
@@ -75,6 +96,28 @@ export function starUpEquipment(state: GameState, instanceId: number): boolean {
 
   // Cheap either way - simpler than checking whether this specific item is
   // currently equipped on some hero before deciding to recompute.
+  recomputeHeroStats(state);
+  return true;
+}
+
+// 洗练 (reforge) - re-rolls an item's substats (kind and value both) in
+// place, leaving slot/rarity/main stat/set/legendary effect untouched. Works
+// on both equipped and inventory items, same as starUpEquipment - reforging
+// your currently-worn gear is the common case, not an edge case.
+export function reforgeEquipment(state: GameState, instanceId: number): boolean {
+  const item = findItemByInstanceId(state, instanceId);
+  if (!item) {
+    return false;
+  }
+
+  const cost = getReforgeCost(item.rarity);
+  if (state.reforgeDust < cost) {
+    return false;
+  }
+
+  state.reforgeDust -= cost;
+  item.substats = rollSubstats(item.rarity, item.stat);
+
   recomputeHeroStats(state);
   return true;
 }

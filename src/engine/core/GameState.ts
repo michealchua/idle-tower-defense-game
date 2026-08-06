@@ -70,6 +70,7 @@ export function createInitialGameState(): GameState {
     spawnCooldownRemaining: 0,
     inventory: [],
     nextEquipmentInstanceId: 1,
+    reforgeDust: 0,
   };
 
   recomputeHeroStats(state);

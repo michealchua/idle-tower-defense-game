@@ -1,6 +1,6 @@
 import type { UpgradeableStat } from '../data/heroConfig';
 import type { EnemyArchetypeId } from '../data/enemyArchetypes';
-import type { EquipmentAffix, EquipmentRarity, EquipmentSetId, EquipmentSlot } from '../data/equipmentConfig';
+import type { EquipmentRarity, EquipmentSetId, EquipmentSlot, EquipmentSubstat } from '../data/equipmentConfig';
 import type { BossKind } from '../data/waveConfig';
 import type { AscensionShopId } from '../data/ascensionShopConfig';
 import type { PityPoolId } from '../data/pityConfig';
@@ -150,7 +150,11 @@ export interface EquipmentItem {
   // equipmentConfig.getEquipmentMainStatValue for the star-scaled value.
   value: number;
   starLevel: number;
-  affixes: EquipmentAffix[];
+  // 副词条 (secondary stats) - count/roll-quality scale with rarity, see
+  // equipmentConfig.equipmentRarities.substatCount. Fully re-rolled in place
+  // by EquipmentSystem.reforgeEquipment (洗练), never touching slot/rarity/
+  // main stat/set/legendary effect.
+  substats: EquipmentSubstat[];
   legendaryEffectId?: string;
   // Which 套装 (equipment set) this item belongs to, if any - see
   // equipmentConfig.equipmentSets/getActiveSetBonuses. Only blue+ rarity
@@ -280,4 +284,8 @@ export interface GameState {
   // HeroState.equipment instead (see EquipmentSystem.ts/HeroSystem.ts).
   inventory: EquipmentItem[];
   nextEquipmentInstanceId: number;
+  // 洗练尘 - salvaging an unequipped item (EquipmentSystem.salvageEquipment)
+  // is its only source, reforging an item's substats
+  // (EquipmentSystem.reforgeEquipment) its only sink. See resourceConfig.ts.
+  reforgeDust: number;
 }

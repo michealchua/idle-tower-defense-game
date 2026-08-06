@@ -44,8 +44,8 @@ function computeHeroEquipmentBonuses(hero: HeroState): Partial<Record<Upgradeabl
     }
     const mainStatValue = getEquipmentMainStatValue(item.rarity, item.value, item.starLevel);
     bonuses[item.stat] = (bonuses[item.stat] ?? 0) + mainStatValue;
-    for (const affix of item.affixes) {
-      bonuses[affix.stat] = (bonuses[affix.stat] ?? 0) + affix.value;
+    for (const substat of item.substats) {
+      bonuses[substat.stat] = (bonuses[substat.stat] ?? 0) + substat.value;
     }
   }
   for (const [stat, value] of Object.entries(getEquipmentSetStatBonuses(hero.equipment)) as [UpgradeableStat, number][]) {

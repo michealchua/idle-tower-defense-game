@@ -4,6 +4,7 @@ import {
   equipmentSets,
   getEquipmentMainStatValue,
   getEquipmentStarUpCost,
+  getReforgeCost,
   legendaryEffects,
   type EquipmentRarity,
   type EquipmentSlot,
@@ -96,18 +97,22 @@ function itemTitle(item: EquipmentItem): string {
   return `${SLOT_ICON[item.slot]} ${rarity}${slot} ★${item.starLevel}/${MAX_STAR_LEVEL}`;
 }
 
-// Default view is just icon/name/main-stat/primary-button - the affix list,
-// legendary-effect blurb, and set name (secondary, only matters once you're
-// deciding between two similar items) fold into the Accordion instead of
-// always taking up card space. Exported so HeroPanel's per-hero equipment
-// slots can render the exact same card instead of duplicating this markup.
+// Main stat and substats (副词条) are always visible and clearly separated -
+// this is the one place a player judges "is this item worth keeping,"
+// so both need to read at a glance rather than hiding behind a fold. Only
+// the legendary-effect blurb (flavor text, doesn't affect the decision)
+// stays in the Accordion. Exported so HeroPanel's per-hero equipment slots
+// render the exact same card instead of duplicating this markup.
 export function ItemCard({ item, actions, labelPrefix }: { item: EquipmentItem; actions: ReactNode; labelPrefix?: string }) {
   const gold = useGameStore((state) => state.gold);
+  const reforgeDust = useGameStore((state) => state.reforgeDust);
   const starUpEquipment = useGameStore((state) => state.starUpEquipment);
-  const nextCost = getEquipmentStarUpCost(item.rarity, item.starLevel);
-  const canStarUp = nextCost !== undefined && gold >= nextCost;
+  const reforgeEquipment = useGameStore((state) => state.reforgeEquipment);
+  const nextStarCost = getEquipmentStarUpCost(item.rarity, item.starLevel);
+  const canStarUp = nextStarCost !== undefined && gold >= nextStarCost;
+  const reforgeCost = getReforgeCost(item.rarity);
+  const canReforge = reforgeDust >= reforgeCost;
   const mainStatValue = getEquipmentMainStatValue(item.rarity, item.value, item.starLevel);
-  const hasSecondaryInfo = item.affixes.length > 0 || !!item.legendaryEffectId || !!item.setId;
 
   return (
     <div className={`mini-card ${RARITY_BORDER_CLASS[item.rarity]}`}>
@@ -115,36 +120,59 @@ export function ItemCard({ item, actions, labelPrefix }: { item: EquipmentItem; 
         {labelPrefix}
         {itemTitle(item)}
       </div>
-      <div className="mini-card-sub">
-        {t(STAT_LABEL_KEYS[item.stat])} {formatStatBonus(item.stat, mainStatValue)}
-      </div>
       {item.setId && <div className="text-faint">{t(equipmentSets[item.setId].nameKey)}</div>}
+
+      <div style={{ marginTop: 4 }}>
+        <div className="text-faint">{t('equipment.mainStat')}</div>
+        <div className="mini-card-sub">
+          {t(STAT_LABEL_KEYS[item.stat])} {formatStatBonus(item.stat, mainStatValue)}
+        </div>
+      </div>
+
+      {item.substats.length > 0 && (
+        <div style={{ marginTop: 4 }}>
+          <div className="text-faint">{t('equipment.substats')}</div>
+          {item.substats.map((substat, index) => (
+            <div key={index} className="mini-card-sub">
+              {t(STAT_LABEL_KEYS[substat.stat])} {formatStatBonus(substat.stat, substat.value)}
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="item-actions" style={{ marginTop: 6 }}>
-        <button className="btn btn-sm" onClick={() => starUpEquipment(item.instanceId)} disabled={!nextCost || !canStarUp}>
-          {nextCost ? `${t('star.upgrade')} (${nextCost}${t('battle.gold')})` : t('star.maxed')}
+        <button className="btn btn-sm" onClick={() => starUpEquipment(item.instanceId)} disabled={!nextStarCost || !canStarUp}>
+          {nextStarCost ? `${t('star.upgrade')} (${nextStarCost}${t('battle.gold')})` : t('star.maxed')}
+        </button>
+        <button className="btn btn-sm" onClick={() => reforgeEquipment(item.instanceId)} disabled={!canReforge}>
+          {t('equipment.reforge')} ({reforgeCost}{t('equipment.reforgeDustShort')})
         </button>
         {actions}
       </div>
-      {hasSecondaryInfo && (
+
+      {item.legendaryEffectId && (
         <Accordion title={t('equipment.details')}>
-          {item.affixes.map((affix) => (
-            <div key={affix.stat} className="text-faint">
-              {t(STAT_LABEL_KEYS[affix.stat])} {formatStatBonus(affix.stat, affix.value)}
-            </div>
-          ))}
-          {item.legendaryEffectId && <div className="item-detail">{t(LEGENDARY_EFFECT_LABEL_KEYS[item.legendaryEffectId])}</div>}
+          <div className="item-detail">{t(LEGENDARY_EFFECT_LABEL_KEYS[item.legendaryEffectId])}</div>
         </Accordion>
       )}
     </div>
   );
 }
 
+// Rarities the "batch salvage low-rarity gear" button targets - the two
+// tiers that never roll a set (see equipmentConfig.SET_ELIGIBLE_RARITIES)
+// and are worth the least sold for gold, i.e. the ones piling up unused in a
+// bulging inventory.
+const LOW_RARITIES: EquipmentRarity[] = ['white', 'green'];
+
 // Equipping now happens per-hero from HeroPanel's detail pane (each hero has
 // its own weapon/armor/trinket/boots loadout) - this panel is just the
-// shared unequipped-item pool: browse, star-up, and sell.
+// shared unequipped-item pool: browse, star-up/reforge, sell/salvage.
 function EquipmentPanel() {
   const inventory = useGameStore((state) => state.inventory);
+  const reforgeDust = useGameStore((state) => state.reforgeDust);
   const sellItem = useGameStore((state) => state.sellItem);
+  const salvageEquipment = useGameStore((state) => state.salvageEquipment);
 
   const [slotFilter, setSlotFilter] = useState<SlotFilter>('all');
   const [rarityFilter, setRarityFilter] = useState<RarityFilter>('all');
@@ -170,22 +198,42 @@ function EquipmentPanel() {
     [filteredInventory],
   );
 
+  const lowRarityItems = useMemo(() => inventory.filter((item) => LOW_RARITIES.includes(item.rarity)), [inventory]);
+  const lowRarityDust = useMemo(
+    () => lowRarityItems.reduce((sum, item) => sum + equipmentRarities[item.rarity].reforgeDustValue, 0),
+    [lowRarityItems],
+  );
+
   function sellFiltered() {
     for (const item of filteredInventory) {
       sellItem(item.instanceId);
     }
   }
 
+  function salvageLowRarity() {
+    for (const item of lowRarityItems) {
+      salvageEquipment(item.instanceId);
+    }
+  }
+
   return (
     <div>
       <div className="card">
-        <div className="card-title">{t('equipment.inventory')}</div>
+        <div className="card-title">
+          {t('equipment.inventory')} <span className="text-faint">· {t('equipment.reforgeDust')} {reforgeDust}</span>
+        </div>
         <div className="card-subtitle">{t('equipment.equipHint')}</div>
 
         {inventory.length === 0 ? (
           <div className="empty-state">{t('equipment.inventoryEmpty')}</div>
         ) : (
           <>
+            {lowRarityItems.length > 0 && (
+              <button className="btn btn-primary btn-block" style={{ marginBottom: 8 }} onClick={salvageLowRarity}>
+                {t('equipment.salvageLowRarity')} ({lowRarityItems.length} · +{lowRarityDust} {t('equipment.reforgeDustShort')})
+              </button>
+            )}
+
             <div className="filter-bar">
               <div className="filter-field">
                 <span className="filter-label">{t('equipment.filterSlot')}</span>
@@ -232,9 +280,14 @@ function EquipmentPanel() {
                       key={item.instanceId}
                       item={item}
                       actions={
-                        <button className="btn btn-sm btn-danger" onClick={() => sellItem(item.instanceId)}>
-                          {t('equipment.sell')} ({equipmentRarities[item.rarity].sellValue} {t('battle.gold')})
-                        </button>
+                        <>
+                          <button className="btn btn-sm btn-danger" onClick={() => sellItem(item.instanceId)}>
+                            {t('equipment.sell')} ({equipmentRarities[item.rarity].sellValue} {t('battle.gold')})
+                          </button>
+                          <button className="btn btn-sm btn-danger" onClick={() => salvageEquipment(item.instanceId)}>
+                            {t('equipment.salvage')} (+{equipmentRarities[item.rarity].reforgeDustValue} {t('equipment.reforgeDustShort')})
+                          </button>
+                        </>
                       }
                     />
                   ))}

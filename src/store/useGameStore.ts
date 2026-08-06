@@ -10,6 +10,8 @@ import { spawnEnemyNow } from '../engine/systems/SpawnSystem';
 import { handleDeath } from '../engine/systems/DamageSystem';
 import {
   debugForceDropEquipment,
+  reforgeEquipment as reforgeEquipmentInEngine,
+  salvageEquipment as salvageEquipmentInEngine,
   sellItem as sellItemInEngine,
   starUpEquipment as starUpEquipmentInEngine,
 } from '../engine/systems/EquipmentSystem';
@@ -107,6 +109,7 @@ function snapshotGameState(state: GameState) {
     isGameOver: state.isGameOver,
     difficultyScore: getDifficultyScore(state),
     inventory: state.inventory.map((item) => ({ ...item })),
+    reforgeDust: state.reforgeDust,
   };
 }
 
@@ -149,10 +152,13 @@ interface GameStore {
   difficultyScore: number;
   upgradeHeroStat: (heroId: string, stat: UpgradeableStat, count: number) => void;
   inventory: EquipmentItem[];
+  reforgeDust: number;
   equipItemToHero: (heroId: string, instanceId: number) => void;
   unequipHeroSlot: (heroId: string, slot: EquipmentSlot) => void;
   sellItem: (instanceId: number) => void;
+  salvageEquipment: (instanceId: number) => void;
   starUpEquipment: (instanceId: number) => void;
+  reforgeEquipment: (instanceId: number) => void;
   unlockHero: (heroId: string) => void;
   unlockPet: (petId: string) => void;
   deployHero: (heroId: string) => void;
@@ -205,8 +211,18 @@ export const useGameStore = create<GameStore>((set) => ({
       set(snapshotGameState(gameState));
     }
   },
+  salvageEquipment: (instanceId) => {
+    if (salvageEquipmentInEngine(gameState, instanceId)) {
+      set(snapshotGameState(gameState));
+    }
+  },
   starUpEquipment: (instanceId) => {
     if (starUpEquipmentInEngine(gameState, instanceId)) {
+      set(snapshotGameState(gameState));
+    }
+  },
+  reforgeEquipment: (instanceId) => {
+    if (reforgeEquipmentInEngine(gameState, instanceId)) {
       set(snapshotGameState(gameState));
     }
   },
@@ -493,6 +509,11 @@ export function debugGrantAscensionPoints(amount: number): void {
 
 export function debugGrantDiamonds(amount: number): void {
   gameState.diamonds += amount;
+  useGameStore.setState(snapshotGameState(gameState));
+}
+
+export function debugGrantReforgeDust(amount: number): void {
+  gameState.reforgeDust += amount;
   useGameStore.setState(snapshotGameState(gameState));
 }
 

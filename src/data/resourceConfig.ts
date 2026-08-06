@@ -16,9 +16,11 @@
 // |                  | (castleTypeConfig.getCastleBuildMaterials  | (castleConfig.getCastleUpgradeCost via        |
 // |                  | PerSecond, ticked by CastleSystem)         | CastleSystem.upgradeCastle)                   |
 // | ascensionPoints  | Ascending (ascensionConfig.pointsPerAscend)| Ascension shop only (ascensionShopConfig)     |
+// | reforgeDust      | Salvaging unequipped gear                  | Reforging an item's substats                  |
+// |                  | (EquipmentSystem.salvageEquipment)         | (EquipmentSystem.reforgeEquipment)            |
 //
 // Gold's gacha pool (GachaSystem.pullHero/pullPet, priced in
 // gachaConfig.pullCostGold) predates this isolation pass and is left as-is
 // for now - the gacha rate/pity rework is explicitly a separate, later step
 // (see the conversation this file was scoped from), not touched here.
-export type ResourceId = 'gold' | 'diamonds' | 'buildMaterials' | 'ascensionPoints';
+export type ResourceId = 'gold' | 'diamonds' | 'buildMaterials' | 'ascensionPoints' | 'reforgeDust';
