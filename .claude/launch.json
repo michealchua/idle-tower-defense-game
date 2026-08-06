@@ -2,7 +2,7 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "idle-tower-defense",
+      "name": "tatakai",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 4728,
