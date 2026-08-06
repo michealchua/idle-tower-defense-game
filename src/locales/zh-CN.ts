@@ -32,6 +32,8 @@ const zhCN = {
     levelUp: '升级!',
     milestoneUnlock: '里程碑达成!',
     bond: '羁绊',
+    skillsSection: '技能',
+    upgradeSection: '属性强化',
   },
   base: {
     hp: '基地生命值',
@@ -92,6 +94,7 @@ const zhCN = {
     itemCount: '件',
     sellFiltered: '出售当前筛选',
     noMatch: '没有符合条件的装备',
+    details: '详情',
   },
   heroRoster: {
     title: '英雄',
@@ -140,6 +143,7 @@ const zhCN = {
     requirementChapter: '且通关至',
     currentChapter: '当前进度',
     resetNotice: '升华会重置等级、金币、升级点数与关卡进度,但保留已解锁的英雄/宠物、装备背包、城堡等级、防御塔、天赋与升华商店加成,并获得升华点数',
+    details: '重置说明',
   },
   ascensionShop: {
     title: '升华商店',

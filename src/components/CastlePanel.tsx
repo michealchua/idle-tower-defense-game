@@ -43,35 +43,36 @@ function CastlePanel() {
       <div className="card-title">
         {t('castle.title')} · {t('castle.level')} {castleLevel}
       </div>
-      <div className="list">
-        <div className="row">
-          <span className="text-muted">{t('base.hp')}</span>
-          <span>{getBaseMaxHpForCastleLevel(castleLevel)}</span>
+
+      <div className="stat-grid">
+        <div className="stat-tile">
+          <div className="stat-tile-label">{t('base.hp')}</div>
+          <div className="stat-tile-value">{getBaseMaxHpForCastleLevel(castleLevel)}</div>
         </div>
-        <div className="row">
-          <span className="text-muted">{t('castle.heroSlots')}</span>
-          <span>{getMaxDeployedHeroes(castleLevel)}</span>
+        <div className="stat-tile">
+          <div className="stat-tile-label">{t('castle.heroSlots')}</div>
+          <div className="stat-tile-value">{getMaxDeployedHeroes(castleLevel)}</div>
         </div>
       </div>
-      <button className="btn btn-primary btn-block" style={{ marginTop: 8 }} onClick={() => upgradeCastle()} disabled={!canAfford}>
+
+      <button className="btn btn-primary btn-block" onClick={() => upgradeCastle()} disabled={!canAfford}>
         {t('castle.upgrade')} → Lv.{castleLevel + 1} ({cost} {t('battle.gold')})
       </button>
 
       <div className="card-subtitle" style={{ marginTop: 12 }}>
         {t('castle.currentType')}: {t(castleTypeConfig[castleType].labelKey)}
       </div>
-      <div className="list">
+      <div className="card-grid-sm">
         {castleTypeIds.map((id) => {
           const isActive = id === castleType;
           const def = castleTypeConfig[id];
           return (
-            <div key={id} className={`item-card${isActive ? '' : ' locked'}`}>
-              <div className="item-name">{t(def.labelKey)}</div>
-              <div className="item-detail">{t(def.descKey)}</div>
-              <div className="item-detail">
-                {t('castle.currentBonus')}: {formatCastleTypeBonus(id, castleLevel)}
+            <div key={id} className={`mini-card${isActive ? ' active' : ''}`}>
+              <div className="mini-card-name" data-tooltip={t(def.descKey)}>
+                {t(def.labelKey)}
               </div>
-              <div className="item-actions">
+              <div className="mini-card-sub">{formatCastleTypeBonus(id, castleLevel)}</div>
+              <div className="item-actions" style={{ marginTop: 6 }}>
                 <button className="btn btn-sm" disabled={isActive} onClick={() => setCastleType(id)}>
                   {isActive ? t('squad.deployed') : t('castle.switchType')}
                 </button>

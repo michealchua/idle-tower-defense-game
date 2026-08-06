@@ -63,11 +63,14 @@ function formatMultiResult(results: GachaPullResult[]): string {
   return `${breakdown} · ${newLabel}${formatPitySuffix(pityHits)}`;
 }
 
-// Shared by the gold-cost and diamond-premium rows for both hero/pet pools -
+// Shared by the gold-cost and diamond-premium cards for both hero/pet pools -
 // same x1/x10/x100 shape, only the currency balance/cost/pull functions and
 // pity pool differ (see gachaConfig.ts pullCostGold vs pullCostDiamonds,
-// pityConfig.ts for the pool's own guarantee threshold).
-function PullRow({
+// pityConfig.ts for the pool's own guarantee threshold). The full pity rule
+// sentence lives in a tooltip - the bar + fraction is enough for the default
+// view.
+function PullCard({
+  icon,
   label,
   costPerPull,
   currencyLabel,
@@ -78,6 +81,7 @@ function PullRow({
   pityPoolId,
   pityCurrent,
 }: {
+  icon: string;
   label: string;
   costPerPull: number;
   currencyLabel: string;
@@ -91,19 +95,25 @@ function PullRow({
   const canAfford = (count: number) => balance >= costPerPull * count;
   const pityRule = gachaPityConfig[pityPoolId];
   const pityRarityLabel = t(RARITY_LABEL_KEYS[pityRule.rarities[0]]);
+  const pityRatio = Math.min(1, pityCurrent / pityRule.pullsUntilGuarantee);
 
   return (
-    <>
-      <div className="item-detail" style={{ marginTop: 8 }}>
-        {label}
+    <div className="mini-card">
+      <div className="mini-card-name">
+        <span>{icon} {label}</span>
       </div>
-      <div className="text-faint">
-        {t('gacha.pityProgress')}: {pityCurrent}/{pityRule.pullsUntilGuarantee} ({pityRarityLabel}
-        {t('gacha.pityOrAbove')})
+      <div
+        className="mini-card-sub"
+        data-tooltip={`${t('gacha.pityProgress')}: ${pityCurrent}/${pityRule.pullsUntilGuarantee} (${pityRarityLabel}${t('gacha.pityOrAbove')})`}
+      >
+        {t('gacha.pityProgress')} {pityCurrent}/{pityRule.pullsUntilGuarantee}
       </div>
-      <div className="item-actions">
+      <div className="bar-track" style={{ marginTop: 4 }}>
+        <div className="bar-fill bar-fill-exp" style={{ width: `${pityRatio * 100}%` }} />
+      </div>
+      <div className="item-actions" style={{ marginTop: 8 }}>
         <button
-          className="btn btn-primary"
+          className="btn btn-primary btn-sm"
           disabled={!canAfford(1)}
           onClick={() => {
             const result = pullOne();
@@ -115,7 +125,7 @@ function PullRow({
           x1 ({costPerPull} {currencyLabel})
         </button>
         <button
-          className="btn btn-primary"
+          className="btn btn-sm"
           disabled={!canAfford(10)}
           onClick={() => {
             const results = pullMulti(10);
@@ -124,11 +134,11 @@ function PullRow({
             }
           }}
         >
-          x10 ({costPerPull * 10} {currencyLabel})
+          x10
         </button>
         {canAfford(100) && (
           <button
-            className="btn btn-primary"
+            className="btn btn-sm"
             onClick={() => {
               const results = pullMulti(100);
               if (results.length > 0) {
@@ -136,11 +146,11 @@ function PullRow({
               }
             }}
           >
-            x100 ({costPerPull * 100} {currencyLabel})
+            x100
           </button>
         )}
       </div>
-    </>
+    </div>
   );
 }
 
@@ -163,54 +173,62 @@ function GachaPanel() {
     <div className="card">
       <div className="card-title">{t('gacha.title')}</div>
 
-      <PullRow
-        label={t('gacha.pullHero')}
-        costPerPull={gachaPullConfig.pullCostGold}
-        currencyLabel={t('battle.gold')}
-        balance={gold}
-        pullOne={pullHero}
-        pullMulti={pullHeroMulti}
-        onResult={setLastResult}
-        pityPoolId="heroGold"
-        pityCurrent={pityCounters.heroGold}
-      />
-      <PullRow
-        label={t('gacha.pullPet')}
-        costPerPull={gachaPullConfig.pullCostGold}
-        currencyLabel={t('battle.gold')}
-        balance={gold}
-        pullOne={pullPet}
-        pullMulti={pullPetMulti}
-        onResult={setLastResult}
-        pityPoolId="petGold"
-        pityCurrent={pityCounters.petGold}
-      />
+      <div className="card-grid">
+        <PullCard
+          icon="🦸"
+          label={t('gacha.pullHero')}
+          costPerPull={gachaPullConfig.pullCostGold}
+          currencyLabel={t('battle.gold')}
+          balance={gold}
+          pullOne={pullHero}
+          pullMulti={pullHeroMulti}
+          onResult={setLastResult}
+          pityPoolId="heroGold"
+          pityCurrent={pityCounters.heroGold}
+        />
+        <PullCard
+          icon="🐾"
+          label={t('gacha.pullPet')}
+          costPerPull={gachaPullConfig.pullCostGold}
+          currencyLabel={t('battle.gold')}
+          balance={gold}
+          pullOne={pullPet}
+          pullMulti={pullPetMulti}
+          onResult={setLastResult}
+          pityPoolId="petGold"
+          pityCurrent={pityCounters.petGold}
+        />
+      </div>
 
       <div className="card-subtitle" style={{ marginTop: 10 }}>
         {t('gacha.premiumHint')}
       </div>
-      <PullRow
-        label={t('gacha.pullHeroPremium')}
-        costPerPull={gachaPullConfig.pullCostDiamonds}
-        currencyLabel={t('battle.diamonds')}
-        balance={diamonds}
-        pullOne={pullHeroPremium}
-        pullMulti={pullHeroPremiumMulti}
-        onResult={setLastResult}
-        pityPoolId="heroPremium"
-        pityCurrent={pityCounters.heroPremium}
-      />
-      <PullRow
-        label={t('gacha.pullPetPremium')}
-        costPerPull={gachaPullConfig.pullCostDiamonds}
-        currencyLabel={t('battle.diamonds')}
-        balance={diamonds}
-        pullOne={pullPetPremium}
-        pullMulti={pullPetPremiumMulti}
-        onResult={setLastResult}
-        pityPoolId="petPremium"
-        pityCurrent={pityCounters.petPremium}
-      />
+      <div className="card-grid">
+        <PullCard
+          icon="💎🦸"
+          label={t('gacha.pullHeroPremium')}
+          costPerPull={gachaPullConfig.pullCostDiamonds}
+          currencyLabel={t('battle.diamonds')}
+          balance={diamonds}
+          pullOne={pullHeroPremium}
+          pullMulti={pullHeroPremiumMulti}
+          onResult={setLastResult}
+          pityPoolId="heroPremium"
+          pityCurrent={pityCounters.heroPremium}
+        />
+        <PullCard
+          icon="💎🐾"
+          label={t('gacha.pullPetPremium')}
+          costPerPull={gachaPullConfig.pullCostDiamonds}
+          currencyLabel={t('battle.diamonds')}
+          balance={diamonds}
+          pullOne={pullPetPremium}
+          pullMulti={pullPetPremiumMulti}
+          onResult={setLastResult}
+          pityPoolId="petPremium"
+          pityCurrent={pityCounters.petPremium}
+        />
+      </div>
 
       {lastResult && (
         <div className="text-faint" style={{ marginTop: 8 }}>

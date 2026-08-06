@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "electron:dev": "electron electron/main.cjs http://localhost:5173",
+    "electron:dev": "electron electron/main.cjs http://localhost:4728",
     "electron:build": "electron-builder"
   },
   "dependencies": {
@@ -27,7 +27,7 @@
   },
   "build": {
     "appId": "com.michealchua.idletowerdefense",
-    "productName": "放置塔防",
+    "productName": "tataKAI",
     "directories": {
       "app": "electron",
       "output": "release"

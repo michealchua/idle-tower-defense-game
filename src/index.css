@@ -608,6 +608,236 @@ select {
   text-align: center;
 }
 
+/* Responsive card grids - auto-fit means the same markup naturally goes
+   from 1 column (narrow mobile sheet) to 2-3+ columns (docked landscape
+   console) without a media query, satisfying the "use the horizontal
+   space" rule for both shells at once. */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.card-grid-sm {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 6px;
+}
+
+/* Compact summary card - used both as a plain grid tile (talent/castle-type/
+   gacha cards) and as a selectable master-list row (hero/pet roster) via the
+   .selectable/.active modifiers. */
+.mini-card {
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  color: var(--text);
+  width: 100%;
+  text-align: left;
+  font: inherit;
+}
+
+.mini-card.selectable {
+  cursor: pointer;
+}
+
+.mini-card.active {
+  background: var(--surface-hover);
+  border-color: var(--accent-strong);
+}
+
+.mini-card-name {
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.mini-card-sub {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  display: inline-block;
+  flex: none;
+}
+
+.status-dot.on {
+  background: var(--success);
+}
+
+/* Master-detail: a narrow scrollable strip of .mini-card rows next to an
+   expanded .detail-card. Below 560px (mobile sheet width) it flips to a
+   horizontal-scrolling strip on top of a full-width detail card instead -
+   a fixed sidebar wouldn't leave room for either column to read. */
+.master-detail {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.master-list {
+  flex: 0 0 132px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.detail-pane {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 560px) {
+  .master-detail {
+    flex-direction: column;
+  }
+  .master-list {
+    flex-direction: row;
+    flex-basis: auto;
+    width: 100%;
+    max-height: none;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-right: 0;
+    padding-bottom: 2px;
+  }
+  .master-list .mini-card {
+    flex: 0 0 116px;
+  }
+}
+
+.detail-card {
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: var(--radius);
+  padding: 12px;
+}
+
+.detail-title {
+  font-weight: 700;
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+
+/* Stat tiles - a compact always-visible "overview" readout (ascension
+   level/points, castle HP/slots) so those panels never show a blank area
+   before any interaction. */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.stat-tile {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px;
+  text-align: center;
+}
+
+.stat-tile-label {
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+.stat-tile-value {
+  font-size: 18px;
+  font-weight: 800;
+  margin-top: 2px;
+}
+
+/* Progressive disclosure - secondary/verbose data (affixes, lore, bulk
+   upgrade tables) collapses in here instead of cluttering the default
+   card view. */
+.accordion {
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+}
+
+.accordion-toggle {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  padding: 6px 0;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.accordion-toggle:hover {
+  color: var(--text);
+}
+
+.accordion-chevron {
+  transition: transform 0.15s ease;
+  font-size: 10px;
+}
+
+.accordion-chevron.open {
+  transform: rotate(180deg);
+}
+
+.accordion-body {
+  padding: 2px 0 8px;
+}
+
+/* CSS-only tooltip - hover/focus reveals attr(data-tooltip) above the
+   element. Used to keep flavor text (descriptions, full pity rules) out of
+   the default compact card view. */
+[data-tooltip] {
+  position: relative;
+}
+
+[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 125%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.4;
+  white-space: normal;
+  width: max-content;
+  max-width: 220px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+  z-index: 40;
+}
+
+[data-tooltip]:hover::after,
+[data-tooltip]:focus-visible::after {
+  opacity: 1;
+}
+
 .locked {
   opacity: 0.55;
 }

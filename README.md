@@ -1,4 +1,4 @@
-# 放置塔防 (Idle Tower Defense)
+# tataKAI (Idle Tower Defense)
 
 一个网页 + 桌面双端的放置塔防 / 英雄养成游戏，用 React、TypeScript、HTML5 Canvas 做的。英雄自动战斗打波次(1-1 到 1-10，含小 BOSS/大 BOSS)，边打边升级、扭蛋抽卡、强化装备、升星、升华。
 

@@ -43,7 +43,7 @@ function TalentPanel() {
         {t('talent.title')} · {t('talent.points')}: {skillPoints}
       </div>
       <div className="card-subtitle">{t('talent.bossHint')}</div>
-      <div className="list">
+      <div className="card-grid">
         {TALENT_ORDER.map((id) => {
           const level = getTalentLevel(talentLevels, id);
           const maxed = isTalentMaxed(talentLevels, id);
@@ -51,13 +51,14 @@ function TalentPanel() {
           const canUpgrade = !maxed && skillPoints >= cost;
 
           return (
-            <div key={id} className="item-card">
-              <div className="item-name">
-                {t(TALENT_LABEL_KEYS[id])} Lv.{level}/{talentConfig[id].maxLevel}
+            <div key={id} className="mini-card">
+              <div className="mini-card-name">
+                <span>{t(TALENT_LABEL_KEYS[id])}</span>
+                <span className="text-faint">Lv.{level}/{talentConfig[id].maxLevel}</span>
               </div>
-              <div className="item-detail">{formatTalentBonus(id, talentLevels)}</div>
-              <div className="item-actions">
-                <button className="btn btn-sm" disabled={!canUpgrade} onClick={() => upgradeTalent(id)}>
+              <div className="mini-card-sub">{formatTalentBonus(id, talentLevels)}</div>
+              <div className="item-actions" style={{ marginTop: 6 }}>
+                <button className="btn btn-sm btn-primary" disabled={!canUpgrade} onClick={() => upgradeTalent(id)}>
                   {maxed ? t('star.maxed') : `${t('talent.upgrade')} (${cost} ${t('talent.points')})`}
                 </button>
               </div>

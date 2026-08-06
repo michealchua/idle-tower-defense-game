@@ -5,7 +5,7 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 900,
     height: 700,
-    title: '放置塔防',
+    title: 'tataKAI',
     autoHideMenuBar: true,
   });
 

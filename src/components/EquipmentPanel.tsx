@@ -12,6 +12,7 @@ import type { UpgradeableStat } from '../data/heroConfig';
 import type { EquipmentItem } from '../engine/types';
 import { t } from '../locales/i18n';
 import { useGameStore } from '../store/useGameStore';
+import Accordion from './Accordion';
 
 const SLOT_IDS: EquipmentSlot[] = ['weapon', 'armor', 'trinket'];
 const RARITY_IDS: EquipmentRarity[] = ['white', 'green', 'blue', 'purple', 'gold', 'red', 'rainbow'];
@@ -80,43 +81,49 @@ function formatStatBonus(stat: UpgradeableStat, value: number): string {
   return `+${Math.round(value)}`;
 }
 
-function itemLabel(item: EquipmentItem): string {
+function itemTitle(item: EquipmentItem): string {
   const rarity = t(RARITY_LABEL_KEYS[item.rarity]);
   const slot = t(SLOT_LABEL_KEYS[item.slot]);
-  const stat = t(STAT_LABEL_KEYS[item.stat]);
-  // Affixes are fixed at roll time, but the primary stat scales with star
-  // level (see equipmentConfig.getEquipmentMainStatValue) - display the
-  // effective value, not the stored 0-star base.
-  const mainStatValue = getEquipmentMainStatValue(item.rarity, item.value, item.starLevel);
-  const affixText = item.affixes
-    .map((affix) => `${t(STAT_LABEL_KEYS[affix.stat])} ${formatStatBonus(affix.stat, affix.value)}`)
-    .join(', ');
-  return `${rarity}${slot} ★${item.starLevel}/${MAX_STAR_LEVEL} (${stat} ${formatStatBonus(item.stat, mainStatValue)}${
-    affixText ? `, ${affixText}` : ''
-  })`;
+  return `${rarity}${slot} ★${item.starLevel}/${MAX_STAR_LEVEL}`;
 }
 
+// Default view is just icon/name/main-stat/primary-button - the affix list
+// and legendary-effect blurb (secondary, only matters once you're deciding
+// between two similar items) fold into the Accordion instead of always
+// taking up card space.
 function ItemCard({ item, actions, labelPrefix }: { item: EquipmentItem; actions: ReactNode; labelPrefix?: string }) {
   const gold = useGameStore((state) => state.gold);
   const starUpEquipment = useGameStore((state) => state.starUpEquipment);
   const nextCost = getEquipmentStarUpCost(item.rarity, item.starLevel);
   const canStarUp = nextCost !== undefined && gold >= nextCost;
+  const mainStatValue = getEquipmentMainStatValue(item.rarity, item.value, item.starLevel);
+  const hasSecondaryInfo = item.affixes.length > 0 || !!item.legendaryEffectId;
 
   return (
-    <div className={`item-card ${RARITY_BORDER_CLASS[item.rarity]}`}>
-      <div className={`item-name ${RARITY_CLASS[item.rarity]}`}>
+    <div className={`mini-card ${RARITY_BORDER_CLASS[item.rarity]}`}>
+      <div className={`mini-card-name ${RARITY_CLASS[item.rarity]}`}>
         {labelPrefix}
-        {itemLabel(item)}
+        {itemTitle(item)}
       </div>
-      {item.legendaryEffectId && (
-        <div className="item-detail">{t(LEGENDARY_EFFECT_LABEL_KEYS[item.legendaryEffectId])}</div>
-      )}
-      <div className="item-actions">
+      <div className="mini-card-sub">
+        {t(STAT_LABEL_KEYS[item.stat])} {formatStatBonus(item.stat, mainStatValue)}
+      </div>
+      <div className="item-actions" style={{ marginTop: 6 }}>
         <button className="btn btn-sm" onClick={() => starUpEquipment(item.instanceId)} disabled={!nextCost || !canStarUp}>
           {nextCost ? `${t('star.upgrade')} (${nextCost}${t('battle.gold')})` : t('star.maxed')}
         </button>
         {actions}
       </div>
+      {hasSecondaryInfo && (
+        <Accordion title={t('equipment.details')}>
+          {item.affixes.map((affix) => (
+            <div key={affix.stat} className="text-faint">
+              {t(STAT_LABEL_KEYS[affix.stat])} {formatStatBonus(affix.stat, affix.value)}
+            </div>
+          ))}
+          {item.legendaryEffectId && <div className="item-detail">{t(LEGENDARY_EFFECT_LABEL_KEYS[item.legendaryEffectId])}</div>}
+        </Accordion>
+      )}
     </div>
   );
 }
@@ -162,28 +169,24 @@ function EquipmentPanel() {
     <div>
       <div className="card">
         <div className="card-title">{t('equipment.title')}</div>
-        <div className="list">
+        <div className="card-grid-sm">
           {SLOT_IDS.map((slot) => {
             const item = equipped[slot];
-            return (
-              <div key={slot}>
-                {item ? (
-                  <ItemCard
-                    item={item}
-                    labelPrefix={`${t(SLOT_LABEL_KEYS[slot])}: `}
-                    actions={
-                      <button className="btn btn-sm" onClick={() => unequipSlot(slot)}>
-                        {t('equipment.unequip')}
-                      </button>
-                    }
-                  />
-                ) : (
-                  <div className="row item-card">
-                    <span className="text-muted">
-                      {t(SLOT_LABEL_KEYS[slot])}: {t('equipment.empty')}
-                    </span>
-                  </div>
-                )}
+            return item ? (
+              <ItemCard
+                key={slot}
+                item={item}
+                labelPrefix={`${t(SLOT_LABEL_KEYS[slot])}: `}
+                actions={
+                  <button className="btn btn-sm" onClick={() => unequipSlot(slot)}>
+                    {t('equipment.unequip')}
+                  </button>
+                }
+              />
+            ) : (
+              <div key={slot} className="mini-card">
+                <div className="mini-card-name">{t(SLOT_LABEL_KEYS[slot])}</div>
+                <div className="mini-card-sub">{t('equipment.empty')}</div>
               </div>
             );
           })}
@@ -237,7 +240,7 @@ function EquipmentPanel() {
               <div className="empty-state">{t('equipment.noMatch')}</div>
             ) : (
               <>
-                <div className="list scroll-list">
+                <div className="card-grid" style={{ maxHeight: 420, overflowY: 'auto', paddingRight: 2 }}>
                   {filteredInventory.map((item) => (
                     <ItemCard
                       key={item.instanceId}
