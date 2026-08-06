@@ -21,6 +21,15 @@ const TALENT_LABEL_KEYS: Record<TalentId, string> = {
   criticalChance: 'talent.criticalChanceBonus',
 };
 
+const TALENT_ICON: Record<TalentId, string> = {
+  goldGain: '💰',
+  expGain: '⭐',
+  attackDamage: '⚔️',
+  maxHp: '❤️',
+  damageReduction: '🛡️',
+  criticalChance: '🎯',
+};
+
 // criticalChance/damageReduction are flat +X per level (see
 // talentConfig.getTalentFlatBonus); everything else is a "+X%" multiplier.
 const FLAT_TALENT_IDS = new Set<TalentId>(['criticalChance', 'damageReduction']);
@@ -53,7 +62,7 @@ function TalentPanel() {
           return (
             <div key={id} className="mini-card">
               <div className="mini-card-name">
-                <span>{t(TALENT_LABEL_KEYS[id])}</span>
+                <span>{TALENT_ICON[id]} {t(TALENT_LABEL_KEYS[id])}</span>
                 <span className="text-faint">Lv.{level}/{talentConfig[id].maxLevel}</span>
               </div>
               <div className="mini-card-sub">{formatTalentBonus(id, talentLevels)}</div>

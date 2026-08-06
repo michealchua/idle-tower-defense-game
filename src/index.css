@@ -206,16 +206,19 @@ select {
   border-radius: 4px;
 }
 
+/* Flat color-block fills - no gradients, matching the high-contrast/flat
+   art direction. Each still keys off an existing token instead of a new
+   hardcoded hex. */
 .bar-fill-hp {
-  background: linear-gradient(90deg, #ff6b6b, #ff9f6b);
+  background: var(--danger);
 }
 
 .bar-fill-exp {
-  background: linear-gradient(90deg, #ffd54f, #ffb648);
+  background: var(--gold-currency);
 }
 
 .bar-fill-kill {
-  background: linear-gradient(90deg, #6bc4ff, #6b8bff);
+  background: var(--accent-strong);
 }
 
 /* Fills the entire game-shell (i.e. the entire viewport) edge-to-edge - no
@@ -475,10 +478,21 @@ select {
   cursor: not-allowed;
 }
 
+/* Primary actions (deploy/upgrade/pull/ascend) are the single most
+   important control on their panel, so they get the panel's strongest
+   color weight - solid accent fill, bold label - rather than competing
+   visually with secondary buttons. */
 .btn-primary {
   background: var(--accent);
   border-color: var(--accent);
   color: #ffffff;
+  font-weight: 700;
+}
+
+.btn-primary.btn-block:not(.btn-sm) {
+  padding: 10px 14px;
+  font-size: 13px;
+  letter-spacing: 0.2px;
 }
 
 .btn-danger {
@@ -817,7 +831,7 @@ select {
   transform: translateX(-50%);
   background: var(--bg);
   color: var(--text);
-  border: 1px solid var(--border);
+  border: 1px solid var(--accent-strong);
   border-radius: var(--radius-sm);
   padding: 6px 8px;
   font-size: 11px;
@@ -826,7 +840,6 @@ select {
   white-space: normal;
   width: max-content;
   max-width: 220px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.12s ease;

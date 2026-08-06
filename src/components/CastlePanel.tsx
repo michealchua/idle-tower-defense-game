@@ -11,6 +11,13 @@ import {
 import { t } from '../locales/i18n';
 import { useGameStore } from '../store/useGameStore';
 
+const CASTLE_TYPE_ICON: Record<CastleTypeId, string> = {
+  military: '⚔️',
+  economic: '💰',
+  defense: '🛡️',
+  arcane: '🔮',
+};
+
 // Each type's headline bonus at a given level, formatted for display -
 // passing the type itself as the "active" arg to these getters is
 // deliberate (see castleTypeConfig.ts) so every type's preview can be
@@ -69,11 +76,11 @@ function CastlePanel() {
           return (
             <div key={id} className={`mini-card${isActive ? ' active' : ''}`}>
               <div className="mini-card-name" data-tooltip={t(def.descKey)}>
-                {t(def.labelKey)}
+                {CASTLE_TYPE_ICON[id]} {t(def.labelKey)}
               </div>
               <div className="mini-card-sub">{formatCastleTypeBonus(id, castleLevel)}</div>
               <div className="item-actions" style={{ marginTop: 6 }}>
-                <button className="btn btn-sm" disabled={isActive} onClick={() => setCastleType(id)}>
+                <button className="btn btn-sm btn-primary" disabled={isActive} onClick={() => setCastleType(id)}>
                   {isActive ? t('squad.deployed') : t('castle.switchType')}
                 </button>
               </div>

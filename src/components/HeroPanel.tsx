@@ -86,6 +86,17 @@ const BOND_LABEL_KEYS: Record<BondId, string> = {
   assassin: 'bond.assassin',
 };
 
+// Quick-scan glyph per bond archetype - lets the compact roster row read at
+// a glance instead of relying on the rarity color alone.
+const BOND_ICON: Record<BondId, string> = {
+  warrior: '⚔️',
+  mage: '🔮',
+  archer: '🏹',
+  guardian: '🛡️',
+  support: '✨',
+  assassin: '🗡️',
+};
+
 const RARITY_LABEL_KEYS: Record<GachaRarity, string> = {
   white: 'rarity.white',
   green: 'rarity.green',
@@ -170,7 +181,8 @@ function HeroDetail({
   return (
     <div className={`detail-card ${RARITY_BORDER_CLASS[definition.rarity]}`}>
       <div className={`detail-title ${RARITY_CLASS[definition.rarity]}`}>
-        {heroLabel(definition)} <span className="text-faint">Lv.{hero.level} · ★{currentStar}/{MAX_STAR_LEVEL}</span>
+        {BOND_ICON[definition.bondId]} {heroLabel(definition)}{' '}
+        <span className="text-faint">Lv.{hero.level} · ★{currentStar}/{MAX_STAR_LEVEL}</span>
       </div>
 
       <div className="bar-track">
@@ -341,11 +353,16 @@ function HeroPanel({ gameScreenRef }: { gameScreenRef: RefObject<HTMLDivElement>
                     onPointerCancel={handlePointerCancel}
                   >
                     <div className={`mini-card-name ${RARITY_CLASS[definition.rarity]}`}>
-                      <span>{heroLabel(definition)}</span>
+                      <span>
+                        {BOND_ICON[definition.bondId]} {heroLabel(definition)}
+                      </span>
                       <span className={`status-dot${isDeployed ? ' on' : ''}`} title={isDeployed ? t('squad.deployed') : t('squad.benched')} />
                     </div>
                     <div className="mini-card-sub">
                       Lv.{hero.level} · ★{heroStars[definition.id] ?? 0}
+                    </div>
+                    <div className="mini-card-sub">
+                      {t('hero.attackDamage')} {Math.round(hero.attackDamage)}
                     </div>
                   </div>
                 );
@@ -373,7 +390,7 @@ function HeroPanel({ gameScreenRef }: { gameScreenRef: RefObject<HTMLDivElement>
 
       {draggingDefinition && (
         <div className="drag-ghost" style={{ left: drag.pointerX, top: drag.pointerY }}>
-          {heroLabel(draggingDefinition)}
+          {BOND_ICON[draggingDefinition.bondId]} {heroLabel(draggingDefinition)}
         </div>
       )}
     </div>

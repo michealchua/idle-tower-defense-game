@@ -30,6 +30,12 @@ const SLOT_LABEL_KEYS: Record<EquipmentSlot, string> = {
   trinket: 'equipment.slotTrinket',
 };
 
+const SLOT_ICON: Record<EquipmentSlot, string> = {
+  weapon: '🗡️',
+  armor: '🛡️',
+  trinket: '💍',
+};
+
 const RARITY_LABEL_KEYS: Record<EquipmentRarity, string> = {
   white: 'rarity.white',
   green: 'rarity.green',
@@ -84,7 +90,7 @@ function formatStatBonus(stat: UpgradeableStat, value: number): string {
 function itemTitle(item: EquipmentItem): string {
   const rarity = t(RARITY_LABEL_KEYS[item.rarity]);
   const slot = t(SLOT_LABEL_KEYS[item.slot]);
-  return `${rarity}${slot} ★${item.starLevel}/${MAX_STAR_LEVEL}`;
+  return `${SLOT_ICON[item.slot]} ${rarity}${slot} ★${item.starLevel}/${MAX_STAR_LEVEL}`;
 }
 
 // Default view is just icon/name/main-stat/primary-button - the affix list
@@ -185,7 +191,9 @@ function EquipmentPanel() {
               />
             ) : (
               <div key={slot} className="mini-card">
-                <div className="mini-card-name">{t(SLOT_LABEL_KEYS[slot])}</div>
+                <div className="mini-card-name">
+                  {SLOT_ICON[slot]} {t(SLOT_LABEL_KEYS[slot])}
+                </div>
                 <div className="mini-card-sub">{t('equipment.empty')}</div>
               </div>
             );
@@ -247,7 +255,7 @@ function EquipmentPanel() {
                       item={item}
                       actions={
                         <>
-                          <button className="btn btn-sm" onClick={() => equipItem(item.instanceId)}>
+                          <button className="btn btn-sm btn-primary" onClick={() => equipItem(item.instanceId)}>
                             {t('equipment.equip')}
                           </button>
                           <button className="btn btn-sm btn-danger" onClick={() => sellItem(item.instanceId)}>

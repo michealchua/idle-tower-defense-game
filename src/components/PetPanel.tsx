@@ -63,6 +63,18 @@ function petLabel(definition: PetDefinition): string {
   return `${t(RARITY_LABEL_KEYS[definition.rarity])}${definition.id.split('-')[1]}`;
 }
 
+// Pets don't have a bond archetype to key an icon off of (unlike heroes),
+// so every card uses the same paw glyph - rarity color already carries the
+// at-a-glance differentiation.
+const PET_ICON = '🐾';
+
+// First entry of passiveBonus, used as the row's "core combat power" stat -
+// the full breakdown (every stat) stays in the detail pane's stat-grid.
+function primaryPassiveEntry(definition: PetDefinition): [UpgradeableStat, number] | undefined {
+  const entries = Object.entries(definition.passiveBonus) as [UpgradeableStat, number][];
+  return entries[0];
+}
+
 interface Materials {
   epicSourceStone: number;
   legendarySourceStone: number;
@@ -85,7 +97,7 @@ function PetDetail({ definition, gold, materials }: { definition: PetDefinition;
   return (
     <div className={`detail-card ${RARITY_BORDER_CLASS[definition.rarity]}`}>
       <div className={`detail-title ${RARITY_CLASS[definition.rarity]}`}>
-        {petLabel(definition)} <span className="text-faint">★{currentStar}/{MAX_STAR_LEVEL}</span>
+        {PET_ICON} {petLabel(definition)} <span className="text-faint">★{currentStar}/{MAX_STAR_LEVEL}</span>
       </div>
       <div className="item-detail">{t('petRoster.active')}</div>
 
@@ -155,6 +167,7 @@ function PetPanel() {
                 return null;
               }
               const isSelected = definition.id === effectiveSelectedId;
+              const corePassive = primaryPassiveEntry(definition);
               return (
                 <button
                   key={definition.id}
@@ -162,8 +175,15 @@ function PetPanel() {
                   className={`mini-card selectable ${RARITY_BORDER_CLASS[definition.rarity]}${isSelected ? ' active' : ''}`}
                   onClick={() => setSelectedPetId(definition.id)}
                 >
-                  <div className={`mini-card-name ${RARITY_CLASS[definition.rarity]}`}>{petLabel(definition)}</div>
+                  <div className={`mini-card-name ${RARITY_CLASS[definition.rarity]}`}>
+                    {PET_ICON} {petLabel(definition)}
+                  </div>
                   <div className="mini-card-sub">★{petStars[definition.id] ?? 0}/{MAX_STAR_LEVEL}</div>
+                  {corePassive && (
+                    <div className="mini-card-sub">
+                      {t(STAT_LABEL_KEYS[corePassive[0]])} {formatBonusValue(corePassive[0], corePassive[1])}
+                    </div>
+                  )}
                 </button>
               );
             })}

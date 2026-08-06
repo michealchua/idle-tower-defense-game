@@ -15,7 +15,7 @@ function AscensionPanel() {
 
   return (
     <div className="card">
-      <div className="card-title">{t('ascension.title')}</div>
+      <div className="card-title">🌟 {t('ascension.title')}</div>
 
       <div className="stat-grid">
         <div className="stat-tile">
