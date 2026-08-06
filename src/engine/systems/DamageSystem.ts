@@ -1,6 +1,7 @@
 import { spawnVisualEffect } from './EffectsSystem';
 import { rollEquipmentDrop } from './EquipmentSystem';
 import { getDeployedHeroes } from './HeroStatsSystem';
+import { enemyArchetypes } from '../../data/enemyArchetypes';
 import { effectLifetimes } from '../../data/effectConfig';
 import { getTalentMultiplier, talentPointRewardConfig } from '../../data/talentConfig';
 import { getAscensionShopMultiplier } from '../../data/ascensionShopConfig';
@@ -46,6 +47,22 @@ export function applyDamage(state: GameState, target: EnemyState, damage: Damage
   });
 
   if (target.currentHp <= 0) {
+    // Zombie-archetype enemies come back instead of dying while they still
+    // have charges - no gold/exp/drop rewards for this "death" since it
+    // didn't actually happen, same early-return shape as the shieldActive
+    // check above.
+    if (target.revivesRemaining > 0) {
+      target.revivesRemaining -= 1;
+      const reviveHpRatio = enemyArchetypes[target.archetypeId].revive?.reviveHpRatio ?? 0.5;
+      target.currentHp = Math.round(target.maxHp * reviveHpRatio);
+      spawnVisualEffect(state, {
+        kind: 'revive',
+        x: target.position.x,
+        y: target.position.y,
+        lifetime: effectLifetimes.revive,
+      });
+      return;
+    }
     handleDeath(state, target);
   }
 }

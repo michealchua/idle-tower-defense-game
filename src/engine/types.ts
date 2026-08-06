@@ -87,9 +87,10 @@ export interface EnemyState {
   // Always present (false for archetypes without hasShield), set at spawn
   // in Enemy.ts.
   shieldActive: boolean;
-  // Generic per-enemy active-ability cooldown - only healAbility archetypes
-  // use it in v1, but named generically so a future active ability doesn't
-  // need its own field. See EnemyAbilitySystem.tickEnemyAbilities.
+  // Generic per-enemy active-ability cooldown - healAbility and
+  // summonAbility archetypes both use it, named generically so a future
+  // active ability doesn't need its own field. See
+  // EnemyAbilitySystem.tickEnemyAbilities.
   abilityCooldownRemaining: number;
   // Generic movement-speed slow debuff - always present (1/0 when not
   // slowed) so MovementSystem never needs a fallback. slowMultiplier applies
@@ -99,6 +100,16 @@ export interface EnemyState {
   // skill/mechanic rather than ripped out along with it.
   slowMultiplier: number;
   slowRemaining: number;
+  // Charges left before a zombie-archetype enemy actually dies - see
+  // DamageSystem.applyDamage. Seeded from archetype.revive.maxRevives at
+  // spawn (0 for every archetype without `revive`), decremented on each
+  // revive instead of ever going negative.
+  revivesRemaining: number;
+  // Set only on minions created by a witch-archetype's summonAbility (see
+  // EnemyAbilitySystem.tickEnemyAbilities) - the summoning enemy's own
+  // instanceId, used to cap how many of its summons can be alive at once.
+  // Undefined for every normally-spawned enemy.
+  summonedByInstanceId?: number;
 }
 
 export interface BaseState {
@@ -148,6 +159,8 @@ export type VisualEffectKind =
   | 'lightningBolt'
   | 'healPulse'
   | 'shieldBreak'
+  | 'revive'
+  | 'summon'
   | 'waveClear';
 
 export interface VisualEffect {

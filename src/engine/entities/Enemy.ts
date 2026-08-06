@@ -28,5 +28,6 @@ export function createEnemy(archetypeId: EnemyArchetypeId, difficultyScore: numb
     abilityCooldownRemaining: 0,
     slowMultiplier: 1,
     slowRemaining: 0,
+    revivesRemaining: archetype.revive?.maxRevives ?? 0,
   };
 }

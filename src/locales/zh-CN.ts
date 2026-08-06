@@ -7,6 +7,7 @@ const zhCN = {
     gameOver: '游戏结束',
     muteMusic: '静音',
     unmuteMusic: '开启音乐',
+    selectPanel: '选择左侧标签查看详情',
   },
   biome: {
     forest: '森林',

@@ -128,6 +128,14 @@ function BattleScreen() {
   // slot with another - separate from dragPreviewKind, which is for
   // dragging a fresh unit in from the roster panel.
   const [canvasDrag, setCanvasDrag] = useState<CanvasDragState | null>(null);
+  // Wide/landscape viewports (desktop, Electron window) get a permanent
+  // left-stage/right-console split instead of the mobile bottom-nav +
+  // sheet-overlay pattern - same TABS/openPanel state either way, just a
+  // different shell around it. Tracked via matchMedia rather than a fixed
+  // React breakpoint constant so it stays in sync if the window is resized.
+  const [isDocked, setIsDocked] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(min-width: 860px) and (orientation: landscape)').matches,
+  );
 
   const biome = getBiomeForChapter(wave.chapter);
 
@@ -197,6 +205,13 @@ function BattleScreen() {
 
   useEffect(() => {
     ensureGameLoopStarted();
+  }, []);
+
+  useEffect(() => {
+    const query = window.matchMedia('(min-width: 860px) and (orientation: landscape)');
+    const handleChange = (event: MediaQueryListEvent) => setIsDocked(event.matches);
+    query.addEventListener('change', handleChange);
+    return () => query.removeEventListener('change', handleChange);
   }, []);
 
   // Browsers block audio.play() until a user gesture happens anywhere on the
@@ -305,98 +320,136 @@ function BattleScreen() {
   const killRatio = totalWaveEnemies > 0 ? killedCount / totalWaveEnemies : 0;
 
   return (
-    <div className="game-shell">
-      <div className="hud-compact">
-        <div className="hud-currency-row">
-          <span className="hud-gold">
-            {t('battle.gold')}: {gold}
-          </span>
-          <span className="hud-diamond">
-            {t('battle.diamonds')}: {diamonds}
-          </span>
-          <span>
-            {t('difficulty.tier')}: {Math.floor(difficultyScore)}
-          </span>
-          <button
-            className="btn btn-sm mute-toggle-btn"
-            onClick={() => setIsMuted(audioManager.toggleMute())}
-            title={t(isMuted ? 'battle.unmuteMusic' : 'battle.muteMusic')}
-          >
-            {isMuted ? '🔇' : '🔊'}
-          </button>
-        </div>
-        <div className="hud-sub-row">
-          <span>
-            {t('wave.stage')} {wave.chapter}-{wave.waveInChapter} · {t(biome.labelKey)}
-            {wave.isBossWave ? ` · ${t(wave.bossKind === 'boss' ? 'wave.boss' : 'wave.miniboss')}` : ''}
-          </span>
-          {wave.isBossWave && wave.timeRemaining !== undefined && (
-            <span>
-              {t('wave.timeRemaining')}: {Math.ceil(wave.timeRemaining)}s
+    <div className={`game-shell${isDocked ? ' docked' : ''}`}>
+      <div className="stage-column">
+        <div className="hud-compact">
+          <div className="hud-currency-row">
+            <span className="hud-gold">
+              {t('battle.gold')}: {gold}
             </span>
-          )}
-          {!wave.isBossWave && (
-            <span>
-              {t('wave.killProgress')}: {killedCount}/{totalWaveEnemies}
+            <span className="hud-diamond">
+              {t('battle.diamonds')}: {diamonds}
             </span>
-          )}
-        </div>
-        {!wave.isBossWave && (
-          <div className="bar-track">
-            <div className="bar-fill bar-fill-kill" style={{ width: `${killRatio * 100}%` }} />
-          </div>
-        )}
-        <div className="hud-sub-row">
-          <span>
-            {t('base.hp')}: {Math.round(base.currentHp)} / {Math.round(base.maxHp)}
-          </span>
-        </div>
-        <div className="bar-track">
-          <div className="bar-fill bar-fill-hp" style={{ width: `${hpRatio * 100}%` }} />
-        </div>
-      </div>
-
-      <div className="canvas-stage" ref={stageRef}>
-        <canvas
-          ref={canvasRef}
-          style={{ width: '100%', height: '100%', display: 'block', touchAction: 'none' }}
-          onPointerDown={handleCanvasPointerDown}
-          onPointerMove={handleCanvasPointerMove}
-          onPointerUp={handleCanvasPointerUp}
-          onPointerCancel={handleCanvasPointerCancel}
-        />
-        {isGameOver && <div className="game-over-overlay">{t('battle.gameOver')}</div>}
-      </div>
-
-      <div className="bottom-nav">
-        <div className="bottom-nav-inner">
-          {TABS.map((tab) => (
+            <span>
+              {t('difficulty.tier')}: {Math.floor(difficultyScore)}
+            </span>
             <button
-              key={tab.id}
-              className={`bottom-nav-btn${openPanel === tab.id ? ' active' : ''}`}
-              onClick={() => setOpenPanel(tab.id)}
+              className="btn btn-sm mute-toggle-btn"
+              onClick={() => setIsMuted(audioManager.toggleMute())}
+              title={t(isMuted ? 'battle.unmuteMusic' : 'battle.muteMusic')}
             >
-              <span className="bottom-nav-icon">{tab.icon}</span>
-              <span>{t(tab.labelKey)}</span>
+              {isMuted ? '🔇' : '🔊'}
             </button>
-          ))}
+          </div>
+          <div className="hud-sub-row">
+            <span>
+              {t('wave.stage')} {wave.chapter}-{wave.waveInChapter} · {t(biome.labelKey)}
+              {wave.isBossWave ? ` · ${t(wave.bossKind === 'boss' ? 'wave.boss' : 'wave.miniboss')}` : ''}
+            </span>
+            {wave.isBossWave && wave.timeRemaining !== undefined && (
+              <span>
+                {t('wave.timeRemaining')}: {Math.ceil(wave.timeRemaining)}s
+              </span>
+            )}
+            {!wave.isBossWave && (
+              <span>
+                {t('wave.killProgress')}: {killedCount}/{totalWaveEnemies}
+              </span>
+            )}
+          </div>
+          {!wave.isBossWave && (
+            <div className="bar-track">
+              <div className="bar-fill bar-fill-kill" style={{ width: `${killRatio * 100}%` }} />
+            </div>
+          )}
+          <div className="hud-sub-row">
+            <span>
+              {t('base.hp')}: {Math.round(base.currentHp)} / {Math.round(base.maxHp)}
+            </span>
+          </div>
+          <div className="bar-track">
+            <div className="bar-fill bar-fill-hp" style={{ width: `${hpRatio * 100}%` }} />
+          </div>
+        </div>
+
+        <div className="canvas-stage" ref={stageRef}>
+          <canvas
+            ref={canvasRef}
+            style={{ width: '100%', height: '100%', display: 'block', touchAction: 'none' }}
+            onPointerDown={handleCanvasPointerDown}
+            onPointerMove={handleCanvasPointerMove}
+            onPointerUp={handleCanvasPointerUp}
+            onPointerCancel={handleCanvasPointerCancel}
+          />
+          {isGameOver && <div className="game-over-overlay">{t('battle.gameOver')}</div>}
         </div>
       </div>
 
-      {activeTab && (
-        <>
-          <div className="sheet-backdrop" onClick={() => setOpenPanel(null)} />
-          <div className="sheet-panel">
-            <div className="sheet-header">
-              <span className="sheet-title">
-                {activeTab.icon} {t(activeTab.labelKey)}
-              </span>
-              <button className="sheet-close" onClick={() => setOpenPanel(null)}>
-                ×
+      {isDocked ? (
+        <div className="console-column">
+          <div className="console-nav">
+            {TABS.map((tab) => (
+              <button
+                key={tab.id}
+                className={`console-nav-btn${openPanel === tab.id ? ' active' : ''}`}
+                onClick={() => setOpenPanel(tab.id)}
+              >
+                <span className="console-nav-icon">{tab.icon}</span>
+                <span>{t(tab.labelKey)}</span>
               </button>
-            </div>
-            {renderPanel(activeTab.id, stageRef)}
+            ))}
           </div>
+          <div className="console-content">
+            {activeTab ? (
+              <>
+                <div className="console-header">
+                  <span className="sheet-title">
+                    {activeTab.icon} {t(activeTab.labelKey)}
+                  </span>
+                  <button className="sheet-close" onClick={() => setOpenPanel(null)}>
+                    ×
+                  </button>
+                </div>
+                {renderPanel(activeTab.id, stageRef)}
+              </>
+            ) : (
+              <div className="empty-state">{t('battle.selectPanel')}</div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="bottom-nav">
+            <div className="bottom-nav-inner">
+              {TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  className={`bottom-nav-btn${openPanel === tab.id ? ' active' : ''}`}
+                  onClick={() => setOpenPanel(tab.id)}
+                >
+                  <span className="bottom-nav-icon">{tab.icon}</span>
+                  <span>{t(tab.labelKey)}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {activeTab && (
+            <>
+              <div className="sheet-backdrop" onClick={() => setOpenPanel(null)} />
+              <div className="sheet-panel">
+                <div className="sheet-header">
+                  <span className="sheet-title">
+                    {activeTab.icon} {t(activeTab.labelKey)}
+                  </span>
+                  <button className="sheet-close" onClick={() => setOpenPanel(null)}>
+                    ×
+                  </button>
+                </div>
+                {renderPanel(activeTab.id, stageRef)}
+              </div>
+            </>
+          )}
         </>
       )}
     </div>

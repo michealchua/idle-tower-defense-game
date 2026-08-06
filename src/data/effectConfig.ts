@@ -8,5 +8,7 @@ export const effectLifetimes = {
   lightningBolt: 0.2,
   healPulse: 0.4,
   shieldBreak: 0.3,
+  revive: 0.5,
+  summon: 0.4,
   waveClear: 1.5,
 } as const;

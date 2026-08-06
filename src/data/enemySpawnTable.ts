@@ -14,8 +14,10 @@ export const enemySpawnTable: SpawnWeightEntry[] = [
   { archetypeId: 'berserker', weight: 3, minDifficultyScore: 0.3 },
   { archetypeId: 'brute', weight: 3, minDifficultyScore: 0.4 },
   { archetypeId: 'shield', weight: 3, minDifficultyScore: 0.4 },
+  { archetypeId: 'zombie', weight: 3, minDifficultyScore: 0.5 },
   { archetypeId: 'tank', weight: 3, minDifficultyScore: 0.6 },
   { archetypeId: 'healer', weight: 2, minDifficultyScore: 0.6 },
+  { archetypeId: 'witch', weight: 2, minDifficultyScore: 0.7 },
   { archetypeId: 'giant', weight: 2, minDifficultyScore: 0.8 },
   { archetypeId: 'elite', weight: 1, minDifficultyScore: 1.2 },
 ];

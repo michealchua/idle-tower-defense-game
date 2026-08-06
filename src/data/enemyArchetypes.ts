@@ -9,6 +9,8 @@ export type EnemyArchetypeId =
   | 'berserker'
   | 'healer'
   | 'shield'
+  | 'zombie'
+  | 'witch'
   | 'miniboss'
   | 'boss';
 
@@ -23,6 +25,27 @@ export interface HealAbility {
   intervalSeconds: number;
 }
 
+// See DamageSystem.applyDamage - checked (after shieldActive) whenever a hit
+// would bring currentHp to 0. Consumes one charge from the enemy's own
+// runtime EnemyState.revivesRemaining (set from maxRevives at spawn in
+// Enemy.ts) instead of dying, restoring HP to reviveHpRatio of maxHp.
+export interface ReviveBehavior {
+  maxRevives: number;
+  reviveHpRatio: number;
+}
+
+// See EnemyAbilitySystem.tickEnemyAbilities - same cooldown/interval shape as
+// HealAbility, but spawns a fresh minion at the caster's own position instead
+// of buffing nearby allies. maxActiveSummons caps how many of this witch's
+// own live summons (EnemyState.summonedByInstanceId) count against it, so
+// killing the minions lets it summon again before the cooldown would
+// otherwise allow.
+export interface SummonAbility {
+  minionArchetypeId: EnemyArchetypeId;
+  maxActiveSummons: number;
+  intervalSeconds: number;
+}
+
 export interface EnemyArchetype {
   id: EnemyArchetypeId;
   hpMultiplier: number;
@@ -33,13 +56,14 @@ export interface EnemyArchetype {
   // Not consumed by anything yet - a future threat-budget spawn system reads
   // this instead of just counting enemies. Inert hook, not wired up here.
   threatValue: number;
-  // All three below are optional - unset means "no special behavior", which
-  // is every archetype up through brute. Only berserker/healer/shield set
-  // one of these; giant is still a pure stat-multiplier archetype (a bigger
-  // tank), same as normal/fast/tank/elite/swarm/brute.
+  // All below are optional - unset means "no special behavior", which is
+  // every archetype up through brute. giant is still a pure stat-multiplier
+  // archetype (a bigger tank), same as normal/fast/tank/elite/swarm/brute.
   berserker?: BerserkerBehavior;
   healAbility?: HealAbility;
   hasShield?: boolean;
+  revive?: ReviveBehavior;
+  summonAbility?: SummonAbility;
 }
 
 export const enemyArchetypes: Record<EnemyArchetypeId, EnemyArchetype> = {
@@ -145,6 +169,34 @@ export const enemyArchetypes: Record<EnemyArchetypeId, EnemyArchetype> = {
     expRewardMultiplier: 1.4,
     threatValue: 2.5,
     hasShield: true,
+  },
+  // Comes back once at half HP the first time it would die - see
+  // DamageSystem.applyDamage, which checks EnemyState.revivesRemaining
+  // (seeded from maxRevives at spawn) before calling handleDeath. Tanky and
+  // slow rather than fast, since the revive already buys it a second wind.
+  zombie: {
+    id: 'zombie',
+    hpMultiplier: 1.6,
+    speedMultiplier: 0.7,
+    damageToBaseMultiplier: 1.2,
+    goldRewardMultiplier: 1.8,
+    expRewardMultiplier: 1.8,
+    threatValue: 3.5,
+    revive: { maxRevives: 1, reviveHpRatio: 0.5 },
+  },
+  // Periodically spawns a swarm minion at its own position - see
+  // EnemyAbilitySystem.tickEnemyAbilities. Deliberately squishy in its own
+  // right (low hpMultiplier/damageToBaseMultiplier) so its threat comes from
+  // the minions it keeps adding, not from itself.
+  witch: {
+    id: 'witch',
+    hpMultiplier: 0.8,
+    speedMultiplier: 0.9,
+    damageToBaseMultiplier: 0.6,
+    goldRewardMultiplier: 2,
+    expRewardMultiplier: 2,
+    threatValue: 3.5,
+    summonAbility: { minionArchetypeId: 'swarm', maxActiveSummons: 3, intervalSeconds: 4 },
   },
   // Deterministic single spawn for a chapter's wave-5 miniboss - never part
   // of the weighted enemySpawnTable, only spawned directly by

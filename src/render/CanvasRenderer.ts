@@ -59,6 +59,8 @@ const ENEMY_VISUAL_STYLES: Record<string, EnemyVisualStyle> = {
   berserker: { color: '#ff7043', radiusMultiplier: 1 },
   healer: { color: '#69f0ae', radiusMultiplier: 0.9 },
   shield: { color: '#78909c', radiusMultiplier: 1.1 },
+  zombie: { color: '#556b2f', radiusMultiplier: 1.1 },
+  witch: { color: '#6a1b9a', radiusMultiplier: 0.95 },
   miniboss: { color: '#b71c1c', radiusMultiplier: 1.8 },
   boss: { color: '#000000', radiusMultiplier: 2.2 },
 };
@@ -181,6 +183,25 @@ function drawVisualEffect(ctx: CanvasRenderingContext2D, effect: VisualEffect): 
       ctx.stroke();
       return;
     }
+    case 'revive': {
+      const radius = ENEMY_RADIUS + progress * 16;
+      ctx.strokeStyle = `rgba(192, 202, 51, ${fadeAlpha})`;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(effect.x, effect.y, radius, 0, Math.PI * 2);
+      ctx.stroke();
+      return;
+    }
+    case 'summon': {
+      const maxRadius = effect.radius ?? 24;
+      const radius = maxRadius * progress;
+      ctx.strokeStyle = `rgba(106, 27, 154, ${fadeAlpha})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(effect.x, effect.y, radius, 0, Math.PI * 2);
+      ctx.stroke();
+      return;
+    }
     case 'waveClear': {
       const y = effect.y - 30 - progress * MILESTONE_UNLOCK_RISE;
       ctx.font = 'bold 22px sans-serif';
@@ -240,6 +261,16 @@ function drawEnemy(ctx: CanvasRenderingContext2D, enemy: EnemyState): void {
     ctx.stroke();
   }
 
+  // Same "always visible" identity marker as Healer's, purple instead of
+  // green so a Witch reads as "summoner" on sight.
+  if (archetype.summonAbility) {
+    ctx.strokeStyle = 'rgba(106, 27, 154, 0.6)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(enemy.position.x, enemy.position.y, enemyRadius + 6, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
   ctx.fillStyle = enemyStyle.color;
   ctx.beginPath();
   ctx.arc(enemy.position.x, enemy.position.y, enemyRadius, 0, Math.PI * 2);
@@ -260,6 +291,19 @@ function drawEnemy(ctx: CanvasRenderingContext2D, enemy: EnemyState): void {
     ctx.beginPath();
     ctx.arc(enemy.position.x, enemy.position.y, enemyRadius + 5, 0, Math.PI * 2);
     ctx.stroke();
+  }
+
+  // Runtime state (charges left), not an archetype-static flag like
+  // hasShield - dashed so it reads distinctly from the shield ring above.
+  if (enemy.revivesRemaining > 0) {
+    ctx.save();
+    ctx.setLineDash([4, 3]);
+    ctx.strokeStyle = '#c0ca33';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(enemy.position.x, enemy.position.y, enemyRadius + 5, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
   }
 
   drawHpBar(ctx, enemy.position.x, enemy.position.y - enemyRadius - 12, enemy.currentHp / enemy.maxHp);
