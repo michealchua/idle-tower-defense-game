@@ -1,5 +1,6 @@
 import { getBossKindForWave, getBossTimeLimit, getNormalWaveEnemyCount, waveConfig } from '../../data/waveConfig';
 import { effectLifetimes } from '../../data/effectConfig';
+import { getDiamondChapterClearReward } from '../../data/diamondConfig';
 import { spawnVisualEffect } from './EffectsSystem';
 import type { GameState, WaveState } from '../types';
 
@@ -39,6 +40,10 @@ function resetBattlefieldForWave(state: GameState): void {
 export function advanceToNextWave(state: GameState): void {
   const wave = state.wave;
   if (wave.waveInChapter >= waveConfig.wavesPerChapter) {
+    // Milestone reward for clearing a whole chapter (its wave-10 boss just
+    // died) - separate from the per-boss-kill reward in
+    // DamageSystem.handleDeath, which already fired for this same kill.
+    state.diamonds += getDiamondChapterClearReward(wave.chapter);
     wave.chapter += 1;
     wave.waveInChapter = 1;
   } else {

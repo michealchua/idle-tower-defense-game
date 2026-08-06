@@ -17,7 +17,6 @@ export const castleConfig = {
   // level-1 baseline - existing squad caps only ever grow, never shrink.
   heroSlotEveryNLevels: 2,
   petSlotEveryNLevels: 3,
-  towerSlotEveryNLevels: 2,
 };
 
 export function getCastleUpgradeCost(currentLevel: number): number {
@@ -34,8 +33,4 @@ export function getMaxDeployedHeroes(castleLevel: number): number {
 
 export function getMaxDeployedPets(castleLevel: number): number {
   return squadConfig.maxDeployedPets + Math.floor((castleLevel - 1) / castleConfig.petSlotEveryNLevels);
-}
-
-export function getMaxDeployedTowers(castleLevel: number): number {
-  return squadConfig.baseTowerSlots + Math.floor((castleLevel - 1) / castleConfig.towerSlotEveryNLevels);
 }

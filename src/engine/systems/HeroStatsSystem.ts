@@ -1,13 +1,14 @@
 import { heroBaseConfig, heroLevelConfig, heroUpgradeConfig, type UpgradeableStat } from '../../data/heroConfig';
 import { getHeroDefinition } from '../../data/heroRosterConfig';
 import { getPetDefinition } from '../../data/petRosterConfig';
-import { ascensionConfig } from '../../data/ascensionConfig';
 import { evolutionConfig } from '../../data/evolutionConfig';
 import { starBonusPerStar } from '../../data/gachaConfig';
 import { getEquipmentMainStatValue } from '../../data/equipmentConfig';
 import { getVisualTierForLevel } from '../../data/milestoneConfig';
 import { getTalentFlatBonus, getTalentMultiplier } from '../../data/talentConfig';
-import type { GameState, HeroState, PetState, TowerState } from '../types';
+import { getAscensionShopFlatBonus, getAscensionShopMultiplier } from '../../data/ascensionShopConfig';
+import { getCastleAttackMultiplier, getCastleCriticalChanceBonus } from '../../data/castleTypeConfig';
+import type { GameState, HeroState, PetState } from '../types';
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(value, max));
@@ -22,10 +23,6 @@ export function getDeployedHeroes(state: GameState): HeroState[] {
 
 export function getDeployedPets(state: GameState): PetState[] {
   return state.pets.filter((pet) => state.deployedPetIds.includes(pet.id));
-}
-
-export function getDeployedTowers(state: GameState): TowerState[] {
-  return state.towers.filter((tower) => state.deployedTowerIds.includes(tower.id));
 }
 
 // Shared by DifficultySystem/SpawnSystem (use the strongest hero as "how far
@@ -67,10 +64,6 @@ function computePetPassiveBonuses(state: GameState): Partial<Record<UpgradeableS
   return bonuses;
 }
 
-export function getAscensionMultiplier(state: GameState): number {
-  return 1 + state.ascensionLevel * ascensionConfig.bonusMultiplierPerLevel;
-}
-
 // Reuses the visual tier milestoneConfig.ts already gates at levels
 // 5/10/15/20 instead of inventing a second level-threshold table - this is
 // what turns that tier from purely cosmetic into "进化" with real stat teeth.
@@ -83,11 +76,10 @@ function getStarMultiplier(stars: Record<string, number>, id: string): number {
 }
 
 // The single place hero combat/HP stats are written. Called after any input
-// changes: level-up, global upgrade purchase, equip/unequip/sell, hero/pet
+// changes: level-up, per-hero upgrade purchase, equip/unequip/sell, hero/pet
 // unlock, ascend. Also refreshes pets (see recomputePetStats) so every
 // call site only has to remember one function.
 export function recomputeHeroStats(state: GameState): void {
-  const ascensionMultiplier = getAscensionMultiplier(state);
   const equipmentBonus = computeEquipmentBonuses(state);
   const petBonus = computePetPassiveBonuses(state);
   // Talent tree (talentConfig.ts) - permanent, ascension-surviving
@@ -97,61 +89,70 @@ export function recomputeHeroStats(state: GameState): void {
   const talentAttackMultiplier = getTalentMultiplier(state.talentLevels, 'attackDamage');
   const talentMaxHpMultiplier = getTalentMultiplier(state.talentLevels, 'maxHp');
   const talentCritBonus = getTalentFlatBonus(state.talentLevels, 'criticalChance');
+  // Ascension shop (ascensionShopConfig.ts) - same "final multiplier/flat-add"
+  // treatment as the talent tree, spent with ascensionPoints instead of
+  // skillPoints. Never reset by ascend() itself (see AscensionSystem.ascend).
+  const ascensionAttackMultiplier = getAscensionShopMultiplier(state.ascensionShopLevels, 'attackDamage');
+  const ascensionMaxHpMultiplier = getAscensionShopMultiplier(state.ascensionShopLevels, 'maxHp');
+  const ascensionCritBonus = getAscensionShopFlatBonus(state.ascensionShopLevels, 'criticalChance');
+  // Castle type (castleTypeConfig.ts) - military/arcane are the only two
+  // types that feed cached hero stats (economic/defense are read live
+  // elsewhere, see CastleSystem.tickCastleIncome/MovementSystem); both are
+  // 1/0-inert unless that's the currently selected type.
+  const castleAttackMultiplier = getCastleAttackMultiplier(state.castleType, state.castleLevel);
+  const castleCritBonus = getCastleCriticalChanceBonus(state.castleType, state.castleLevel);
 
   for (const hero of state.heroes) {
     const template = getHeroDefinition(hero.id);
-    const powerMultiplier =
-      ascensionMultiplier * getEvolutionMultiplier(hero.level) * getStarMultiplier(state.heroStars, hero.id);
+    const powerMultiplier = getEvolutionMultiplier(hero.level) * getStarMultiplier(state.heroStars, hero.id);
     const levelSteps = hero.level - 1;
     const oldMaxHp = hero.maxHp;
 
     const attackDamage =
       heroBaseConfig.attackDamage * template.statMultiplier.attackDamage * powerMultiplier +
       levelSteps * heroLevelConfig.perLevel.attackDamage +
-      state.globalUpgrades.attackDamage * heroUpgradeConfig.attackDamage.valuePerLevel +
+      hero.upgrades.attackDamage * heroUpgradeConfig.attackDamage.valuePerLevel +
       (equipmentBonus.attackDamage ?? 0) +
       (petBonus.attackDamage ?? 0);
 
     const maxHp =
       heroBaseConfig.maxHp * template.statMultiplier.maxHp * powerMultiplier +
       levelSteps * heroLevelConfig.perLevel.maxHp +
-      state.globalUpgrades.maxHp * heroUpgradeConfig.maxHp.valuePerLevel +
+      hero.upgrades.maxHp * heroUpgradeConfig.maxHp.valuePerLevel +
       (equipmentBonus.maxHp ?? 0) +
       (petBonus.maxHp ?? 0);
 
     const attackSpeed =
       heroBaseConfig.attackSpeed * template.statMultiplier.attackSpeed +
       levelSteps * heroLevelConfig.perLevel.attackSpeed +
-      state.globalUpgrades.attackSpeed * heroUpgradeConfig.attackSpeed.valuePerLevel +
+      hero.upgrades.attackSpeed * heroUpgradeConfig.attackSpeed.valuePerLevel +
       (equipmentBonus.attackSpeed ?? 0) +
       (petBonus.attackSpeed ?? 0);
 
-    const attackRange =
-      heroBaseConfig.attackRange * template.statMultiplier.attackRange +
-      state.globalUpgrades.attackRange * heroUpgradeConfig.attackRange.valuePerLevel +
-      (equipmentBonus.attackRange ?? 0) +
-      (petBonus.attackRange ?? 0);
-
     const criticalChanceRaw =
       heroBaseConfig.criticalChance * template.statMultiplier.criticalChance +
-      state.globalUpgrades.criticalChance * heroUpgradeConfig.criticalChance.valuePerLevel +
+      hero.upgrades.criticalChance * heroUpgradeConfig.criticalChance.valuePerLevel +
       (equipmentBonus.criticalChance ?? 0) +
       (petBonus.criticalChance ?? 0);
     const criticalChanceMax = heroUpgradeConfig.criticalChance.maxValue;
     const criticalChanceBeforeTalent =
       criticalChanceMax === undefined ? criticalChanceRaw : Math.min(criticalChanceRaw, criticalChanceMax);
+    const critBonus = talentCritBonus + ascensionCritBonus + castleCritBonus;
     const criticalChance =
       criticalChanceMax === undefined
-        ? criticalChanceBeforeTalent + talentCritBonus
-        : Math.min(criticalChanceBeforeTalent + talentCritBonus, criticalChanceMax);
+        ? criticalChanceBeforeTalent + critBonus
+        : Math.min(criticalChanceBeforeTalent + critBonus, criticalChanceMax);
 
-    const finalAttackDamage = attackDamage * talentAttackMultiplier;
-    const finalMaxHp = maxHp * talentMaxHpMultiplier;
+    const finalAttackDamage = attackDamage * talentAttackMultiplier * ascensionAttackMultiplier * castleAttackMultiplier;
+    const finalMaxHp = maxHp * talentMaxHpMultiplier * ascensionMaxHpMultiplier;
 
     hero.attackDamage = finalAttackDamage;
     hero.maxHp = finalMaxHp;
     hero.attackSpeed = attackSpeed;
-    hero.attackRange = attackRange;
+    // Fixed - see heroBaseConfig.attackRange's comment. Reassigned here
+    // (rather than left untouched from createHero) only for consistency;
+    // it never actually changes.
+    hero.attackRange = heroBaseConfig.attackRange;
     hero.criticalChance = criticalChance;
     // Leveling/upgrading/equipping a maxHp increase heals by the same
     // delta, same felt behavior as the old per-system mutation code had,
@@ -162,16 +163,18 @@ export function recomputeHeroStats(state: GameState): void {
   recomputePetStats(state);
 }
 
-// Pets don't level in v1 - their only inputs are their fixed template, the
-// shared ascension multiplier, and the same attackDamage talent bonus heroes
-// get (the talent tree buffs "your army," not just heroes).
+// Pets don't level in v1 - their only inputs are their fixed template, and
+// the same attackDamage talent/ascension-shop bonuses heroes get (both buff
+// "your army," not just heroes).
 export function recomputePetStats(state: GameState): void {
-  const ascensionMultiplier = getAscensionMultiplier(state);
   const talentAttackMultiplier = getTalentMultiplier(state.talentLevels, 'attackDamage');
+  const ascensionAttackMultiplier = getAscensionShopMultiplier(state.ascensionShopLevels, 'attackDamage');
+  const castleAttackMultiplier = getCastleAttackMultiplier(state.castleType, state.castleLevel);
 
   for (const pet of state.pets) {
     const template = getPetDefinition(pet.id);
-    const powerMultiplier = ascensionMultiplier * getStarMultiplier(state.petStars, pet.id) * talentAttackMultiplier;
+    const powerMultiplier =
+      getStarMultiplier(state.petStars, pet.id) * talentAttackMultiplier * ascensionAttackMultiplier * castleAttackMultiplier;
     pet.attackDamage = template.attackDamage * powerMultiplier;
     pet.attackSpeed = template.attackSpeed;
     pet.attackRange = template.attackRange;

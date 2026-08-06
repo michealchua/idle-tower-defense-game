@@ -14,6 +14,8 @@ const RARITY_LABEL_KEYS: Record<GachaRarity, string> = {
   blue: 'rarity.blue',
   purple: 'rarity.purple',
   gold: 'rarity.gold',
+  red: 'rarity.red',
+  rainbow: 'rarity.rainbow',
 };
 
 const RARITY_CLASS: Record<GachaRarity, string> = {
@@ -22,6 +24,8 @@ const RARITY_CLASS: Record<GachaRarity, string> = {
   blue: 'rarity-blue',
   purple: 'rarity-purple',
   gold: 'rarity-gold',
+  red: 'rarity-red',
+  rainbow: 'rarity-rainbow',
 };
 
 const RARITY_BORDER_CLASS: Record<GachaRarity, string> = {
@@ -30,6 +34,8 @@ const RARITY_BORDER_CLASS: Record<GachaRarity, string> = {
   blue: 'border-rarity-blue',
   purple: 'border-rarity-purple',
   gold: 'border-rarity-gold',
+  red: 'border-rarity-red',
+  rainbow: 'border-rarity-rainbow',
 };
 
 const STAT_LABEL_KEYS: Record<UpgradeableStat, string> = {
@@ -37,7 +43,6 @@ const STAT_LABEL_KEYS: Record<UpgradeableStat, string> = {
   attackSpeed: 'hero.attackSpeed',
   maxHp: 'hero.maxHp',
   criticalChance: 'hero.criticalChance',
-  attackRange: 'hero.attackRange',
 };
 
 function formatBonusValue(stat: UpgradeableStat, value: number): string {
@@ -54,13 +59,12 @@ function CodexPanel() {
   const heroes = useGameStore((state) => state.heroes);
   const unlockedHeroIds = useGameStore((state) => state.unlockedHeroIds);
   const unlockedPetIds = useGameStore((state) => state.unlockedPetIds);
-  const globalUpgrades = useGameStore((state) => state.globalUpgrades);
   const goldSpentTotal = useGameStore((state) => state.goldSpentTotal);
   const ascensionLevel = useGameStore((state) => state.ascensionLevel);
   const unlockHeroByCondition = useGameStore((state) => state.unlockHeroByCondition);
   const unlockPetByCondition = useGameStore((state) => state.unlockPetByCondition);
 
-  const conditionState = { unlockedHeroIds, unlockedPetIds, heroes, globalUpgrades, goldSpentTotal, ascensionLevel };
+  const conditionState = { unlockedHeroIds, unlockedPetIds, heroes, goldSpentTotal, ascensionLevel };
 
   function renderHeroEntry(definition: HeroDefinition) {
     const isUnlocked = unlockedHeroIds.includes(definition.id);

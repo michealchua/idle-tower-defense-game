@@ -4,33 +4,21 @@ import {
   getTalentLevel,
   getTalentMultiplier,
   isTalentMaxed,
-  skillPointGainConfig,
   talentConfig,
   type TalentId,
 } from '../data/talentConfig';
 import { t } from '../locales/i18n';
 import { useGameStore } from '../store/useGameStore';
 
-const TALENT_ORDER: TalentId[] = [
-  'goldGain',
-  'expGain',
-  'spGainSpeed',
-  'attackDamage',
-  'maxHp',
-  'criticalChance',
-  'damageReduction',
-  'aoeDamage',
-];
+const TALENT_ORDER: TalentId[] = ['goldGain', 'expGain', 'attackDamage', 'maxHp', 'criticalChance', 'damageReduction'];
 
 const TALENT_LABEL_KEYS: Record<TalentId, string> = {
   goldGain: 'talent.goldGain',
   expGain: 'talent.expGain',
-  spGainSpeed: 'talent.spGainSpeed',
   attackDamage: 'talent.attackDamageBonus',
   maxHp: 'talent.maxHpBonus',
   damageReduction: 'talent.damageReduction',
   criticalChance: 'talent.criticalChanceBonus',
-  aoeDamage: 'talent.aoeDamage',
 };
 
 // criticalChance/damageReduction are flat +X per level (see
@@ -47,22 +35,14 @@ function formatTalentBonus(id: TalentId, talentLevels: Record<string, number>): 
 function TalentPanel() {
   const talentLevels = useGameStore((state) => state.talentLevels);
   const skillPoints = useGameStore((state) => state.skillPoints);
-  const skillPointAccumulator = useGameStore((state) => state.skillPointAccumulator);
   const upgradeTalent = useGameStore((state) => state.upgradeTalent);
-
-  const nextPointRatio = Math.min(1, skillPointAccumulator / skillPointGainConfig.secondsPerPoint);
 
   return (
     <div className="card">
       <div className="card-title">
         {t('talent.title')} · {t('talent.points')}: {skillPoints}
       </div>
-      <div className="card-subtitle">
-        {t('talent.nextPoint')}: {Math.ceil(skillPointGainConfig.secondsPerPoint - skillPointAccumulator)}s
-      </div>
-      <div className="bar-track" style={{ marginBottom: 10 }}>
-        <div className="bar-fill bar-fill-exp" style={{ width: `${nextPointRatio * 100}%` }} />
-      </div>
+      <div className="card-subtitle">{t('talent.bossHint')}</div>
       <div className="list">
         {TALENT_ORDER.map((id) => {
           const level = getTalentLevel(talentLevels, id);

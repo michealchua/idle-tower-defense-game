@@ -1,6 +1,10 @@
-export type GachaRarity = 'white' | 'green' | 'blue' | 'purple' | 'gold';
+// red (至尊/"Supreme") and rainbow (彩/"Legendary") sit above gold - the two
+// tiers whose breakthrough material is diamonds instead of a source stone
+// (see BreakthroughMaterial below), gating them behind the premium currency
+// rather than just gold/shards.
+export type GachaRarity = 'white' | 'green' | 'blue' | 'purple' | 'gold' | 'red' | 'rainbow';
 
-export type BreakthroughMaterial = 'epicSourceStone' | 'legendarySourceStone';
+export type BreakthroughMaterial = 'epicSourceStone' | 'legendarySourceStone' | 'diamonds';
 
 export interface StarUpStageCost {
   shards: number;
@@ -11,6 +15,11 @@ export interface StarUpStageCost {
 export interface GachaRarityDefinition {
   // Placeholder odds - not specified by the source tables, tune later.
   pullWeight: number;
+  // Odds used by the diamond premium pool (see gachaPullConfig.
+  // pullCostDiamonds/GachaSystem.pullHeroPremium) instead of pullWeight -
+  // deliberately front-loaded toward purple+ so spending diamonds visibly
+  // beats the gold pool's odds, not just its currency.
+  premiumPullWeight: number;
   shardsPerDuplicate: number;
   breakthroughMaterial?: BreakthroughMaterial;
   // Index i = the cost to go from i★ to (i+1)★. Length 5 (0★→5★ max).
@@ -25,6 +34,7 @@ export interface GachaRarityDefinition {
 export const gachaRarityConfig: Record<GachaRarity, GachaRarityDefinition> = {
   white: {
     pullWeight: 55,
+    premiumPullWeight: 20,
     shardsPerDuplicate: 10,
     starUpCosts: [
       { shards: 10, gold: 1000 },
@@ -36,6 +46,7 @@ export const gachaRarityConfig: Record<GachaRarity, GachaRarityDefinition> = {
   },
   green: {
     pullWeight: 27,
+    premiumPullWeight: 20,
     shardsPerDuplicate: 20,
     starUpCosts: [
       { shards: 20, gold: 2000 },
@@ -47,6 +58,7 @@ export const gachaRarityConfig: Record<GachaRarity, GachaRarityDefinition> = {
   },
   blue: {
     pullWeight: 12,
+    premiumPullWeight: 20,
     shardsPerDuplicate: 30,
     starUpCosts: [
       { shards: 30, gold: 5000 },
@@ -58,6 +70,7 @@ export const gachaRarityConfig: Record<GachaRarity, GachaRarityDefinition> = {
   },
   purple: {
     pullWeight: 5,
+    premiumPullWeight: 20,
     shardsPerDuplicate: 40,
     breakthroughMaterial: 'epicSourceStone',
     starUpCosts: [
@@ -70,6 +83,7 @@ export const gachaRarityConfig: Record<GachaRarity, GachaRarityDefinition> = {
   },
   gold: {
     pullWeight: 1,
+    premiumPullWeight: 12,
     shardsPerDuplicate: 60,
     breakthroughMaterial: 'legendarySourceStone',
     starUpCosts: [
@@ -80,16 +94,47 @@ export const gachaRarityConfig: Record<GachaRarity, GachaRarityDefinition> = {
       { shards: 180, gold: 2500000, material: 15 },
     ],
   },
+  // Diamond-gated tiers - extremely rare from the gold-cost pool (see
+  // gachaPullConfig), meaningfully more common from the diamond premium pool
+  // (gachaPullConfig.premiumPullWeight).
+  red: {
+    pullWeight: 0.2,
+    premiumPullWeight: 6,
+    shardsPerDuplicate: 80,
+    breakthroughMaterial: 'diamonds',
+    starUpCosts: [
+      { shards: 30, gold: 125000, material: 0 },
+      { shards: 60, gold: 375000, material: 1 },
+      { shards: 90, gold: 1000000, material: 2 },
+      { shards: 150, gold: 2500000, material: 5 },
+      { shards: 220, gold: 6000000, material: 10 },
+    ],
+  },
+  rainbow: {
+    pullWeight: 0.03,
+    premiumPullWeight: 2,
+    shardsPerDuplicate: 100,
+    breakthroughMaterial: 'diamonds',
+    starUpCosts: [
+      { shards: 40, gold: 300000, material: 1 },
+      { shards: 80, gold: 900000, material: 3 },
+      { shards: 120, gold: 2500000, material: 6 },
+      { shards: 200, gold: 6000000, material: 12 },
+      { shards: 280, gold: 15000000, material: 25 },
+    ],
+  },
 };
 
 export const MAX_STAR_LEVEL = 5;
 
 export const gachaPullConfig = {
-  // Placeholder - both pools cost gold since there's no separate summon
-  // currency with a real income source yet.
   pullCostGold: 100,
+  // Diamond premium pool (see GachaSystem.pullHeroPremium/pullPetPremium) -
+  // better odds via premiumPullWeight above, same multi-pull sizes/no-bulk-
+  // discount shape as the gold pool.
+  pullCostDiamonds: 50,
   // Multi-pull sizes offered in GachaPanel, cheapest first. No bulk
-  // discount - total cost is always pullCostGold * count. The 100-pull
+  // discount - total cost is always pullCost* * count. The 100-pull
   // button only renders once the player can actually afford it (see
   // GachaPanel), the others always show.
   multiPullCounts: [10, 100],

@@ -13,10 +13,6 @@ export const mapConfig = {
   heroColSpacing: 44,
   petRowOffset: 70,
   petRowSpacing: 24,
-  // Towers sit on the opposite side of the hero anchor from pets (negative
-  // offset) so the two secondary-unit rows never overlap.
-  towerRowOffset: -70,
-  towerRowSpacing: 24,
 };
 
 // Heroes are laid out in a fixed-width grid (mapConfig.heroColumns) centered
@@ -45,15 +41,5 @@ export function layoutPetPositions(count: number): Position[] {
   return Array.from({ length: count }, (_, index) => ({
     x,
     y: y + mapConfig.petRowOffset + (index - (count - 1) / 2) * mapConfig.petRowSpacing,
-  }));
-}
-
-// Towers get their own row too - same layout shape as pets, mirrored to the
-// other side of the hero anchor (see mapConfig.towerRowOffset).
-export function layoutTowerPositions(count: number): Position[] {
-  const { x, y } = mapConfig.heroPosition;
-  return Array.from({ length: count }, (_, index) => ({
-    x,
-    y: y + mapConfig.towerRowOffset + (index - (count - 1) / 2) * mapConfig.towerRowSpacing,
   }));
 }

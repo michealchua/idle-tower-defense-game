@@ -4,10 +4,10 @@ import { useGameStore } from '../store/useGameStore';
 
 function AscensionPanel() {
   const ascensionLevel = useGameStore((state) => state.ascensionLevel);
+  const ascensionPoints = useGameStore((state) => state.ascensionPoints);
+  const wave = useGameStore((state) => state.wave);
   const eligible = useGameStore((state) => state.canAscend);
   const ascend = useGameStore((state) => state.ascend);
-
-  const bonusPercent = Math.round(ascensionLevel * ascensionConfig.bonusMultiplierPerLevel * 100);
 
   return (
     <div className="card">
@@ -17,14 +17,18 @@ function AscensionPanel() {
         <span className="hud-gold">{ascensionLevel}</span>
       </div>
       <div className="row" style={{ marginTop: 4 }}>
-        <span>{t('ascension.bonus')}</span>
-        <span>+{bonusPercent}%</span>
+        <span>{t('ascension.points')}</span>
+        <span className="hud-gold">{ascensionPoints}</span>
+      </div>
+      <div className="card-subtitle" style={{ marginTop: 8 }}>
+        {t('ascension.requirement')} {ascensionConfig.unlockHeroLevel}, {t('ascension.requirementChapter')}{' '}
+        {ascensionConfig.requiredChapter} ({t('ascension.currentChapter')} {wave.chapter}-{wave.waveInChapter})
       </div>
       <div className="card-subtitle" style={{ marginTop: 8 }}>
         {t('ascension.resetNotice')}
       </div>
       <button className="btn btn-primary btn-block" onClick={() => ascend()} disabled={!eligible}>
-        {eligible ? t('ascension.ascend') : `${t('ascension.requirement')} ${ascensionConfig.unlockHeroLevel}`}
+        {t('ascension.ascend')}
       </button>
     </div>
   );

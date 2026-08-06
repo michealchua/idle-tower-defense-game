@@ -1,7 +1,7 @@
 import { spawnVisualEffect } from './EffectsSystem';
 import { getEnemiesInRange, heroDefaultStrategy, pickBestTarget } from './TargetingSystem';
 import { calculateDamage, applyDamage } from './DamageSystem';
-import { getDeployedHeroes, getDeployedPets } from './HeroStatsSystem';
+import { getDeployedHeroes } from './HeroStatsSystem';
 import { effectLifetimes } from '../../data/effectConfig';
 import type { GameState, Position } from '../types';
 
@@ -14,9 +14,9 @@ interface Attacker {
   criticalChance?: number;
 }
 
-// Shared by heroes and pets - both are just "a positioned unit with attack
-// stats that shoots whatever heroDefaultStrategy picks in range." Pets omit
-// criticalChance (no crit in v1) and default to 0.
+// Pets have no attack stats/combat role in v1 - they're passive stat-bonus
+// providers only (see HeroStatsSystem.computePetPassiveBonuses), so this
+// only ever runs for heroes now.
 function tickAttackerCombat(state: GameState, attacker: Attacker, deltaSeconds: number): void {
   attacker.attackCooldownRemaining = Math.max(0, attacker.attackCooldownRemaining - deltaSeconds);
 
@@ -52,8 +52,5 @@ function tickAttackerCombat(state: GameState, attacker: Attacker, deltaSeconds: 
 export function tickCombat(state: GameState, deltaSeconds: number): void {
   for (const hero of getDeployedHeroes(state)) {
     tickAttackerCombat(state, hero, deltaSeconds);
-  }
-  for (const pet of getDeployedPets(state)) {
-    tickAttackerCombat(state, pet, deltaSeconds);
   }
 }

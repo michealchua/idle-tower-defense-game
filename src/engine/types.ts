@@ -2,6 +2,9 @@ import type { UpgradeableStat } from '../data/heroConfig';
 import type { EnemyArchetypeId } from '../data/enemyArchetypes';
 import type { EquipmentAffix, EquipmentRarity, EquipmentSlot } from '../data/equipmentConfig';
 import type { BossKind } from '../data/waveConfig';
+import type { AscensionShopId } from '../data/ascensionShopConfig';
+import type { PityPoolId } from '../data/pityConfig';
+import type { CastleTypeId } from '../data/castleTypeConfig';
 
 export interface Position {
   x: number;
@@ -36,6 +39,11 @@ export interface HeroState {
   expToNextLevel: number;
   unlockedMilestoneIds: string[];
   skills: Record<string, SkillRuntimeState>;
+  // Gold-purchased per-hero upgrade levels (see UpgradeSystem.ts) - each
+  // hero has its own independent track now, replacing the old GameState-
+  // level shared globalUpgrades. Reset (like level/exp) on ascend, see
+  // AscensionSystem.ascend.
+  upgrades: Record<UpgradeableStat, number>;
   position: Position;
 }
 
@@ -49,24 +57,6 @@ export interface PetState {
   attackSpeed: number;
   attackRange: number;
   attackCooldownRemaining: number;
-}
-
-export interface TowerState {
-  // Matches a towerConfig id. Unlike heroes/pets, one tower id = one
-  // instance - there's no gacha/duplicate concept, just build once and
-  // upgrade in place (see TowerSystem.upgradeTower).
-  id: string;
-  level: number;
-  position: Position;
-  // Fully-computed by TowerSystem.recomputeTowerStats, same contract as
-  // HeroState/PetState combat stats. 0 for the economy (gold-generating)
-  // tower kind, which never attacks.
-  attackDamage: number;
-  attackSpeed: number;
-  attackRange: number;
-  attackCooldownRemaining: number;
-  // Economy tower kind only - see towerConfig.ts. 0 for combat towers.
-  goldPerSecond: number;
 }
 
 export interface EnemyState {
@@ -92,10 +82,12 @@ export interface EnemyState {
   // use it in v1, but named generically so a future active ability doesn't
   // need its own field. See EnemyAbilitySystem.tickEnemyAbilities.
   abilityCooldownRemaining: number;
-  // Frost tower slow debuff (see TowerSystem.tickTowerCombat) - always
-  // present (1/0 when not slowed) so MovementSystem never needs a fallback.
-  // slowMultiplier applies only while slowRemaining > 0; MovementSystem
-  // resets it back to 1 once the timer runs out.
+  // Generic movement-speed slow debuff - always present (1/0 when not
+  // slowed) so MovementSystem never needs a fallback. slowMultiplier applies
+  // only while slowRemaining > 0; MovementSystem resets it back to 1 once
+  // the timer runs out. Nothing currently grants this (the tower that used
+  // to - frost - is gone), kept as generic infrastructure for a future
+  // skill/mechanic rather than ripped out along with it.
   slowMultiplier: number;
   slowRemaining: number;
 }
@@ -147,9 +139,7 @@ export type VisualEffectKind =
   | 'lightningBolt'
   | 'healPulse'
   | 'shieldBreak'
-  | 'waveClear'
-  | 'towerSplash'
-  | 'frostImpact';
+  | 'waveClear';
 
 export interface VisualEffect {
   id: number;
@@ -172,31 +162,40 @@ export interface GameState {
   // LevelSystem/DamageSystem, all of which filter to the deployed subset.
   heroes: HeroState[];
   pets: PetState[];
-  towers: TowerState[];
   unlockedHeroIds: string[];
   unlockedPetIds: string[];
-  unlockedTowerIds: string[];
   deployedHeroIds: string[];
   deployedPetIds: string[];
-  deployedTowerIds: string[];
   // Gold-purchased castle upgrade level (see castleConfig.ts/CastleSystem.ts)
-  // - grows base maxHp and unlocks more hero/pet/tower deploy slots over
-  // squadConfig's level-1 baseline. Survives ascension, same as unlocked
+  // - grows base maxHp and unlocks more hero/pet deploy slots over
+  // squadConfig's level-1 baseline, and scales whichever castleType bonus is
+  // currently selected below. Survives ascension, same as unlocked
   // heroes/pets/equipment (it's collection/structure progress, not a
   // run-scoped stat).
   castleLevel: number;
-  // Passive resource for the talent tree (talentConfig.ts/TalentSystem.ts) -
-  // accumulates over time regardless of combat, spent on permanent
-  // percentage bonuses. skillPointAccumulator is the fractional-seconds
-  // carry so partial progress isn't lost between whole-point ticks.
+  // Which single passive bonus castleLevel currently feeds - see
+  // castleTypeConfig.ts. Free/instant to switch (CastleSystem.setCastleType),
+  // doesn't reset castleLevel.
+  castleType: CastleTypeId;
+  // Resource for the talent tree (talentConfig.ts/TalentSystem.ts) - earned
+  // only by killing a wave's miniboss/boss (see DamageSystem.handleDeath),
+  // never accrues passively. Spent on permanent percentage bonuses that
+  // survive ascension (see AscensionSystem.ascend).
   skillPoints: number;
-  skillPointAccumulator: number;
   talentLevels: Record<string, number>;
-  // Shared across every hero - upgrades used to live per-hero on HeroState,
-  // but with multiple simultaneous heroes there is exactly one team-wide
-  // upgrade track, same as the equipment loadout below.
-  globalUpgrades: Record<UpgradeableStat, number>;
+  // Lifetime ascension counter - never reset, also used as an unlock
+  // condition (see unlockConditionConfig.ts). No longer drives a stat
+  // multiplier directly; see ascensionPoints/ascensionShopLevels below.
   ascensionLevel: number;
+  // Resource for the ascension shop (ascensionShopConfig.ts/
+  // AscensionShopSystem.ts) - granted on every ascend() and, like
+  // talentLevels, never reset by ascending again.
+  ascensionPoints: number;
+  ascensionShopLevels: Record<AscensionShopId, number>;
+  // Premium currency - no passive income, only discrete rewards (boss kills,
+  // chapter clears, ascending; see diamondConfig.ts). Spent on premium gacha
+  // pulls, red/rainbow rarity breakthroughs, and direct gold exchange.
+  diamonds: number;
   // Gacha economy - keyed by heroRosterConfig/petRosterConfig id, pre-seeded
   // to 0 for every roster entry (see GameState.ts) so reads never need a
   // fallback. Stars are 0-MAX_STAR_LEVEL; see gachaConfig.ts.
@@ -204,6 +203,10 @@ export interface GameState {
   heroStars: Record<string, number>;
   petShards: Record<string, number>;
   petStars: Record<string, number>;
+  // Pulls since each pool's last pity-eligible rarity (see pityConfig.ts) -
+  // incremented on every pull that isn't itself a hit, reset to 0 on one
+  // (natural or forced). Never reset by ascension, same as goldSpentTotal.
+  pityCounters: Record<PityPoolId, number>;
   // Rare star-up materials for purple/gold rarity only - no real income
   // source built yet, granted via debug tools for now.
   epicSourceStone: number;

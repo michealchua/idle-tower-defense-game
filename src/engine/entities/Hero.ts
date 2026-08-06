@@ -1,5 +1,9 @@
-import { getExpToNextLevel, heroBaseConfig } from '../../data/heroConfig';
+import { getExpToNextLevel, heroBaseConfig, heroUpgradeConfig, type UpgradeableStat } from '../../data/heroConfig';
 import type { HeroState, Position } from '../types';
+
+function createInitialHeroUpgrades(): Record<UpgradeableStat, number> {
+  return Object.fromEntries(Object.keys(heroUpgradeConfig).map((stat) => [stat, 0])) as Record<UpgradeableStat, number>;
+}
 
 // Combat stats (attackDamage/maxHp/etc.) are seeded from heroBaseConfig here
 // but immediately overwritten by HeroStatsSystem.recomputeHeroStats - every
@@ -19,6 +23,9 @@ export function createHero(heroId: string, position: Position): HeroState {
     expToNextLevel: getExpToNextLevel(heroBaseConfig.level),
     unlockedMilestoneIds: [],
     skills: {},
+    upgrades: createInitialHeroUpgrades(),
     position: { ...position },
   };
 }
+
+export { createInitialHeroUpgrades };

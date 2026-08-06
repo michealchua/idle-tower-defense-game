@@ -4,6 +4,8 @@ import {
   debugForceAscend,
   debugForceClearWave,
   debugForceFailWave,
+  debugGrantAscensionPoints,
+  debugGrantDiamonds,
   debugGrantGold,
   debugGrantMaterials,
   debugGrantSkillPoints,
@@ -20,7 +22,6 @@ import {
   debugUnlockAllHeroes,
   debugUnlockAllPets,
   debugUnlockAllSkills,
-  debugUnlockAllTowers,
   useGameStore,
 } from '../store/useGameStore';
 
@@ -99,7 +100,8 @@ function DebugPanel() {
         <button onClick={() => debugGrantGold(100000)}>+100000 Gold</button>
         <button onClick={() => debugGrantMaterials()}>+20 Materials</button>
         <button onClick={() => debugGrantSkillPoints(10)}>+10 Skill Points</button>
-        <button onClick={() => debugUnlockAllTowers()}>Build All Towers</button>
+        <button onClick={() => debugGrantAscensionPoints(10)}>+10 Ascension Points</button>
+        <button onClick={() => debugGrantDiamonds(100)}>+100 Diamonds</button>
         <button onClick={() => debugPullHeroMany(10)}>Pull Hero x10</button>
         <button onClick={() => debugPullPetMany(10)}>Pull Pet x10</button>
         <button onClick={() => debugKillAllEnemies()}>Kill All</button>

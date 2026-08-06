@@ -71,3 +71,17 @@ export function undeployPet(state: GameState, petId: string): boolean {
   recomputeHeroStats(state);
   return true;
 }
+
+// See HeroSystem.swapDeployedHeroes - same reasoning, for pets.
+export function swapDeployedPets(state: GameState, petIdA: string, petIdB: string): boolean {
+  const indexA = state.deployedPetIds.indexOf(petIdA);
+  const indexB = state.deployedPetIds.indexOf(petIdB);
+  if (indexA === -1 || indexB === -1 || indexA === indexB) {
+    return false;
+  }
+
+  state.deployedPetIds[indexA] = petIdB;
+  state.deployedPetIds[indexB] = petIdA;
+  relayoutDeployedPets(state);
+  return true;
+}

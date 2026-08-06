@@ -1,13 +1,16 @@
 import { mapConfig } from '../../data/mapConfig';
 import { enemyArchetypes } from '../../data/enemyArchetypes';
 import { getTalentFlatBonus } from '../../data/talentConfig';
+import { getAscensionShopFlatBonus } from '../../data/ascensionShopConfig';
+import { getCastleDamageReductionBonus } from '../../data/castleTypeConfig';
 import { retryCurrentWave } from './WaveSystem';
 import type { GameState } from '../types';
 
 // Recomputed every tick from live HP (not a one-way "enraged" flag), so a
 // Berserker healed back above the threshold (see EnemyAbilitySystem) visibly
-// calms back down instead of staying sped up forever. Frost tower slow (see
-// TowerSystem.tickTowerCombat) stacks on top multiplicatively.
+// calms back down instead of staying sped up forever. Any future
+// slow-granting effect (enemy.slowMultiplier - currently unused, nothing
+// sets it) would stack on top multiplicatively.
 function getEffectiveSpeed(enemy: GameState['enemies'][number]): number {
   const archetype = enemyArchetypes[enemy.archetypeId];
   const berserkerMultiplier =
@@ -20,7 +23,10 @@ function getEffectiveSpeed(enemy: GameState['enemies'][number]): number {
 export function tickMovement(state: GameState, deltaSeconds: number): void {
   const { base } = state;
   const survivors: GameState['enemies'] = [];
-  const damageReduction = getTalentFlatBonus(state.talentLevels, 'damageReduction');
+  const damageReduction =
+    getTalentFlatBonus(state.talentLevels, 'damageReduction') +
+    getAscensionShopFlatBonus(state.ascensionShopLevels, 'damageReduction') +
+    getCastleDamageReductionBonus(state.castleType, state.castleLevel);
 
   for (const enemy of state.enemies) {
     if (enemy.slowRemaining > 0) {

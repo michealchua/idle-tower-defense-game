@@ -5,6 +5,11 @@ export const heroBaseConfig = {
   maxHp: 100,
   attackDamage: 10,
   attackSpeed: 1,
+  // Fixed, non-upgradeable - not part of UpgradeableStat below, so it can
+  // never be rolled on equipment, bought as a hero upgrade, or granted by a
+  // talent/ascension/castle bonus. Every hero/pet/tower still needs *some*
+  // engagement range for TargetingSystem.getEnemiesInRange, this is just no
+  // longer a player-facing stat.
   attackRange: 100,
   criticalChance: 0.05,
 };
@@ -19,17 +24,16 @@ export interface UpgradeDefinition {
   maxValue?: number;
 }
 
-export type UpgradeableStat = 'attackDamage' | 'attackSpeed' | 'maxHp' | 'criticalChance' | 'attackRange';
+export type UpgradeableStat = 'attackDamage' | 'attackSpeed' | 'maxHp' | 'criticalChance';
 
-// `category` is metadata only - getUpgradeCost/upgradeStat never read it. It
-// exists so the UI can later group these into Combat/Survival/Utility
+// `category` is metadata only - getUpgradeCost/applyHeroUpgrade never read
+// it. It exists so the UI can later group these into Combat/Survival/Utility
 // sections without touching the upgrade logic itself.
 export const heroUpgradeConfig: Record<UpgradeableStat, UpgradeDefinition> = {
   attackDamage: { category: 'combat', baseCost: 10, costGrowth: 1.15, valuePerLevel: 2 },
   attackSpeed: { category: 'combat', baseCost: 15, costGrowth: 1.18, valuePerLevel: 0.05 },
   criticalChance: { category: 'combat', baseCost: 25, costGrowth: 1.25, valuePerLevel: 0.02, maxValue: 0.75 },
   maxHp: { category: 'survival', baseCost: 8, costGrowth: 1.12, valuePerLevel: 20 },
-  attackRange: { category: 'utility', baseCost: 12, costGrowth: 1.15, valuePerLevel: 10 },
 };
 
 export const heroLevelConfig = {

@@ -2,7 +2,9 @@ import { spawnVisualEffect } from './EffectsSystem';
 import { rollEquipmentDrop } from './EquipmentSystem';
 import { getDeployedHeroes } from './HeroStatsSystem';
 import { effectLifetimes } from '../../data/effectConfig';
-import { getTalentMultiplier } from '../../data/talentConfig';
+import { getTalentMultiplier, talentPointRewardConfig } from '../../data/talentConfig';
+import { getAscensionShopMultiplier } from '../../data/ascensionShopConfig';
+import { diamondRewardConfig } from '../../data/diamondConfig';
 import type { EnemyState, GameState } from '../types';
 
 export interface DamageResult {
@@ -49,8 +51,10 @@ export function applyDamage(state: GameState, target: EnemyState, damage: Damage
 }
 
 export function handleDeath(state: GameState, target: EnemyState): void {
-  const goldGainMultiplier = getTalentMultiplier(state.talentLevels, 'goldGain');
-  const expGainMultiplier = getTalentMultiplier(state.talentLevels, 'expGain');
+  const goldGainMultiplier =
+    getTalentMultiplier(state.talentLevels, 'goldGain') * getAscensionShopMultiplier(state.ascensionShopLevels, 'goldGain');
+  const expGainMultiplier =
+    getTalentMultiplier(state.talentLevels, 'expGain') * getAscensionShopMultiplier(state.ascensionShopLevels, 'expGain');
 
   state.gold += target.goldReward * goldGainMultiplier;
   // Parallel leveling - every deployed hero gets the full exp reward
@@ -62,6 +66,15 @@ export function handleDeath(state: GameState, target: EnemyState): void {
     hero.exp += target.expReward * expGainMultiplier;
   }
   rollEquipmentDrop(state);
+
+  // Talent points have no passive/idle income (see talentConfig.ts) - the
+  // only source is killing the current wave's miniboss/boss, identified by
+  // its archetypeId matching the wave's bossKind (same check WaveSystem's
+  // isBossAlive uses).
+  if (state.wave.isBossWave && state.wave.bossKind && target.archetypeId === state.wave.bossKind) {
+    state.skillPoints += talentPointRewardConfig[state.wave.bossKind];
+    state.diamonds += diamondRewardConfig[state.wave.bossKind];
+  }
 
   spawnVisualEffect(state, {
     kind: 'deathBurst',

@@ -41,9 +41,9 @@ export function combineStrategies(...strategies: TargetComparator[]): TargetComp
 }
 
 // The hero's current default: protect the base first, finish off already-
-// weakened enemies second, break remaining ties by proximity. Towers,
-// skills, companions, and bosses are free to combine TargetingStrategies
-// differently (or add new strategies) without touching this one.
+// weakened enemies second, break remaining ties by proximity. Skills,
+// companions, and bosses are free to combine TargetingStrategies differently
+// (or add new strategies) without touching this one.
 export const heroDefaultStrategy = combineStrategies(
   TargetingStrategies.closestToBase,
   TargetingStrategies.lowestHp,

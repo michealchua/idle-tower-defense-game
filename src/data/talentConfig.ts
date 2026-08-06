@@ -1,14 +1,7 @@
 import { computeScaledValue } from './scaling';
+import type { BossKind } from './waveConfig';
 
-export type TalentId =
-  | 'goldGain'
-  | 'expGain'
-  | 'spGainSpeed'
-  | 'attackDamage'
-  | 'maxHp'
-  | 'damageReduction'
-  | 'criticalChance'
-  | 'aoeDamage';
+export type TalentId = 'goldGain' | 'expGain' | 'attackDamage' | 'maxHp' | 'damageReduction' | 'criticalChance';
 
 export interface TalentDefinition {
   maxLevel: number;
@@ -16,8 +9,8 @@ export interface TalentDefinition {
   baseCost: number;
   costGrowth: number;
   // Meaning depends on the node: most are "+X% per level" multipliers
-  // (goldGain/expGain/spGainSpeed/attackDamage/maxHp/aoeDamage), while
-  // criticalChance/damageReduction are flat +X per level, capped by maxValue.
+  // (goldGain/expGain/attackDamage/maxHp), while criticalChance/
+  // damageReduction are flat +X per level, capped by maxValue.
   valuePerLevel: number;
   maxValue?: number;
 }
@@ -29,26 +22,25 @@ export interface TalentDefinition {
 export const talentConfig: Record<TalentId, TalentDefinition> = {
   goldGain: { maxLevel: 20, baseCost: 1, costGrowth: 1.3, valuePerLevel: 0.05 },
   expGain: { maxLevel: 20, baseCost: 1, costGrowth: 1.3, valuePerLevel: 0.05 },
-  spGainSpeed: { maxLevel: 10, baseCost: 2, costGrowth: 1.4, valuePerLevel: 0.1 },
   attackDamage: { maxLevel: 30, baseCost: 1, costGrowth: 1.25, valuePerLevel: 0.03 },
   maxHp: { maxLevel: 30, baseCost: 1, costGrowth: 1.25, valuePerLevel: 0.03 },
   damageReduction: { maxLevel: 20, baseCost: 2, costGrowth: 1.35, valuePerLevel: 0.02, maxValue: 0.5 },
   criticalChance: { maxLevel: 15, baseCost: 2, costGrowth: 1.3, valuePerLevel: 0.01 },
-  aoeDamage: { maxLevel: 20, baseCost: 2, costGrowth: 1.3, valuePerLevel: 0.04 },
 };
 
-export const skillPointGainConfig = {
-  // Baseline seconds to accumulate 1 skill point - spGainSpeed talent shrinks
-  // this effectively by speeding up the accumulator (see
-  // TalentSystem.tickSkillPointGain).
-  secondsPerPoint: 60,
+// Talent points are earned only by killing a wave's miniboss/boss (see
+// DamageSystem.handleDeath) - there is deliberately no passive/idle income,
+// so points stay tied to actually clearing content.
+export const talentPointRewardConfig: Record<BossKind, number> = {
+  miniboss: 1,
+  boss: 3,
 };
 
 // Pure getters over `Record<TalentId, number>` + the config above - kept
-// here (not in engine/systems/TalentSystem.ts) so HeroStatsSystem and
-// TowerSystem can read talent bonuses without importing TalentSystem itself,
-// which would create a cycle (TalentSystem.upgradeTalent already needs to
-// call back into both of those to refresh stats after a purchase).
+// here (not in engine/systems/TalentSystem.ts) so HeroStatsSystem/
+// MovementSystem can read talent bonuses without importing TalentSystem
+// itself, which would create a cycle (TalentSystem.upgradeTalent already
+// needs to call back into HeroStatsSystem to refresh stats after a purchase).
 export function getTalentLevel(talentLevels: Record<string, number>, id: TalentId): number {
   return talentLevels[id] ?? 0;
 }
@@ -62,8 +54,8 @@ export function isTalentMaxed(talentLevels: Record<string, number>, id: TalentId
   return getTalentLevel(talentLevels, id) >= talentConfig[id].maxLevel;
 }
 
-// Multiplicative nodes (goldGain/expGain/spGainSpeed/attackDamage/maxHp/
-// aoeDamage) - "1 + N * valuePerLevel".
+// Multiplicative nodes (goldGain/expGain/attackDamage/maxHp) -
+// "1 + N * valuePerLevel".
 export function getTalentMultiplier(talentLevels: Record<string, number>, id: TalentId): number {
   return 1 + getTalentLevel(talentLevels, id) * talentConfig[id].valuePerLevel;
 }

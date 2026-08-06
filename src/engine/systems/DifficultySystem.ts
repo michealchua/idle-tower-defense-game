@@ -1,6 +1,6 @@
 import { enemyScalingConfig } from '../../data/enemyScalingConfig';
 import { waveConfig } from '../../data/waveConfig';
-import { getStrongestHeroLevel } from './HeroStatsSystem';
+import { getDeployedHeroes, getStrongestHeroLevel } from './HeroStatsSystem';
 import type { GameState } from '../types';
 
 // Same shape as TargetingSystem's TargetComparator/TargetingStrategies -
@@ -20,8 +20,15 @@ export const difficultyContributors: Record<string, DifficultyContributor> = {
     return stageIndex * enemyScalingConfig.stage.weight;
   },
   heroLevel: (state) => (getStrongestHeroLevel(state) - 1) * enemyScalingConfig.level.weight,
+  // Sums every deployed hero's own upgrade levels (see HeroState.upgrades) -
+  // deployed-only for the same reason getStrongestHeroLevel is: a strong
+  // benched hero shouldn't inflate difficulty for a squad that isn't
+  // actually fielding it.
   upgrades: (state) => {
-    const totalUpgrades = Object.values(state.globalUpgrades).reduce((sum, count) => sum + count, 0);
+    const totalUpgrades = getDeployedHeroes(state).reduce(
+      (sum, hero) => sum + Object.values(hero.upgrades).reduce((heroSum, count) => heroSum + count, 0),
+      0,
+    );
     return totalUpgrades * enemyScalingConfig.upgrades.weight;
   },
   // Future: prestige: (state) => state.prestige.level * enemyScalingConfig.prestige.weight,

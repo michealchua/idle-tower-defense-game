@@ -5,7 +5,7 @@ import { heroUpgradeConfig, type UpgradeableStat } from '../data/heroConfig';
 import { skillDefinitions } from '../data/skillConfig';
 import { heroRosterConfig } from '../data/heroRosterConfig';
 import { petRosterConfig } from '../data/petRosterConfig';
-import { getUpgradeCost, isUpgradeMaxed, applyUpgrade } from '../engine/systems/UpgradeSystem';
+import { applyHeroUpgrade } from '../engine/systems/UpgradeSystem';
 import { getDifficultyScore } from '../engine/systems/DifficultySystem';
 import { spawnEnemyNow } from '../engine/systems/SpawnSystem';
 import { handleDeath } from '../engine/systems/DamageSystem';
@@ -20,28 +20,31 @@ import {
   unlockHero as unlockHeroInEngine,
   deployHero as deployHeroInEngine,
   undeployHero as undeployHeroInEngine,
+  swapDeployedHeroes as swapDeployedHeroesInEngine,
 } from '../engine/systems/HeroSystem';
 import {
   unlockPet as unlockPetInEngine,
   deployPet as deployPetInEngine,
   undeployPet as undeployPetInEngine,
+  swapDeployedPets as swapDeployedPetsInEngine,
 } from '../engine/systems/PetSystem';
-import {
-  unlockTower as unlockTowerInEngine,
-  deployTower as deployTowerInEngine,
-  undeployTower as undeployTowerInEngine,
-  upgradeTower as upgradeTowerInEngine,
-} from '../engine/systems/TowerSystem';
-import { upgradeCastle as upgradeCastleInEngine } from '../engine/systems/CastleSystem';
+import { upgradeCastle as upgradeCastleInEngine, setCastleType as setCastleTypeInEngine } from '../engine/systems/CastleSystem';
 import { upgradeTalent as upgradeTalentInEngine } from '../engine/systems/TalentSystem';
+import { upgradeAscensionShopNode as upgradeAscensionShopNodeInEngine } from '../engine/systems/AscensionShopSystem';
 import { ascend as ascendInEngine, canAscend } from '../engine/systems/AscensionSystem';
-import { recomputeHeroStats, getDeployedHeroes, getDeployedPets, getDeployedTowers } from '../engine/systems/HeroStatsSystem';
+import { ascensionConfig } from '../data/ascensionConfig';
+import { recomputeHeroStats, getDeployedHeroes, getDeployedPets } from '../engine/systems/HeroStatsSystem';
 import { advanceToNextWave, retryCurrentWave, tickWaveProgress } from '../engine/systems/WaveSystem';
 import {
   pullHero as pullHeroInEngine,
   pullPet as pullPetInEngine,
   pullHeroMulti as pullHeroMultiInEngine,
   pullPetMulti as pullPetMultiInEngine,
+  pullHeroPremium as pullHeroPremiumInEngine,
+  pullPetPremium as pullPetPremiumInEngine,
+  pullHeroPremiumMulti as pullHeroPremiumMultiInEngine,
+  pullPetPremiumMulti as pullPetPremiumMultiInEngine,
+  exchangeDiamondsForGold as exchangeDiamondsForGoldInEngine,
   type GachaPullResult,
 } from '../engine/systems/GachaSystem';
 import { starUpHero as starUpHeroInEngine, starUpPet as starUpPetInEngine } from '../engine/systems/StarUpSystem';
@@ -51,19 +54,11 @@ import {
 } from '../engine/systems/UnlockSystem';
 import type { EnemyArchetypeId } from '../data/enemyArchetypes';
 import type { EquipmentSlot } from '../data/equipmentConfig';
-import { towerConfig, towerIds, type TowerId } from '../data/towerConfig';
 import type { TalentId } from '../data/talentConfig';
-import type {
-  BaseState,
-  EnemyState,
-  EquipmentItem,
-  GameState,
-  HeroState,
-  PetState,
-  TowerState,
-  VisualEffect,
-  WaveState,
-} from '../engine/types';
+import type { AscensionShopId } from '../data/ascensionShopConfig';
+import type { CastleTypeId } from '../data/castleTypeConfig';
+import type { PityPoolId } from '../data/pityConfig';
+import type { BaseState, EnemyState, EquipmentItem, GameState, HeroState, PetState, VisualEffect, WaveState } from '../engine/types';
 
 // Single mutable simulation state, shared by the GameLoop and by upgrade
 // actions. The store below only ever holds read-only snapshots copied from
@@ -72,18 +67,6 @@ import type {
 const gameState: GameState = createInitialGameState();
 
 const upgradeableStats = Object.keys(heroUpgradeConfig) as UpgradeableStat[];
-
-function computeUpgradeCosts(state: GameState): Record<UpgradeableStat, number> {
-  return Object.fromEntries(
-    upgradeableStats.map((stat) => [stat, getUpgradeCost(stat, state.globalUpgrades[stat])]),
-  ) as Record<UpgradeableStat, number>;
-}
-
-function computeUpgradeMaxed(state: GameState): Record<UpgradeableStat, boolean> {
-  return Object.fromEntries(
-    upgradeableStats.map((stat) => [stat, isUpgradeMaxed(state, stat)]),
-  ) as Record<UpgradeableStat, boolean>;
-}
 
 // Used for both the store's initial state and every GameLoop tick sync, so
 // the two can never drift into different copy semantics. Derived values
@@ -94,29 +77,28 @@ function snapshotGameState(state: GameState) {
   return {
     heroes: state.heroes.map((hero) => ({ ...hero })),
     pets: state.pets.map((pet) => ({ ...pet })),
-    towers: state.towers.map((tower) => ({ ...tower })),
     unlockedHeroIds: [...state.unlockedHeroIds],
     unlockedPetIds: [...state.unlockedPetIds],
-    unlockedTowerIds: [...state.unlockedTowerIds],
     deployedHeroIds: [...state.deployedHeroIds],
     deployedPetIds: [...state.deployedPetIds],
-    deployedTowerIds: [...state.deployedTowerIds],
     // Pre-filtered read-only views for rendering - only the active squad
     // gets drawn, a benched unit's stale position would otherwise render.
     deployedHeroes: getDeployedHeroes(state).map((hero) => ({ ...hero })),
     deployedPets: getDeployedPets(state).map((pet) => ({ ...pet })),
-    deployedTowers: getDeployedTowers(state).map((tower) => ({ ...tower })),
     castleLevel: state.castleLevel,
+    castleType: state.castleType,
     skillPoints: state.skillPoints,
-    skillPointAccumulator: state.skillPointAccumulator,
     talentLevels: { ...state.talentLevels },
-    globalUpgrades: { ...state.globalUpgrades },
     ascensionLevel: state.ascensionLevel,
+    ascensionPoints: state.ascensionPoints,
+    ascensionShopLevels: { ...state.ascensionShopLevels },
+    diamonds: state.diamonds,
     canAscend: canAscend(state),
     heroShards: { ...state.heroShards },
     heroStars: { ...state.heroStars },
     petShards: { ...state.petShards },
     petStars: { ...state.petStars },
+    pityCounters: { ...state.pityCounters },
     epicSourceStone: state.epicSourceStone,
     legendarySourceStone: state.legendarySourceStone,
     goldSpentTotal: state.goldSpentTotal,
@@ -127,8 +109,6 @@ function snapshotGameState(state: GameState) {
     gold: state.gold,
     isGameOver: state.isGameOver,
     difficultyScore: getDifficultyScore(state),
-    upgradeCosts: computeUpgradeCosts(state),
-    upgradeMaxed: computeUpgradeMaxed(state),
     inventory: state.inventory.map((item) => ({ ...item })),
     equipped: { ...state.equipped },
   };
@@ -137,33 +117,30 @@ function snapshotGameState(state: GameState) {
 interface GameStore {
   heroes: HeroState[];
   pets: PetState[];
-  towers: TowerState[];
   unlockedHeroIds: string[];
   unlockedPetIds: string[];
-  unlockedTowerIds: string[];
   deployedHeroIds: string[];
   deployedPetIds: string[];
-  deployedTowerIds: string[];
   deployedHeroes: HeroState[];
   deployedPets: PetState[];
-  deployedTowers: TowerState[];
   castleLevel: number;
+  castleType: CastleTypeId;
   skillPoints: number;
-  skillPointAccumulator: number;
   talentLevels: Record<string, number>;
   upgradeCastle: () => void;
-  buildTower: (towerId: TowerId) => void;
-  deployTower: (towerId: string) => void;
-  undeployTower: (towerId: string) => void;
-  upgradeTower: (towerId: string) => void;
+  setCastleType: (castleType: CastleTypeId) => void;
   upgradeTalent: (talentId: TalentId) => void;
-  globalUpgrades: Record<UpgradeableStat, number>;
   ascensionLevel: number;
+  ascensionPoints: number;
+  ascensionShopLevels: Record<string, number>;
+  upgradeAscensionShopNode: (id: AscensionShopId) => void;
+  diamonds: number;
   canAscend: boolean;
   heroShards: Record<string, number>;
   heroStars: Record<string, number>;
   petShards: Record<string, number>;
   petStars: Record<string, number>;
+  pityCounters: Record<PityPoolId, number>;
   epicSourceStone: number;
   legendarySourceStone: number;
   goldSpentTotal: number;
@@ -174,9 +151,7 @@ interface GameStore {
   gold: number;
   isGameOver: boolean;
   difficultyScore: number;
-  upgradeCosts: Record<UpgradeableStat, number>;
-  upgradeMaxed: Record<UpgradeableStat, boolean>;
-  upgradeStat: (stat: UpgradeableStat) => void;
+  upgradeHeroStat: (heroId: string, stat: UpgradeableStat, count: number) => void;
   inventory: EquipmentItem[];
   equipped: Record<EquipmentSlot, EquipmentItem | null>;
   equipItem: (instanceId: number) => void;
@@ -187,8 +162,10 @@ interface GameStore {
   unlockPet: (petId: string) => void;
   deployHero: (heroId: string) => void;
   undeployHero: (heroId: string) => void;
+  swapDeployedHeroes: (heroIdA: string, heroIdB: string) => void;
   deployPet: (petId: string) => void;
   undeployPet: (petId: string) => void;
+  swapDeployedPets: (petIdA: string, petIdB: string) => void;
   unlockHeroByCondition: (heroId: string) => void;
   unlockPetByCondition: (petId: string) => void;
   ascend: () => void;
@@ -196,16 +173,26 @@ interface GameStore {
   pullPet: () => GachaPullResult | null;
   pullHeroMulti: (count: number) => GachaPullResult[];
   pullPetMulti: (count: number) => GachaPullResult[];
+  pullHeroPremium: () => GachaPullResult | null;
+  pullPetPremium: () => GachaPullResult | null;
+  pullHeroPremiumMulti: (count: number) => GachaPullResult[];
+  pullPetPremiumMulti: (count: number) => GachaPullResult[];
+  exchangeDiamondsForGold: () => void;
   starUpHero: (heroId: string) => void;
   starUpPet: (petId: string) => void;
   isPaused: boolean;
   speedMultiplier: number;
+  // UI-only, not part of gameState - which roster is mid-drag over the
+  // battle canvas, so BattleScreen knows whether/what deploy-slot grid to
+  // overlay. Null whenever nothing is being dragged.
+  dragPreviewKind: 'hero' | 'pet' | null;
+  setDragPreviewKind: (kind: 'hero' | 'pet' | null) => void;
 }
 
 export const useGameStore = create<GameStore>((set) => ({
   ...snapshotGameState(gameState),
-  upgradeStat: (stat) => {
-    if (applyUpgrade(gameState, stat)) {
+  upgradeHeroStat: (heroId, stat, count) => {
+    if (applyHeroUpgrade(gameState, heroId, stat, count)) {
       set(snapshotGameState(gameState));
     }
   },
@@ -249,6 +236,11 @@ export const useGameStore = create<GameStore>((set) => ({
       set(snapshotGameState(gameState));
     }
   },
+  swapDeployedHeroes: (heroIdA, heroIdB) => {
+    if (swapDeployedHeroesInEngine(gameState, heroIdA, heroIdB)) {
+      set(snapshotGameState(gameState));
+    }
+  },
   deployPet: (petId) => {
     if (deployPetInEngine(gameState, petId)) {
       set(snapshotGameState(gameState));
@@ -259,33 +251,28 @@ export const useGameStore = create<GameStore>((set) => ({
       set(snapshotGameState(gameState));
     }
   },
+  swapDeployedPets: (petIdA, petIdB) => {
+    if (swapDeployedPetsInEngine(gameState, petIdA, petIdB)) {
+      set(snapshotGameState(gameState));
+    }
+  },
   upgradeCastle: () => {
     if (upgradeCastleInEngine(gameState)) {
       set(snapshotGameState(gameState));
     }
   },
-  buildTower: (towerId) => {
-    if (unlockTowerInEngine(gameState, towerId)) {
-      set(snapshotGameState(gameState));
-    }
-  },
-  deployTower: (towerId) => {
-    if (deployTowerInEngine(gameState, towerId)) {
-      set(snapshotGameState(gameState));
-    }
-  },
-  undeployTower: (towerId) => {
-    if (undeployTowerInEngine(gameState, towerId)) {
-      set(snapshotGameState(gameState));
-    }
-  },
-  upgradeTower: (towerId) => {
-    if (upgradeTowerInEngine(gameState, towerId)) {
+  setCastleType: (castleType) => {
+    if (setCastleTypeInEngine(gameState, castleType)) {
       set(snapshotGameState(gameState));
     }
   },
   upgradeTalent: (talentId) => {
     if (upgradeTalentInEngine(gameState, talentId)) {
+      set(snapshotGameState(gameState));
+    }
+  },
+  upgradeAscensionShopNode: (id) => {
+    if (upgradeAscensionShopNodeInEngine(gameState, id)) {
       set(snapshotGameState(gameState));
     }
   },
@@ -332,6 +319,39 @@ export const useGameStore = create<GameStore>((set) => ({
     }
     return results;
   },
+  pullHeroPremium: () => {
+    const result = pullHeroPremiumInEngine(gameState);
+    if (result) {
+      set(snapshotGameState(gameState));
+    }
+    return result;
+  },
+  pullPetPremium: () => {
+    const result = pullPetPremiumInEngine(gameState);
+    if (result) {
+      set(snapshotGameState(gameState));
+    }
+    return result;
+  },
+  pullHeroPremiumMulti: (count) => {
+    const results = pullHeroPremiumMultiInEngine(gameState, count);
+    if (results.length > 0) {
+      set(snapshotGameState(gameState));
+    }
+    return results;
+  },
+  pullPetPremiumMulti: (count) => {
+    const results = pullPetPremiumMultiInEngine(gameState, count);
+    if (results.length > 0) {
+      set(snapshotGameState(gameState));
+    }
+    return results;
+  },
+  exchangeDiamondsForGold: () => {
+    if (exchangeDiamondsForGoldInEngine(gameState)) {
+      set(snapshotGameState(gameState));
+    }
+  },
   starUpHero: (heroId) => {
     if (starUpHeroInEngine(gameState, heroId)) {
       set(snapshotGameState(gameState));
@@ -344,6 +364,8 @@ export const useGameStore = create<GameStore>((set) => ({
   },
   isPaused: false,
   speedMultiplier: 1,
+  dragPreviewKind: null,
+  setDragPreviewKind: (kind) => set({ dragPreviewKind: kind }),
 }));
 
 export { upgradeableStats };
@@ -442,8 +464,9 @@ export function debugPullPetMany(count: number): void {
 
 export function debugForceAscend(): void {
   for (const hero of gameState.heroes) {
-    hero.level = Math.max(hero.level, 10);
+    hero.level = Math.max(hero.level, ascensionConfig.unlockHeroLevel);
   }
+  gameState.wave.chapter = Math.max(gameState.wave.chapter, ascensionConfig.requiredChapter);
   recomputeHeroStats(gameState);
   ascendInEngine(gameState);
   useGameStore.setState(snapshotGameState(gameState));
@@ -476,13 +499,13 @@ export function debugGrantSkillPoints(amount: number): void {
   useGameStore.setState(snapshotGameState(gameState));
 }
 
-export function debugUnlockAllTowers(): void {
-  for (const towerId of towerIds) {
-    if (!gameState.unlockedTowerIds.includes(towerId)) {
-      gameState.gold += towerConfig[towerId].buildCost;
-      unlockTowerInEngine(gameState, towerId);
-    }
-  }
+export function debugGrantAscensionPoints(amount: number): void {
+  gameState.ascensionPoints += amount;
+  useGameStore.setState(snapshotGameState(gameState));
+}
+
+export function debugGrantDiamonds(amount: number): void {
+  gameState.diamonds += amount;
   useGameStore.setState(snapshotGameState(gameState));
 }
 

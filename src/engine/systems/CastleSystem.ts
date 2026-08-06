@@ -1,4 +1,6 @@
 import { getBaseMaxHpForCastleLevel, getCastleUpgradeCost } from '../../data/castleConfig';
+import { getCastleGoldPerSecond, type CastleTypeId } from '../../data/castleTypeConfig';
+import { recomputeHeroStats } from './HeroStatsSystem';
 import type { GameState } from '../types';
 
 function clamp(value: number, min: number, max: number): number {
@@ -26,5 +28,31 @@ export function upgradeCastle(state: GameState): boolean {
   state.goldSpentTotal += cost;
   state.castleLevel += 1;
   recomputeBaseMaxHp(state);
+  // castleLevel also scales whichever castleType bonus is active (military
+  // attack%/arcane crit both feed cached hero stats; economic/defense are
+  // read live each tick, see tickCastleIncome/MovementSystem).
+  recomputeHeroStats(state);
   return true;
+}
+
+// Free and instant - there's only one castleLevel progression, switching
+// type just changes which single bonus it feeds (see castleTypeConfig.ts).
+// A no-op (returns false) if the requested type is already active, so
+// re-clicking the current type doesn't churn state/re-render for nothing.
+export function setCastleType(state: GameState, castleType: CastleTypeId): boolean {
+  if (state.castleType === castleType) {
+    return false;
+  }
+
+  state.castleType = castleType;
+  recomputeHeroStats(state);
+  return true;
+}
+
+// Economic castle type's passive income - called every GameLoop tick,
+// mirroring the old goldTower's per-tick accumulation (see git history for
+// TowerSystem.tickTowerCombat's 'economy' branch). A no-op for every other
+// castleType since getCastleGoldPerSecond returns 0 unless it's active.
+export function tickCastleIncome(state: GameState, deltaSeconds: number): void {
+  state.gold += getCastleGoldPerSecond(state.castleType, state.castleLevel) * deltaSeconds;
 }

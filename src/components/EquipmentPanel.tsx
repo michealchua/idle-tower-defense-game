@@ -14,7 +14,7 @@ import { t } from '../locales/i18n';
 import { useGameStore } from '../store/useGameStore';
 
 const SLOT_IDS: EquipmentSlot[] = ['weapon', 'armor', 'trinket'];
-const RARITY_IDS: EquipmentRarity[] = ['white', 'green', 'blue', 'purple', 'gold'];
+const RARITY_IDS: EquipmentRarity[] = ['white', 'green', 'blue', 'purple', 'gold', 'red', 'rainbow'];
 const RARITY_RANK: Record<EquipmentRarity, number> = Object.fromEntries(
   RARITY_IDS.map((rarity, index) => [rarity, index]),
 ) as Record<EquipmentRarity, number>;
@@ -35,6 +35,8 @@ const RARITY_LABEL_KEYS: Record<EquipmentRarity, string> = {
   blue: 'rarity.blue',
   purple: 'rarity.purple',
   gold: 'rarity.gold',
+  red: 'rarity.red',
+  rainbow: 'rarity.rainbow',
 };
 
 const RARITY_CLASS: Record<EquipmentRarity, string> = {
@@ -43,6 +45,8 @@ const RARITY_CLASS: Record<EquipmentRarity, string> = {
   blue: 'rarity-blue',
   purple: 'rarity-purple',
   gold: 'rarity-gold',
+  red: 'rarity-red',
+  rainbow: 'rarity-rainbow',
 };
 
 const RARITY_BORDER_CLASS: Record<EquipmentRarity, string> = {
@@ -51,6 +55,8 @@ const RARITY_BORDER_CLASS: Record<EquipmentRarity, string> = {
   blue: 'border-rarity-blue',
   purple: 'border-rarity-purple',
   gold: 'border-rarity-gold',
+  red: 'border-rarity-red',
+  rainbow: 'border-rarity-rainbow',
 };
 
 const LEGENDARY_EFFECT_LABEL_KEYS: Record<string, string> = Object.fromEntries(
@@ -62,7 +68,6 @@ const STAT_LABEL_KEYS: Record<UpgradeableStat, string> = {
   attackSpeed: 'hero.attackSpeed',
   maxHp: 'hero.maxHp',
   criticalChance: 'hero.criticalChance',
-  attackRange: 'hero.attackRange',
 };
 
 function formatStatBonus(stat: UpgradeableStat, value: number): string {

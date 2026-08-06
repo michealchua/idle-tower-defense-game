@@ -86,15 +86,38 @@ export const equipmentRarities: Record<EquipmentRarity, RarityDefinition> = {
     dropWeight: 5,
     sellValue: 120,
   },
+  // affixCount stays capped at 3 (there are only 4 UpgradeableStats total,
+  // one of which is always the item's own primary stat) - gold/red/rainbow
+  // differentiate via baseMultiplier/starGrowthRate/affixRollRange instead.
   gold: {
     baseMultiplier: 3,
     starGrowthRate: 0.3,
-    affixCount: 4,
+    affixCount: 3,
     affixRollRange: [5, 10],
     guaranteesPremiumAffix: true,
     hasLegendaryEffect: true,
     dropWeight: 1,
     sellValue: 400,
+  },
+  red: {
+    baseMultiplier: 4.5,
+    starGrowthRate: 0.4,
+    affixCount: 3,
+    affixRollRange: [8, 16],
+    guaranteesPremiumAffix: true,
+    hasLegendaryEffect: true,
+    dropWeight: 0.3,
+    sellValue: 1200,
+  },
+  rainbow: {
+    baseMultiplier: 6.5,
+    starGrowthRate: 0.55,
+    affixCount: 3,
+    affixRollRange: [12, 24],
+    guaranteesPremiumAffix: true,
+    hasLegendaryEffect: true,
+    dropWeight: 0.05,
+    sellValue: 4000,
   },
 };
 
@@ -115,8 +138,8 @@ export const equipmentSlots: Record<EquipmentSlot, SlotDefinition> = {
     baseValueByStat: { maxHp: 15 },
   },
   trinket: {
-    possibleStats: ['attackSpeed', 'attackRange'],
-    baseValueByStat: { attackSpeed: 0.06, attackRange: 12 },
+    possibleStats: ['attackSpeed'],
+    baseValueByStat: { attackSpeed: 0.06 },
   },
 };
 
@@ -128,10 +151,9 @@ export const affixBaseValueByStat: Record<UpgradeableStat, number> = {
   attackSpeed: 0.02,
   maxHp: 8,
   criticalChance: 0.02,
-  attackRange: 6,
 };
 
-const ALL_STATS: UpgradeableStat[] = ['attackDamage', 'attackSpeed', 'maxHp', 'criticalChance', 'attackRange'];
+const ALL_STATS: UpgradeableStat[] = ['attackDamage', 'attackSpeed', 'maxHp', 'criticalChance'];
 
 export const equipmentDropConfig = {
   dropChance: 0.18,

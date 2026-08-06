@@ -67,6 +67,24 @@ export const petRosterConfig: PetDefinition[] = [
     attackRange: 90,
     unlockConditions: [{ type: 'ascensionLevel', level: 1 }],
   },
+  // Gacha-obtainable red/rainbow - same reasoning as hero-9/hero-10, gives
+  // the diamond premium pool something worth chasing.
+  {
+    id: 'pet-6',
+    rarity: 'red',
+    passiveBonus: { attackDamage: 14, maxHp: 40, criticalChance: 0.04 },
+    attackDamage: 12,
+    attackSpeed: 0.75,
+    attackRange: 90,
+  },
+  {
+    id: 'pet-7',
+    rarity: 'rainbow',
+    passiveBonus: { attackDamage: 22, maxHp: 60, criticalChance: 0.06, attackSpeed: 0.06 },
+    attackDamage: 18,
+    attackSpeed: 0.7,
+    attackRange: 90,
+  },
 ];
 
 export function getPetDefinition(petId: string): PetDefinition {

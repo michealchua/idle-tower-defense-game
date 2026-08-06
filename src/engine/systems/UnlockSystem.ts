@@ -14,8 +14,7 @@ import type { GameState } from '../types';
 export interface UnlockConditionCheckState {
   unlockedHeroIds: string[];
   unlockedPetIds: string[];
-  heroes: { id: string; level: number }[];
-  globalUpgrades: Record<UpgradeableStat, number>;
+  heroes: { id: string; level: number; upgrades: Record<UpgradeableStat, number> }[];
   goldSpentTotal: number;
   ascensionLevel: number;
 }
@@ -35,8 +34,8 @@ function isConditionMet(state: UnlockConditionCheckState, condition: UnlockCondi
       const hero = state.heroes.find((candidate) => candidate.id === condition.heroId);
       return !!hero && hero.level >= condition.level;
     }
-    case 'globalUpgradeLevel':
-      return state.globalUpgrades[condition.stat] >= condition.level;
+    case 'heroUpgradeLevel':
+      return state.heroes.some((hero) => hero.upgrades[condition.stat] >= condition.level);
     case 'goldSpent':
       return state.goldSpentTotal >= condition.amount;
     case 'ascensionLevel':

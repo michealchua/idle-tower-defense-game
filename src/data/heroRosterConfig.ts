@@ -27,41 +27,41 @@ export const heroRosterConfig: HeroDefinition[] = [
   {
     id: 'hero-1',
     rarity: 'white',
-    statMultiplier: { attackDamage: 1, maxHp: 1, attackSpeed: 1, attackRange: 1, criticalChance: 1 },
+    statMultiplier: { attackDamage: 1, maxHp: 1, attackSpeed: 1, criticalChance: 1 },
   },
   {
     id: 'hero-2',
     rarity: 'blue',
-    statMultiplier: { attackDamage: 1.4, maxHp: 0.75, attackSpeed: 1, attackRange: 1, criticalChance: 1.5 },
+    statMultiplier: { attackDamage: 1.4, maxHp: 0.75, attackSpeed: 1, criticalChance: 1.5 },
   },
   {
     id: 'hero-3',
     rarity: 'purple',
-    statMultiplier: { attackDamage: 0.75, maxHp: 1.7, attackSpeed: 0.9, attackRange: 0.9, criticalChance: 1 },
+    statMultiplier: { attackDamage: 0.75, maxHp: 1.7, attackSpeed: 0.9, criticalChance: 1 },
   },
   {
     id: 'hero-4',
     rarity: 'green',
-    statMultiplier: { attackDamage: 1.1, maxHp: 1.1, attackSpeed: 1, attackRange: 1, criticalChance: 1.1 },
+    statMultiplier: { attackDamage: 1.1, maxHp: 1.1, attackSpeed: 1, criticalChance: 1.1 },
   },
   {
     id: 'hero-5',
     rarity: 'gold',
-    statMultiplier: { attackDamage: 1.2, maxHp: 1.3, attackSpeed: 0.85, attackRange: 1, criticalChance: 1.2 },
+    statMultiplier: { attackDamage: 1.2, maxHp: 1.3, attackSpeed: 0.85, criticalChance: 1.2 },
   },
-  // Condition-locked: reach 20 purchased levels of the attackDamage global
-  // upgrade. Never appears in the gacha pool.
+  // Condition-locked: any owned hero reaches 20 purchased levels of their
+  // own attackDamage upgrade. Never appears in the gacha pool.
   {
     id: 'hero-6',
     rarity: 'purple',
-    statMultiplier: { attackDamage: 1.6, maxHp: 0.9, attackSpeed: 1, attackRange: 1, criticalChance: 1 },
-    unlockConditions: [{ type: 'globalUpgradeLevel', stat: 'attackDamage', level: 20 }],
+    statMultiplier: { attackDamage: 1.6, maxHp: 0.9, attackSpeed: 1, criticalChance: 1 },
+    unlockConditions: [{ type: 'heroUpgradeLevel', stat: 'attackDamage', level: 20 }],
   },
   // Condition-locked: spend 50,000 lifetime gold. Never appears in the gacha pool.
   {
     id: 'hero-7',
     rarity: 'purple',
-    statMultiplier: { attackDamage: 1, maxHp: 2, attackSpeed: 0.8, attackRange: 1, criticalChance: 0.8 },
+    statMultiplier: { attackDamage: 1, maxHp: 2, attackSpeed: 0.8, criticalChance: 0.8 },
     unlockConditions: [{ type: 'goldSpent', amount: 50000 }],
   },
   // Chained: hero-7 must already be unlocked AND reach level 15. Two
@@ -69,11 +69,24 @@ export const heroRosterConfig: HeroDefinition[] = [
   {
     id: 'hero-8',
     rarity: 'gold',
-    statMultiplier: { attackDamage: 1.5, maxHp: 1.5, attackSpeed: 1, attackRange: 1.1, criticalChance: 1.3 },
+    statMultiplier: { attackDamage: 1.5, maxHp: 1.5, attackSpeed: 1, criticalChance: 1.3 },
     unlockConditions: [
       { type: 'requiresHero', heroId: 'hero-7' },
       { type: 'heroLevel', heroId: 'hero-7', level: 15 },
     ],
+  },
+  // Gacha-obtainable red/rainbow - this is what makes the diamond premium
+  // pool's premiumPullWeight boost (see gachaConfig.ts) actually mean
+  // something instead of silently falling back to the gold-tier pool.
+  {
+    id: 'hero-9',
+    rarity: 'red',
+    statMultiplier: { attackDamage: 1.9, maxHp: 1.7, attackSpeed: 1.1, criticalChance: 1.4 },
+  },
+  {
+    id: 'hero-10',
+    rarity: 'rainbow',
+    statMultiplier: { attackDamage: 2.4, maxHp: 2.2, attackSpeed: 1.2, criticalChance: 1.6 },
   },
 ];
 

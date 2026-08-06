@@ -73,3 +73,21 @@ export function undeployHero(state: GameState, heroId: string): boolean {
   recomputeHeroStats(state);
   return true;
 }
+
+// Swaps two deployed heroes' squad-order slots - since relayoutDeployedHeroes
+// derives on-field position purely from index in deployedHeroIds, swapping
+// the array entries is all it takes to swap their positions too. Used by the
+// canvas drag-to-reposition gesture (BattleScreen), not squad membership -
+// stats are unaffected, so no recomputeHeroStats needed.
+export function swapDeployedHeroes(state: GameState, heroIdA: string, heroIdB: string): boolean {
+  const indexA = state.deployedHeroIds.indexOf(heroIdA);
+  const indexB = state.deployedHeroIds.indexOf(heroIdB);
+  if (indexA === -1 || indexB === -1 || indexA === indexB) {
+    return false;
+  }
+
+  state.deployedHeroIds[indexA] = heroIdB;
+  state.deployedHeroIds[indexB] = heroIdA;
+  relayoutDeployedHeroes(state);
+  return true;
+}

@@ -12,6 +12,7 @@
   --success: #4fd67a;
   --danger: #ff6b6b;
   --gold-currency: #ffc857;
+  --diamond-currency: #6be3ff;
   --radius: 10px;
   --radius-sm: 6px;
   --rarity-white: #c7cbd6;
@@ -19,6 +20,12 @@
   --rarity-blue: #4da3ff;
   --rarity-purple: #c07bff;
   --rarity-gold: #ffb648;
+  --rarity-red: #ff3b3b;
+  --rarity-rainbow-1: #ff5252;
+  --rarity-rainbow-2: #ffeb3b;
+  --rarity-rainbow-3: #69f0ae;
+  --rarity-rainbow-4: #40c4ff;
+  --rarity-rainbow-5: #b388ff;
   /* How wide the game shell (HUD + canvas) is allowed to grow on large
      screens - the canvas itself then fills whatever width that resolves to
      (see .canvas-stage), capped by viewport height too so it never grows
@@ -33,9 +40,16 @@
 }
 
 html,
-body {
+body,
+#root {
   margin: 0;
   padding: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+html,
+body {
   background: var(--bg);
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei', sans-serif;
@@ -46,24 +60,28 @@ select {
   font-family: inherit;
 }
 
-/* Reference-style shell: compact top HUD, full-width canvas stage with an
-   overlay quick-upgrade box, and bottom-sheet panels opened from an icon nav
-   bar - replaces the old always-inline tab layout. Bottom padding reserves
-   room for the fixed bottom-nav. */
+/* Mobile-game shell: the canvas fills the entire viewport edge-to-edge, and
+   everything else (HUD, quick-upgrade box, bottom nav, sheet panels) is an
+   absolutely/fixed-positioned overlay on top of it - there's no separate
+   "battle screen" vs "menu" area, matching how a phone idle game reads. */
 .game-shell {
+  position: fixed;
+  inset: 0;
   max-width: var(--shell-max-width);
-  width: 100%;
   margin: 0 auto;
-  padding: 10px clamp(10px, 3vw, 40px) 84px;
-  position: relative;
-  min-height: 100vh;
+  overflow: hidden;
 }
 
 /* HUD */
 .hud-compact {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 15;
+  background: rgba(28, 33, 46, 0.78);
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--border);
   padding: 8px 10px;
 }
 
@@ -89,6 +107,11 @@ select {
   font-weight: 700;
 }
 
+.hud-diamond {
+  color: var(--diamond-currency);
+  font-weight: 700;
+}
+
 .bar-track {
   height: 8px;
   border-radius: 4px;
@@ -111,29 +134,30 @@ select {
   background: linear-gradient(90deg, #ffd54f, #ffb648);
 }
 
-/* Auto-fills whatever space is available: full shell width, 4:3 aspect
-   ratio, but never taller than 60% of the viewport (so it can't push the
-   bottom-nav/HUD off-screen on a short window) - the browser resolves
-   width/height together to satisfy both constraints. BattleScreen's
-   ResizeObserver reads whatever size this settles on and scales canvas
-   drawing to match (see BattleScreen.tsx), so this is the ONLY place canvas
-   size is decided. */
+.bar-fill-kill {
+  background: linear-gradient(90deg, #6bc4ff, #6b8bff);
+}
+
+/* Fills the entire game-shell (i.e. the entire viewport) edge-to-edge - no
+   aspect-ratio constraint here anymore. The game world is still authored
+   against a fixed 4:3 logical resolution (CANVAS_WIDTH/HEIGHT in
+   BattleScreen.tsx), so BattleScreen's draw effect letterboxes it (uniform
+   scale + centering, background-filled bars) inside this now-arbitrary-
+   aspect box instead of stretching/distorting it - see that effect for the
+   actual scaling math. */
 .canvas-stage {
-  position: relative;
-  border-radius: var(--radius-sm);
+  position: absolute;
+  inset: 0;
   overflow: hidden;
-  border: 1px solid var(--border);
-  margin: 8px auto 0;
   line-height: 0;
-  /* width is the only explicitly-sized axis; height is purely derived from
-     aspect-ratio, so the box is always a true 4:3 rect. 80vh = 60vh * 4/3,
-     i.e. "as wide as the container, but never so wide that height would
-     exceed 60% of the viewport" - min()/aspect-ratio together do the
-     letterboxing that aspect-ratio + max-height alone can't (that combo
-     clamps height without shrinking width, which would distort the game
-     world - see BattleScreen.tsx's canvas scaling). */
-  width: min(100%, 80vh);
-  aspect-ratio: 4 / 3;
+}
+
+/* Toggled directly (not via React state) by useDeploySlotDrag while a
+   roster card is being dragged over this element - see
+   handlePointerMove/handlePointerUp there. */
+.canvas-stage.canvas-drop-target {
+  outline: 3px solid var(--accent-strong);
+  outline-offset: -3px;
 }
 
 .game-over-overlay {
@@ -147,40 +171,6 @@ select {
   font-size: 24px;
   font-weight: 700;
   letter-spacing: 1px;
-}
-
-/* Persistent overlay box docked to the game view, same idea as the
-   reference's always-visible "UPGRADE CASTLE / UPGRADE ARCHER" box. */
-.quick-upgrade-box {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  background: rgba(12, 14, 20, 0.82);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 6px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-width: 150px;
-}
-
-.quick-upgrade-btn {
-  text-align: left;
-  line-height: 1.3;
-  padding: 4px 6px;
-}
-
-.stat-btn-label {
-  display: block;
-  font-size: 10px;
-  color: var(--text-muted);
-}
-
-.stat-btn-value {
-  display: block;
-  font-size: 11px;
-  font-weight: 600;
 }
 
 /* Bottom icon nav - replaces the old top tab bar. Tapping an icon opens the
@@ -327,6 +317,33 @@ select {
   padding-right: 2px;
 }
 
+/* Drag-to-deploy (HeroPanel/PetPanel via useDeploySlotDrag) - a roster card
+   is the drag handle itself (tap to toggle deploy/bench, drag onto the
+   battle canvas to deploy - see .canvas-drop-target below for the drop
+   target's own highlight). */
+.drag-handle {
+  cursor: grab;
+  touch-action: none;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.drag-ghost {
+  position: fixed;
+  transform: translate(-50%, -130%);
+  background: var(--accent);
+  color: #ffffff;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 50;
+}
+
 /* Items */
 .item-card {
   background: var(--bg-alt);
@@ -399,6 +416,11 @@ select {
   width: 100%;
 }
 
+.mute-toggle-btn {
+  padding: 2px 6px;
+  line-height: 1;
+}
+
 /* Forms */
 .select {
   background: var(--bg-alt);
@@ -458,6 +480,24 @@ select {
 .rarity-gold {
   color: var(--rarity-gold);
 }
+.rarity-red {
+  color: var(--rarity-red);
+}
+/* Iridescent gradient text for the top "彩/传说" tier - reads as visually
+   distinct from every solid-color tier below it. */
+.rarity-rainbow {
+  background-image: linear-gradient(
+    90deg,
+    var(--rarity-rainbow-1),
+    var(--rarity-rainbow-2),
+    var(--rarity-rainbow-3),
+    var(--rarity-rainbow-4),
+    var(--rarity-rainbow-5)
+  );
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
 
 .border-rarity-white {
   border-left-color: var(--rarity-white);
@@ -473,6 +513,12 @@ select {
 }
 .border-rarity-gold {
   border-left-color: var(--rarity-gold);
+}
+.border-rarity-red {
+  border-left-color: var(--rarity-red);
+}
+.border-rarity-rainbow {
+  border-left-color: var(--rarity-rainbow-5);
 }
 
 .empty-state {

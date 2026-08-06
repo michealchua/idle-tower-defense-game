@@ -1,13 +1,15 @@
 import { t } from '../locales/i18n';
 import { getVisualTierForLevel } from '../data/milestoneConfig';
 import { enemyArchetypes } from '../data/enemyArchetypes';
-import type { TowerId } from '../data/towerConfig';
-import type { BaseState, EnemyState, HeroState, PetState, TowerState, VisualEffect } from '../engine/types';
+import type { BiomeDefinition } from '../data/biomeConfig';
+import { getImage } from './assetLoader';
+import type { BaseState, EnemyState, HeroState, PetState, Position, VisualEffect } from '../engine/types';
 
-const HERO_RADIUS = 20;
-const PET_RADIUS = 12;
+// Exported so BattleScreen's canvas-native drag-to-swap can hit-test pointer
+// coordinates against the same radii these are actually drawn at.
+export const HERO_RADIUS = 20;
+export const PET_RADIUS = 12;
 const ENEMY_RADIUS = 16;
-const TOWER_SIZE = 22;
 const BASE_SIZE = 36;
 const HP_BAR_WIDTH = 40;
 const HP_BAR_HEIGHT = 5;
@@ -16,6 +18,7 @@ const DEATH_BURST_MAX_GROWTH = 20;
 const DAMAGE_NUMBER_RISE = 40;
 const LEVEL_UP_RISE = 30;
 const MILESTONE_UNLOCK_RISE = 45;
+const DEPLOY_SLOT_SIZE = 30;
 
 interface HeroVisualStyle {
   color: string;
@@ -37,20 +40,6 @@ function getHeroVisualStyle(tier: number): HeroVisualStyle {
   const index = Math.min(tier, HERO_VISUAL_TIERS.length) - 1;
   return HERO_VISUAL_TIERS[index];
 }
-
-// Pets are static-stat combatants with no evolution tier in v1 - one plain
-// style keeps them visually secondary to heroes.
-const PET_VISUAL_COLOR = '#26a69a';
-
-// Keyed by TowerId - each tower kind gets a distinct color so its role
-// (splash/slow/chain/economy) reads at a glance, same reasoning as
-// ENEMY_VISUAL_STYLES below.
-const TOWER_VISUAL_COLORS: Record<TowerId, string> = {
-  cannonTower: '#ff7043',
-  frostTower: '#4fc3f7',
-  lightningTower: '#ffee58',
-  goldTower: '#ffd54f',
-};
 
 interface EnemyVisualStyle {
   color: string;
@@ -200,23 +189,6 @@ function drawVisualEffect(ctx: CanvasRenderingContext2D, effect: VisualEffect): 
       ctx.fillText(t('wave.cleared'), effect.x, y);
       return;
     }
-    case 'towerSplash': {
-      const maxRadius = effect.radius ?? 40;
-      ctx.fillStyle = `rgba(255, 112, 67, ${fadeAlpha * 0.4})`;
-      ctx.beginPath();
-      ctx.arc(effect.x, effect.y, maxRadius, 0, Math.PI * 2);
-      ctx.fill();
-      return;
-    }
-    case 'frostImpact': {
-      const radius = (effect.radius ?? 20) * (0.6 + progress * 0.4);
-      ctx.strokeStyle = `rgba(79, 195, 247, ${fadeAlpha})`;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(effect.x, effect.y, radius, 0, Math.PI * 2);
-      ctx.stroke();
-      return;
-    }
   }
 }
 
@@ -238,18 +210,15 @@ function drawHero(ctx: CanvasRenderingContext2D, hero: HeroState, pulseScale: nu
   drawHpBar(ctx, hero.position.x, hero.position.y - HERO_RADIUS - 12, hero.currentHp / hero.maxHp);
 }
 
+// Pets are static-stat combatants with no evolution tier - one plain style
+// keeps them visually secondary to heroes.
+const PET_VISUAL_COLOR = '#26a69a';
+
 function drawPet(ctx: CanvasRenderingContext2D, pet: PetState): void {
   ctx.fillStyle = PET_VISUAL_COLOR;
   ctx.beginPath();
   ctx.arc(pet.position.x, pet.position.y, PET_RADIUS, 0, Math.PI * 2);
   ctx.fill();
-}
-
-// Square instead of a circle so towers read as "structure" at a glance next
-// to the round hero/pet/enemy units.
-function drawTower(ctx: CanvasRenderingContext2D, tower: TowerState): void {
-  ctx.fillStyle = TOWER_VISUAL_COLORS[tower.id as TowerId] ?? '#9e9e9e';
-  ctx.fillRect(tower.position.x - TOWER_SIZE / 2, tower.position.y - TOWER_SIZE / 2, TOWER_SIZE, TOWER_SIZE);
 }
 
 // Status rings are what make an archetype's threat readable at a glance
@@ -296,18 +265,88 @@ function drawEnemy(ctx: CanvasRenderingContext2D, enemy: EnemyState): void {
   drawHpBar(ctx, enemy.position.x, enemy.position.y - enemyRadius - 12, enemy.currentHp / enemy.maxHp);
 }
 
+function drawBackground(ctx: CanvasRenderingContext2D, canvasWidth: number, canvasHeight: number, biome: BiomeDefinition): void {
+  const image = getImage(biome.backgroundImage);
+  if (image) {
+    ctx.drawImage(image, 0, 0, canvasWidth, canvasHeight);
+    return;
+  }
+  ctx.fillStyle = biome.fallbackColor;
+  ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+}
+
+// Drawn on top of everything else, only while a roster card is actively
+// being dragged (BattleScreen decides that, this just draws whatever slot
+// list it's handed). occupiedCount slots are dimmed, the rest pulse-glow to
+// read as "drop here".
+function drawDeploySlot(ctx: CanvasRenderingContext2D, position: Position, occupied: boolean): void {
+  const half = DEPLOY_SLOT_SIZE / 2;
+  const x = position.x - half;
+  const y = position.y - half;
+
+  if (occupied) {
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+    ctx.fillRect(x, y, DEPLOY_SLOT_SIZE, DEPLOY_SLOT_SIZE);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([]);
+    ctx.strokeRect(x, y, DEPLOY_SLOT_SIZE, DEPLOY_SLOT_SIZE);
+    return;
+  }
+
+  ctx.fillStyle = 'rgba(76, 175, 80, 0.18)';
+  ctx.fillRect(x, y, DEPLOY_SLOT_SIZE, DEPLOY_SLOT_SIZE);
+  ctx.strokeStyle = 'rgba(129, 255, 133, 0.9)';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([5, 4]);
+  ctx.strokeRect(x, y, DEPLOY_SLOT_SIZE, DEPLOY_SLOT_SIZE);
+  ctx.setLineDash([]);
+}
+
+export function drawDeploySlots(ctx: CanvasRenderingContext2D, slots: Position[], occupiedCount: number): void {
+  slots.forEach((slot, index) => {
+    drawDeploySlot(ctx, slot, index < occupiedCount);
+  });
+}
+
+// Drawn while the player is dragging an already-deployed hero/pet around the
+// battle canvas to swap it with another slot (as opposed to drawDeploySlots,
+// which is for dragging a fresh unit in from the roster panel). ringColor
+// distinguishes "this is the one you picked up" from "drop here to swap".
+export function drawSwapHighlight(ctx: CanvasRenderingContext2D, position: Position, radius: number, ringColor: string): void {
+  ctx.strokeStyle = ringColor;
+  ctx.lineWidth = 3;
+  ctx.setLineDash([5, 4]);
+  ctx.beginPath();
+  ctx.arc(position.x, position.y, radius + 6, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+// Faint copy of the dragged unit following the pointer, so it's clear what's
+// being carried even once it's away from its original spot.
+export function drawSwapGhost(ctx: CanvasRenderingContext2D, kind: 'hero' | 'pet', x: number, y: number): void {
+  ctx.globalAlpha = 0.5;
+  ctx.fillStyle = kind === 'hero' ? HERO_VISUAL_TIERS[0].color : PET_VISUAL_COLOR;
+  ctx.beginPath();
+  ctx.arc(x, y, kind === 'hero' ? HERO_RADIUS : PET_RADIUS, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
 export function renderScene(
   ctx: CanvasRenderingContext2D,
   canvasWidth: number,
   canvasHeight: number,
+  biome: BiomeDefinition,
   heroes: HeroState[],
   pets: PetState[],
   enemies: EnemyState[],
   base: BaseState,
   visualEffects: VisualEffect[],
-  towers: TowerState[] = [],
 ): void {
   ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+  drawBackground(ctx, canvasWidth, canvasHeight, biome);
 
   ctx.fillStyle = '#795548';
   ctx.fillRect(base.position.x - BASE_SIZE / 2, base.position.y - BASE_SIZE / 2, BASE_SIZE, BASE_SIZE);
@@ -324,10 +363,6 @@ export function renderScene(
 
   for (const pet of pets) {
     drawPet(ctx, pet);
-  }
-
-  for (const tower of towers) {
-    drawTower(ctx, tower);
   }
 
   for (const enemy of enemies) {

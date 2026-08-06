@@ -1,9 +1,81 @@
+import { useEffect, type RefObject } from 'react';
 import { heroRosterConfig } from '../data/heroRosterConfig';
 import { skillDefinitions } from '../data/skillConfig';
 import { getMaxDeployedHeroes } from '../data/castleConfig';
+import { heroUpgradeConfig, type UpgradeableStat } from '../data/heroConfig';
 import { MAX_STAR_LEVEL, gachaRarityConfig, getStarUpCost, type GachaRarity } from '../data/gachaConfig';
+import { isHeroUpgradeMaxed, previewHeroUpgradeBulk } from '../engine/systems/UpgradeSystem';
+import type { HeroState } from '../engine/types';
 import { t } from '../locales/i18n';
-import { useGameStore } from '../store/useGameStore';
+import { upgradeableStats, useGameStore } from '../store/useGameStore';
+import { useDeploySlotDrag } from './useDeploySlotDrag';
+
+const STAT_LABEL_KEYS: Record<UpgradeableStat, string> = {
+  attackDamage: 'hero.attackDamage',
+  attackSpeed: 'hero.attackSpeed',
+  maxHp: 'hero.maxHp',
+  criticalChance: 'hero.criticalChance',
+};
+
+const BULK_COUNTS = [1, 10, 100];
+
+function formatBonusValue(stat: UpgradeableStat, value: number): string {
+  if (stat === 'criticalChance') {
+    return `+${Math.round(value * 100)}%`;
+  }
+  if (stat === 'attackSpeed') {
+    return `+${value.toFixed(2)}`;
+  }
+  return `+${Math.round(value)}`;
+}
+
+// Per-hero upgrade rows - one per UpgradeableStat, each with +1/+10/+100
+// bulk-buy buttons (see UpgradeSystem.applyHeroUpgrade, which buys as many
+// of the requested count as gold/maxValue allow instead of all-or-nothing).
+function HeroUpgradeSection({ hero, gold }: { hero: HeroState; gold: number }) {
+  const upgradeHeroStat = useGameStore((state) => state.upgradeHeroStat);
+
+  return (
+    <div style={{ marginTop: 6 }}>
+      {upgradeableStats.map((stat) => {
+        const maxed = isHeroUpgradeMaxed(hero, stat);
+        const currentBonus = hero.upgrades[stat] * heroUpgradeConfig[stat].valuePerLevel;
+
+        return (
+          <div key={stat} className="item-actions" style={{ alignItems: 'center', justifyContent: 'space-between' }}>
+            <span className="text-faint">
+              {t(STAT_LABEL_KEYS[stat])} {formatBonusValue(stat, currentBonus)}
+            </span>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {maxed ? (
+                <span className="text-faint">{t('star.maxed')}</span>
+              ) : (
+                BULK_COUNTS.map((count) => {
+                  const preview = previewHeroUpgradeBulk(hero, stat, count);
+                  const canAfford = preview.levels > 0 && gold >= preview.cost;
+                  return (
+                    <button
+                      key={count}
+                      className="btn btn-sm"
+                      disabled={!canAfford}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        upgradeHeroStat(hero.id, stat, count);
+                      }}
+                      onPointerDown={(event) => event.stopPropagation()}
+                    >
+                      +{count} ({preview.cost}{t('battle.gold')})
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 const SKILL_LABEL_KEYS: Record<string, string> = {
   'skill-fireball': 'skill.fireball',
@@ -17,6 +89,8 @@ const RARITY_LABEL_KEYS: Record<GachaRarity, string> = {
   blue: 'rarity.blue',
   purple: 'rarity.purple',
   gold: 'rarity.gold',
+  red: 'rarity.red',
+  rainbow: 'rarity.rainbow',
 };
 
 const RARITY_CLASS: Record<GachaRarity, string> = {
@@ -25,6 +99,8 @@ const RARITY_CLASS: Record<GachaRarity, string> = {
   blue: 'rarity-blue',
   purple: 'rarity-purple',
   gold: 'rarity-gold',
+  red: 'rarity-red',
+  rainbow: 'rarity-rainbow',
 };
 
 const RARITY_BORDER_CLASS: Record<GachaRarity, string> = {
@@ -33,14 +109,17 @@ const RARITY_BORDER_CLASS: Record<GachaRarity, string> = {
   blue: 'border-rarity-blue',
   purple: 'border-rarity-purple',
   gold: 'border-rarity-gold',
+  red: 'border-rarity-red',
+  rainbow: 'border-rarity-rainbow',
 };
 
 const MATERIAL_LABEL_KEYS = {
   epicSourceStone: 'material.epicSourceStone',
   legendarySourceStone: 'material.legendarySourceStone',
+  diamonds: 'material.diamonds',
 } as const;
 
-function HeroPanel() {
+function HeroPanel({ gameScreenRef }: { gameScreenRef: RefObject<HTMLDivElement> }) {
   const heroes = useGameStore((state) => state.heroes);
   const unlockedHeroIds = useGameStore((state) => state.unlockedHeroIds);
   const deployedHeroIds = useGameStore((state) => state.deployedHeroIds);
@@ -50,14 +129,45 @@ function HeroPanel() {
   const gold = useGameStore((state) => state.gold);
   const epicSourceStone = useGameStore((state) => state.epicSourceStone);
   const legendarySourceStone = useGameStore((state) => state.legendarySourceStone);
+  const diamonds = useGameStore((state) => state.diamonds);
   const starUpHero = useGameStore((state) => state.starUpHero);
   const deployHero = useGameStore((state) => state.deployHero);
   const undeployHero = useGameStore((state) => state.undeployHero);
+  const setDragPreviewKind = useGameStore((state) => state.setDragPreviewKind);
 
-  const materials = { epicSourceStone, legendarySourceStone };
+  const materials = { epicSourceStone, legendarySourceStone, diamonds };
   const maxDeployedHeroes = getMaxDeployedHeroes(castleLevel);
   const squadFull = deployedHeroIds.length >= maxDeployedHeroes;
   const ownedHeroes = heroRosterConfig.filter((definition) => unlockedHeroIds.includes(definition.id));
+
+  const { drag, registerGameScreen, handlePointerDown, handlePointerMove, handlePointerUp, handlePointerCancel } = useDeploySlotDrag({
+    onToggle: (id) => {
+      if (deployedHeroIds.includes(id)) {
+        undeployHero(id);
+      } else {
+        deployHero(id);
+      }
+    },
+    onDeploy: (id) => {
+      if (!deployedHeroIds.includes(id)) {
+        deployHero(id);
+      }
+    },
+  });
+
+  useEffect(() => {
+    registerGameScreen(gameScreenRef.current);
+  }, [gameScreenRef, registerGameScreen]);
+
+  // Lets BattleScreen draw the deploy-slot grid over the canvas while (and
+  // only while) a hero card is actually being dragged. Cleanup covers the
+  // panel closing mid-drag, which would otherwise leave the grid stuck on.
+  useEffect(() => {
+    setDragPreviewKind(drag.draggingId ? 'hero' : null);
+    return () => setDragPreviewKind(null);
+  }, [drag.draggingId, setDragPreviewKind]);
+
+  const draggingDefinition = drag.draggingId ? heroRosterConfig.find((d) => d.id === drag.draggingId) : undefined;
 
   return (
     <div className="card">
@@ -67,80 +177,94 @@ function HeroPanel() {
       {ownedHeroes.length === 0 ? (
         <div className="empty-state">{t('heroRoster.empty')}</div>
       ) : (
-        <div className="list">
-          {ownedHeroes.map((definition) => {
-            const hero = heroes.find((candidate) => candidate.id === definition.id);
-            if (!hero) {
-              return null;
-            }
-            const rarityLabel = t(RARITY_LABEL_KEYS[definition.rarity]);
-            const isDeployed = deployedHeroIds.includes(definition.id);
-            const expRatio = Math.min(1, hero.exp / hero.expToNextLevel);
-            const currentStar = heroStars[definition.id] ?? 0;
-            const shards = heroShards[definition.id] ?? 0;
-            const nextCost = getStarUpCost(definition.rarity, currentStar);
-            const materialKey = gachaRarityConfig[definition.rarity].breakthroughMaterial;
-            const canStarUp =
-              !!nextCost &&
-              shards >= nextCost.shards &&
-              gold >= nextCost.gold &&
-              (!nextCost.material || (materialKey !== undefined && materials[materialKey] >= nextCost.material));
+        <>
+          <div className="card-subtitle">{t('squad.dragHint')}</div>
+          <div className="list">
+            {ownedHeroes.map((definition) => {
+              const hero = heroes.find((candidate) => candidate.id === definition.id);
+              if (!hero) {
+                return null;
+              }
+              const rarityLabel = t(RARITY_LABEL_KEYS[definition.rarity]);
+              const isDeployed = deployedHeroIds.includes(definition.id);
+              const expRatio = Math.min(1, hero.exp / hero.expToNextLevel);
+              const currentStar = heroStars[definition.id] ?? 0;
+              const shards = heroShards[definition.id] ?? 0;
+              const nextCost = getStarUpCost(definition.rarity, currentStar);
+              const materialKey = gachaRarityConfig[definition.rarity].breakthroughMaterial;
+              const canStarUp =
+                !!nextCost &&
+                shards >= nextCost.shards &&
+                gold >= nextCost.gold &&
+                (!nextCost.material || (materialKey !== undefined && materials[materialKey] >= nextCost.material));
 
-            return (
-              <div
-                key={definition.id}
-                className={`item-card ${RARITY_BORDER_CLASS[definition.rarity]}${isDeployed ? '' : ' locked'}`}
-              >
-                <div className={`item-name ${RARITY_CLASS[definition.rarity]}`}>
-                  {rarityLabel}·{definition.id} Lv.{hero.level} ★{currentStar}/{MAX_STAR_LEVEL}
-                </div>
-                <div className="item-detail">
-                  {t('hero.attackDamage')} {Math.round(hero.attackDamage)} · {t('hero.hp')} {Math.round(hero.currentHp)}/
-                  {Math.round(hero.maxHp)}
-                </div>
-                <div className="bar-track" style={{ marginTop: 4 }}>
-                  <div className="bar-fill bar-fill-exp" style={{ width: `${expRatio * 100}%` }} />
-                </div>
-                <div className="item-detail">
-                  {t('hero.exp')} {hero.exp}/{hero.expToNextLevel}
-                </div>
-                <div className="item-actions" style={{ alignItems: 'center' }}>
-                  <span className="text-faint">
-                    {t('star.shards')} {shards}
-                    {nextCost ? `/${nextCost.shards}` : ''}
-                  </span>
-                  <button className="btn btn-sm" onClick={() => starUpHero(definition.id)} disabled={!nextCost || !canStarUp}>
-                    {nextCost
-                      ? `${t('star.upgrade')} (${nextCost.shards}${t('star.shards')} + ${nextCost.gold}${t('battle.gold')}${
-                          nextCost.material && materialKey ? ` + ${nextCost.material}${t(MATERIAL_LABEL_KEYS[materialKey])}` : ''
-                        })`
-                      : t('star.maxed')}
-                  </button>
-                </div>
-                <div className="item-actions">
-                  {isDeployed ? (
-                    <button className="btn btn-sm" onClick={() => undeployHero(definition.id)}>
-                      {t('squad.deployed')} → {t('squad.undeploy')}
+              return (
+                <div
+                  key={definition.id}
+                  className={`item-card drag-handle ${RARITY_BORDER_CLASS[definition.rarity]}${isDeployed ? '' : ' locked'}`}
+                  onPointerDown={handlePointerDown(definition.id)}
+                  onPointerMove={handlePointerMove}
+                  onPointerUp={handlePointerUp}
+                  onPointerCancel={handlePointerCancel}
+                >
+                  <div className={`item-name ${RARITY_CLASS[definition.rarity]}`}>
+                    ⠿ {rarityLabel}·{definition.id} Lv.{hero.level} ★{currentStar}/{MAX_STAR_LEVEL}
+                  </div>
+                  <div className="item-detail">
+                    {t('hero.attackDamage')} {Math.round(hero.attackDamage)} · {t('hero.hp')} {Math.round(hero.currentHp)}/
+                    {Math.round(hero.maxHp)}
+                  </div>
+                  <div className="bar-track" style={{ marginTop: 4 }}>
+                    <div className="bar-fill bar-fill-exp" style={{ width: `${expRatio * 100}%` }} />
+                  </div>
+                  <div className="item-detail">
+                    {t('hero.exp')} {hero.exp}/{hero.expToNextLevel}
+                  </div>
+                  <div className="item-detail">
+                    {isDeployed ? t('squad.deployed') : squadFull ? t('squad.full') : t('squad.tapToDeploy')}
+                  </div>
+                  <div className="item-actions" style={{ alignItems: 'center' }}>
+                    <span className="text-faint">
+                      {t('star.shards')} {shards}
+                      {nextCost ? `/${nextCost.shards}` : ''}
+                    </span>
+                    <button
+                      className="btn btn-sm"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        starUpHero(definition.id);
+                      }}
+                      onPointerDown={(event) => event.stopPropagation()}
+                      disabled={!nextCost || !canStarUp}
+                    >
+                      {nextCost
+                        ? `${t('star.upgrade')} (${nextCost.shards}${t('star.shards')} + ${nextCost.gold}${t('battle.gold')}${
+                            nextCost.material && materialKey ? ` + ${nextCost.material}${t(MATERIAL_LABEL_KEYS[materialKey])}` : ''
+                          })`
+                        : t('star.maxed')}
                     </button>
-                  ) : (
-                    <button className="btn btn-sm" disabled={squadFull} onClick={() => deployHero(definition.id)}>
-                      {squadFull ? t('squad.full') : t('squad.deploy')}
-                    </button>
-                  )}
+                  </div>
+                  {Object.keys(skillDefinitions)
+                    .filter((skillId) => hero.unlockedMilestoneIds.includes(skillId))
+                    .map((skillId) => {
+                      const cooldownRemaining = hero.skills[skillId]?.cooldownRemaining ?? 0;
+                      return (
+                        <div key={skillId} className="text-faint" style={{ marginTop: 2 }}>
+                          {t(SKILL_LABEL_KEYS[skillId])}: {cooldownRemaining > 0 ? `${cooldownRemaining.toFixed(1)}s` : t('skill.ready')}
+                        </div>
+                      );
+                    })}
+                  <HeroUpgradeSection hero={hero} gold={gold} />
                 </div>
-                {Object.keys(skillDefinitions)
-                  .filter((skillId) => hero.unlockedMilestoneIds.includes(skillId))
-                  .map((skillId) => {
-                    const cooldownRemaining = hero.skills[skillId]?.cooldownRemaining ?? 0;
-                    return (
-                      <div key={skillId} className="text-faint" style={{ marginTop: 2 }}>
-                        {t(SKILL_LABEL_KEYS[skillId])}: {cooldownRemaining > 0 ? `${cooldownRemaining.toFixed(1)}s` : t('skill.ready')}
-                      </div>
-                    );
-                  })}
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {draggingDefinition && (
+        <div className="drag-ghost" style={{ left: drag.pointerX, top: drag.pointerY }}>
+          {t(RARITY_LABEL_KEYS[draggingDefinition.rarity])}·{draggingDefinition.id}
         </div>
       )}
     </div>

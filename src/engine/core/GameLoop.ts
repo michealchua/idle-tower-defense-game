@@ -6,8 +6,7 @@ import { tickSkills } from '../systems/SkillSystem';
 import { tickLevelUp } from '../systems/LevelSystem';
 import { tickEffects } from '../systems/EffectsSystem';
 import { tickWaveProgress } from '../systems/WaveSystem';
-import { tickTowerCombat } from '../systems/TowerSystem';
-import { tickSkillPointGain } from '../systems/TalentSystem';
+import { tickCastleIncome } from '../systems/CastleSystem';
 import type { GameState } from '../types';
 
 const FIXED_TIMESTEP_SECONDS = 0.1;
@@ -55,11 +54,10 @@ export class GameLoop {
       tickMovement(this.state, FIXED_TIMESTEP_SECONDS);
       tickEnemyAbilities(this.state, FIXED_TIMESTEP_SECONDS);
       tickCombat(this.state, FIXED_TIMESTEP_SECONDS);
-      tickTowerCombat(this.state, FIXED_TIMESTEP_SECONDS);
       tickSkills(this.state, FIXED_TIMESTEP_SECONDS);
       tickLevelUp(this.state);
       tickWaveProgress(this.state, FIXED_TIMESTEP_SECONDS);
-      tickSkillPointGain(this.state, FIXED_TIMESTEP_SECONDS);
+      tickCastleIncome(this.state, FIXED_TIMESTEP_SECONDS);
       tickEffects(this.state, FIXED_TIMESTEP_SECONDS);
       this.accumulatorSeconds -= FIXED_TIMESTEP_SECONDS;
     }
