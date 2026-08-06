@@ -1,8 +1,8 @@
-import { spawnVisualEffect } from './EffectsSystem';
+import { spawnVisualEffect, triggerHitStop, triggerScreenShake } from './EffectsSystem';
 import { rollEquipmentDrop } from './EquipmentSystem';
 import { getDeployedHeroes } from './HeroStatsSystem';
 import { enemyArchetypes } from '../../data/enemyArchetypes';
-import { effectLifetimes } from '../../data/effectConfig';
+import { effectLifetimes, hitStopConfig, screenShakeConfig } from '../../data/effectConfig';
 import { getTalentMultiplier, talentPointRewardConfig } from '../../data/talentConfig';
 import { getAscensionShopMultiplier } from '../../data/ascensionShopConfig';
 import { diamondRewardConfig } from '../../data/diamondConfig';
@@ -46,6 +46,15 @@ export function applyDamage(state: GameState, target: EnemyState, damage: Damage
     lifetime: effectLifetimes.damageNumber,
   });
 
+  // A crit is always hero-dealt (applyDamage is only ever called against
+  // enemies - enemy-on-hero chip damage goes through applyDamageToHero below,
+  // which has no crit calc) - subtle jolt plus a brief freeze-frame so the
+  // hit reads as heavier even before it happens to be a kill.
+  if (damage.isCritical) {
+    triggerScreenShake(state, screenShakeConfig.criticalIntensity);
+    triggerHitStop(state, hitStopConfig.criticalHitSeconds);
+  }
+
   if (target.currentHp <= 0) {
     // Zombie-archetype enemies come back instead of dying while they still
     // have charges - no gold/exp/drop rewards for this "death" since it
@@ -63,6 +72,10 @@ export function applyDamage(state: GameState, target: EnemyState, damage: Damage
       });
       return;
     }
+    // Max-semantics in triggerHitStop means this is a no-op floor rather than
+    // a second freeze stacked on top of the critical-hit one above - a
+    // critical killing blow still resolves to whichever duration is longer.
+    triggerHitStop(state, hitStopConfig.killSeconds);
     handleDeath(state, target);
   }
 }
@@ -111,6 +124,8 @@ export function handleDeath(state: GameState, target: EnemyState): void {
   if (state.wave.isBossWave && state.wave.bossKind && target.archetypeId === state.wave.bossKind) {
     state.skillPoints += talentPointRewardConfig[state.wave.bossKind];
     state.diamonds += diamondRewardConfig[state.wave.bossKind];
+    triggerScreenShake(state, screenShakeConfig.bossImpactIntensity);
+    triggerHitStop(state, hitStopConfig.bossKillSeconds);
   }
 
   spawnVisualEffect(state, {

@@ -160,6 +160,13 @@ function castHealAlly(state: GameState, hero: HeroState, definition: SkillDefini
       radius: 30,
       lifetime: effectLifetimes.healPulse,
     });
+    spawnVisualEffect(state, {
+      kind: 'healNumber',
+      x: target.position.x,
+      y: target.position.y,
+      amount: Math.round(healAmount),
+      lifetime: effectLifetimes.healNumber,
+    });
   }
 
   return true;

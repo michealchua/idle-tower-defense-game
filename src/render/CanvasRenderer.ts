@@ -16,6 +16,11 @@ const HP_BAR_HEIGHT = 5;
 const ATTACK_PULSE_SCALE = 0.2;
 const DEATH_BURST_MAX_GROWTH = 20;
 const DAMAGE_NUMBER_RISE = 40;
+// Critical numbers rise further/faster than normal ones - on top of being
+// bigger and a different color, this is what makes a crit read as "hit
+// harder" rather than just "hit paint-swapped".
+const CRITICAL_DAMAGE_NUMBER_RISE = 55;
+const HEAL_NUMBER_RISE = 34;
 const LEVEL_UP_RISE = 30;
 const MILESTONE_UNLOCK_RISE = 45;
 const DEPLOY_SLOT_SIZE = 30;
@@ -119,11 +124,43 @@ function drawVisualEffect(ctx: CanvasRenderingContext2D, effect: VisualEffect): 
       return;
     }
     case 'damageNumber': {
-      const y = effect.y - progress * DAMAGE_NUMBER_RISE;
-      ctx.font = effect.isCritical ? 'bold 18px sans-serif' : '14px sans-serif';
-      ctx.fillStyle = effect.isCritical ? `rgba(255, 152, 0, ${fadeAlpha})` : `rgba(255, 255, 255, ${fadeAlpha})`;
+      if (!effect.isCritical) {
+        // Plain hits: small, white, no scale animation - kept cheap since
+        // these are by far the most common effect in a busy fight.
+        const y = effect.y - progress * DAMAGE_NUMBER_RISE;
+        ctx.font = '13px sans-serif';
+        ctx.fillStyle = `rgba(255, 255, 255, ${fadeAlpha})`;
+        ctx.textAlign = 'center';
+        ctx.fillText(`-${effect.amount}`, effect.x, y);
+        return;
+      }
+
+      // Crits: big, hot-colored (yellow fading to red as it dies so the
+      // color shift itself reads as "impact fading"), with a punch-in scale
+      // that overshoots then settles - the whole "hit harder" read comes from
+      // stacking size + color + this motion, not any one of them alone.
+      const y = effect.y - progress * CRITICAL_DAMAGE_NUMBER_RISE;
+      const punch = Math.max(0, 1 - progress * 3);
+      const scale = 1 + punch * 0.9;
+      const colorMix = Math.min(1, progress * 1.5);
+      const red = 255;
+      const green = Math.round(214 * (1 - colorMix));
+      ctx.save();
+      ctx.translate(effect.x, y);
+      ctx.scale(scale, scale);
+      ctx.font = 'bold 24px sans-serif';
+      ctx.fillStyle = `rgba(${red}, ${green}, 0, ${fadeAlpha})`;
       ctx.textAlign = 'center';
-      ctx.fillText(`-${effect.amount}`, effect.x, y);
+      ctx.fillText(`-${effect.amount}`, 0, 0);
+      ctx.restore();
+      return;
+    }
+    case 'healNumber': {
+      const y = effect.y - progress * HEAL_NUMBER_RISE;
+      ctx.font = 'bold 15px sans-serif';
+      ctx.fillStyle = `rgba(105, 240, 174, ${fadeAlpha})`;
+      ctx.textAlign = 'center';
+      ctx.fillText(`+${effect.amount}`, effect.x, y);
       return;
     }
     case 'levelUp': {
@@ -457,6 +494,10 @@ export function drawSwapGhost(ctx: CanvasRenderingContext2D, kind: 'hero' | 'pet
   ctx.globalAlpha = 1;
 }
 
+// Below this, a shake is imperceptible - skipping the save/translate/restore
+// entirely avoids paying for it every frame once a shake has mostly decayed.
+const SCREEN_SHAKE_MIN_INTENSITY = 0.05;
+
 export function renderScene(
   ctx: CanvasRenderingContext2D,
   canvasWidth: number,
@@ -467,11 +508,28 @@ export function renderScene(
   enemies: EnemyState[],
   base: BaseState,
   visualEffects: VisualEffect[],
+  screenShakeIntensity: number,
 ): void {
   const nowMs = performance.now();
   advanceBackgroundScroll(enemies.length > 0, nowMs);
 
+  // clearRect runs at the un-shaken transform so the full canvas is always
+  // wiped regardless of this frame's jitter offset - only the actual scene
+  // contents below get displaced.
   ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+
+  const isShaking = screenShakeIntensity > SCREEN_SHAKE_MIN_INTENSITY;
+  if (isShaking) {
+    ctx.save();
+    // Uniform random in [-intensity, intensity] on each axis independently -
+    // a shared magnitude but an uncorrelated direction per axis reads as a
+    // jolt, not a diagonal slide.
+    ctx.translate(
+      (Math.random() * 2 - 1) * screenShakeIntensity,
+      (Math.random() * 2 - 1) * screenShakeIntensity,
+    );
+  }
+
   drawBackground(ctx, canvasWidth, canvasHeight, biome);
 
   ctx.fillStyle = '#795548';
@@ -498,5 +556,9 @@ export function renderScene(
 
   for (const effect of visualEffects) {
     drawVisualEffect(ctx, effect);
+  }
+
+  if (isShaking) {
+    ctx.restore();
   }
 }

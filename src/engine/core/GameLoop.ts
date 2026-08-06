@@ -4,7 +4,7 @@ import { tickMovement } from '../systems/MovementSystem';
 import { tickEnemyAbilities } from '../systems/EnemyAbilitySystem';
 import { tickSkills } from '../systems/SkillSystem';
 import { tickLevelUp } from '../systems/LevelSystem';
-import { tickEffects } from '../systems/EffectsSystem';
+import { tickEffects, tickScreenShake } from '../systems/EffectsSystem';
 import { tickWaveProgress } from '../systems/WaveSystem';
 import { tickCastleIncome } from '../systems/CastleSystem';
 import { tickGachaWelcomeBonus, tickDailyLoginReward } from '../systems/GachaSystem';
@@ -51,18 +51,29 @@ export class GameLoop {
     this.lastTimestampMs = timestampMs;
 
     while (!this.state.isGameOver && this.accumulatorSeconds >= FIXED_TIMESTEP_SECONDS) {
-      tickSpawn(this.state, FIXED_TIMESTEP_SECONDS);
-      tickMovement(this.state, FIXED_TIMESTEP_SECONDS);
-      tickEnemyAbilities(this.state, FIXED_TIMESTEP_SECONDS);
-      tickCombat(this.state, FIXED_TIMESTEP_SECONDS);
-      tickEnemyAttacksOnHeroes(this.state, FIXED_TIMESTEP_SECONDS);
-      tickSkills(this.state, FIXED_TIMESTEP_SECONDS);
-      tickLevelUp(this.state);
-      tickWaveProgress(this.state, FIXED_TIMESTEP_SECONDS);
-      tickCastleIncome(this.state, FIXED_TIMESTEP_SECONDS);
-      tickGachaWelcomeBonus(this.state);
-      tickDailyLoginReward(this.state);
+      // Hit-stop freezes gameplay (movement/combat/spawning/etc.) for a few
+      // fixed steps on a punchy hit - see DamageSystem.applyDamage/handleDeath
+      // and effectConfig.hitStopConfig for what triggers it and for how long.
+      // tickEffects/tickScreenShake still run every step regardless, so
+      // floating damage numbers and the shake itself keep animating smoothly
+      // through the freeze instead of visibly hitching too.
+      if (this.state.hitStopRemaining > 0) {
+        this.state.hitStopRemaining = Math.max(0, this.state.hitStopRemaining - FIXED_TIMESTEP_SECONDS);
+      } else {
+        tickSpawn(this.state, FIXED_TIMESTEP_SECONDS);
+        tickMovement(this.state, FIXED_TIMESTEP_SECONDS);
+        tickEnemyAbilities(this.state, FIXED_TIMESTEP_SECONDS);
+        tickCombat(this.state, FIXED_TIMESTEP_SECONDS);
+        tickEnemyAttacksOnHeroes(this.state, FIXED_TIMESTEP_SECONDS);
+        tickSkills(this.state, FIXED_TIMESTEP_SECONDS);
+        tickLevelUp(this.state);
+        tickWaveProgress(this.state, FIXED_TIMESTEP_SECONDS);
+        tickCastleIncome(this.state, FIXED_TIMESTEP_SECONDS);
+        tickGachaWelcomeBonus(this.state);
+        tickDailyLoginReward(this.state);
+      }
       tickEffects(this.state, FIXED_TIMESTEP_SECONDS);
+      tickScreenShake(this.state, FIXED_TIMESTEP_SECONDS);
       this.accumulatorSeconds -= FIXED_TIMESTEP_SECONDS;
     }
 

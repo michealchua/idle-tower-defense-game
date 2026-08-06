@@ -105,6 +105,7 @@ function snapshotGameState(state: GameState) {
     enemies: state.enemies.map((enemy) => ({ ...enemy })),
     base: { ...state.base },
     visualEffects: state.visualEffects.map((effect) => ({ ...effect })),
+    screenShakeIntensity: state.screenShakeIntensity,
     gold: state.gold,
     buildMaterials: state.buildMaterials,
     isGameOver: state.isGameOver,
@@ -148,6 +149,7 @@ interface GameStore {
   enemies: EnemyState[];
   base: BaseState;
   visualEffects: VisualEffect[];
+  screenShakeIntensity: number;
   gold: number;
   buildMaterials: number;
   isGameOver: boolean;

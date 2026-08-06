@@ -3,6 +3,8 @@ import { getSpawnPacing } from '../../data/spawnConfig';
 import { pickArchetypeForScore } from '../../data/enemySpawnTable';
 import { getDifficultyScore } from './DifficultySystem';
 import { mapConfig } from '../../data/mapConfig';
+import { triggerScreenShake } from './EffectsSystem';
+import { screenShakeConfig } from '../../data/effectConfig';
 import type { EnemyArchetypeId } from '../../data/enemyArchetypes';
 import type { GameState, Position } from '../types';
 
@@ -52,6 +54,7 @@ export function tickSpawn(state: GameState, deltaSeconds: number): void {
     }
     spawnEnemyNow(state, wave.bossKind);
     wave.bossSpawned = true;
+    triggerScreenShake(state, screenShakeConfig.bossImpactIntensity);
     return;
   }
 

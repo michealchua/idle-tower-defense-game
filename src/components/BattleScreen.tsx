@@ -70,6 +70,7 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
   const enemies = useGameStore((state) => state.enemies);
   const base = useGameStore((state) => state.base);
   const visualEffects = useGameStore((state) => state.visualEffects);
+  const screenShakeIntensity = useGameStore((state) => state.screenShakeIntensity);
   const isGameOver = useGameStore((state) => state.isGameOver);
   const wave = useGameStore((state) => state.wave);
   const castleLevel = useGameStore((state) => state.castleLevel);
@@ -211,7 +212,7 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
     const offsetY = (pixelHeight - CANVAS_HEIGHT * scale) / 2;
     ctx.setTransform(scale, 0, 0, scale, offsetX, offsetY);
 
-    renderScene(ctx, CANVAS_WIDTH, CANVAS_HEIGHT, biome, heroes, pets, enemies, base, visualEffects);
+    renderScene(ctx, CANVAS_WIDTH, CANVAS_HEIGHT, biome, heroes, pets, enemies, base, visualEffects, screenShakeIntensity);
 
     if (dragPreviewKind === 'hero') {
       drawDeploySlots(ctx, layoutHeroPositions(getMaxDeployedHeroes(castleLevel)), heroes.length);
@@ -230,7 +231,7 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
       }
       drawSwapGhost(ctx, canvasDrag.kind, canvasDrag.pointerX, canvasDrag.pointerY);
     }
-  }, [heroes, pets, enemies, base, visualEffects, displaySize, biome, dragPreviewKind, castleLevel, canvasDrag]);
+  }, [heroes, pets, enemies, base, visualEffects, screenShakeIntensity, displaySize, biome, dragPreviewKind, castleLevel, canvasDrag]);
 
   const hpRatio = base.maxHp > 0 ? Math.max(0, Math.min(1, base.currentHp / base.maxHp)) : 0;
 

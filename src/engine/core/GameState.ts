@@ -68,6 +68,8 @@ export function createInitialGameState(): GameState {
     visualEffects: [],
     nextVisualEffectId: 1,
     spawnCooldownRemaining: 0,
+    screenShakeIntensity: 0,
+    hitStopRemaining: 0,
     inventory: [],
     nextEquipmentInstanceId: 1,
     reforgeDust: 0,

@@ -172,6 +172,7 @@ export type VisualEffectKind =
   | 'attackFlash'
   | 'deathBurst'
   | 'damageNumber'
+  | 'healNumber'
   | 'levelUp'
   | 'milestoneUnlock'
   | 'skillImpact'
@@ -286,6 +287,16 @@ export interface GameState {
   visualEffects: VisualEffect[];
   nextVisualEffectId: number;
   spawnCooldownRemaining: number;
+  // Game-feel state, both pure presentation (nothing here is ever read as a
+  // gameplay condition). Decays every tick in EffectsSystem.tickScreenShake -
+  // CanvasRenderer reads it to jitter the whole canvas by a random offset
+  // each frame. See effectConfig.screenShakeConfig for trigger intensities.
+  screenShakeIntensity: number;
+  // Counts down in GameLoop.step, which skips every gameplay system (but
+  // still ticks visualEffects/screenShake) while this is above 0 - a brief,
+  // deliberate freeze-frame on a killing blow or crit. See
+  // effectConfig.hitStopConfig for trigger durations.
+  hitStopRemaining: number;
   // Unequipped items only - equipped gear lives on the owning hero's own
   // HeroState.equipment instead (see EquipmentSystem.ts/HeroSystem.ts).
   inventory: EquipmentItem[];
