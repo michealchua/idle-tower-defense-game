@@ -496,6 +496,60 @@ select {
   letter-spacing: 0.2px;
 }
 
+/* 分支进化 (HeroPanel) - deliberately louder than .btn-primary since this is
+   a rare, high-stakes permanent choice (see HeroSystem.evolveHero), not a
+   routine action. Reuses the rarity-rainbow gradient tokens (same ones
+   .rarity-rainbow's text gradient already uses) instead of new colors, kept
+   animated so it reads as "alive" even on an otherwise static panel. */
+.btn-evolve {
+  background: linear-gradient(
+    90deg,
+    var(--rarity-rainbow-1),
+    var(--rarity-rainbow-2),
+    var(--rarity-rainbow-3),
+    var(--rarity-rainbow-4),
+    var(--rarity-rainbow-5),
+    var(--rarity-rainbow-1)
+  );
+  background-size: 300% 100%;
+  border: none;
+  color: #14121f;
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 0.4px;
+  padding: 12px 14px;
+  box-shadow: 0 0 16px rgba(179, 136, 255, 0.55);
+  animation: btn-evolve-shimmer 3.5s linear infinite;
+}
+
+.btn-evolve:hover:not(:disabled) {
+  box-shadow: 0 0 22px rgba(179, 136, 255, 0.85);
+}
+
+@keyframes btn-evolve-shimmer {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 300% 50%;
+  }
+}
+
+.evolve-picker {
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid var(--rarity-rainbow-5);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.evolve-picker-title {
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: var(--text);
+}
+
 .btn-danger {
   background: transparent;
   border-color: var(--danger);

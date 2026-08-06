@@ -55,6 +55,12 @@ export interface HeroState {
   // EquipmentSystem.ts/HeroSystem.ts). Set on createHero, mutated only by
   // HeroSystem.equipItemToHero/unequipHeroSlot.
   equipment: Record<EquipmentSlot, EquipmentItem | null>;
+  // Which of heroRosterConfig's HeroDefinition.evolutionBranches this hero
+  // has chosen - null until HeroSystem.evolveHero fires (requires
+  // heroConfig.heroEvolutionConfig.unlockLevel). Unlike level/exp/upgrades,
+  // this is never reset by AscensionSystem.ascend - it's permanent
+  // collection progress, same as equipment/stars.
+  evolutionBranchId: string | null;
 }
 
 export interface PetState {
@@ -288,4 +294,12 @@ export interface GameState {
   // is its only source, reforging an item's substats
   // (EquipmentSystem.reforgeEquipment) its only sink. See resourceConfig.ts.
   reforgeDust: number;
+  // ISO date (YYYY-MM-DD, local) of the last calendar day the daily login
+  // reward was granted - null means never. See GachaSystem.
+  // tickDailyLoginReward. Note: this project has no save/load persistence
+  // yet (see engine/core/GameState.ts), so in practice this only ever
+  // differs from "today" once per page load/reload, not once per real
+  // calendar day - the field/check is still correct for whenever
+  // persistence lands.
+  lastLoginDate: string | null;
 }

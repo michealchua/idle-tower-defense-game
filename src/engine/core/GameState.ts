@@ -71,6 +71,7 @@ export function createInitialGameState(): GameState {
     inventory: [],
     nextEquipmentInstanceId: 1,
     reforgeDust: 0,
+    lastLoginDate: null,
   };
 
   recomputeHeroStats(state);

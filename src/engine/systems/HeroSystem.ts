@@ -2,8 +2,10 @@ import { createHero } from '../entities/Hero';
 import { layoutHeroPositions } from '../../data/mapConfig';
 import { getMaxDeployedHeroes } from '../../data/castleConfig';
 import type { EquipmentSlot } from '../../data/equipmentConfig';
+import { heroEvolutionConfig, type HeroClass } from '../../data/heroConfig';
+import { getHeroDefinition } from '../../data/heroRosterConfig';
 import { recomputeHeroStats } from './HeroStatsSystem';
-import type { GameState } from '../types';
+import type { GameState, HeroState } from '../types';
 
 // Repositions every currently-deployed hero across the row anchor so the
 // active squad stays centered instead of growing lopsided as it changes
@@ -136,4 +138,49 @@ export function unequipHeroSlot(state: GameState, heroId: string, slot: Equipmen
 
   recomputeHeroStats(state);
   return true;
+}
+
+// 分支进化 gate - level-only (no gold/material cost, same precedent as the
+// existing visual-tier evolution), and one-shot: once a branch is chosen
+// there's no re-picking, see evolveHero below.
+export function canEvolveHero(hero: HeroState): boolean {
+  return !hero.evolutionBranchId && hero.level >= heroEvolutionConfig.unlockLevel;
+}
+
+// Commits one of the hero's heroRosterConfig.evolutionBranches choices -
+// permanent (never reset by AscensionSystem.ascend, see HeroState.
+// evolutionBranchId's doc comment). Grants the branch's exclusive skill
+// immediately (no separate level gate) and recomputes stats so the
+// statMultiplier boost (HeroStatsSystem.getEffectiveStatMultiplier) takes
+// effect the same tick.
+export function evolveHero(state: GameState, heroId: string, branchId: string): boolean {
+  const hero = state.heroes.find((candidate) => candidate.id === heroId);
+  if (!hero || !canEvolveHero(hero)) {
+    return false;
+  }
+
+  const branch = getHeroDefinition(heroId).evolutionBranches.find((candidate) => candidate.id === branchId);
+  if (!branch) {
+    return false;
+  }
+
+  hero.evolutionBranchId = branchId;
+  if (!hero.unlockedSkillIds.includes(branch.skillUnlock.skillId)) {
+    hero.unlockedSkillIds.push(branch.skillUnlock.skillId);
+  }
+
+  recomputeHeroStats(state);
+  return true;
+}
+
+// Base class until evolved, then whatever class the chosen branch results
+// in (see HeroEvolutionBranch.resultClass) - drives HeroPanel's class
+// icon/label so it visibly changes the moment a hero evolves.
+export function getEffectiveHeroClass(hero: HeroState): HeroClass {
+  const definition = getHeroDefinition(hero.id);
+  if (!hero.evolutionBranchId) {
+    return definition.class;
+  }
+  const branch = definition.evolutionBranches.find((candidate) => candidate.id === hero.evolutionBranchId);
+  return branch?.resultClass ?? definition.class;
 }

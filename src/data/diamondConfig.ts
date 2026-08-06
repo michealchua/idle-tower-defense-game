@@ -1,4 +1,5 @@
 import type { BossKind } from './waveConfig';
+import { gachaPullConfig } from './gachaConfig';
 
 // Diamonds are the premium currency - unlike gold there is no passive
 // income, only discrete rewards for clearing content (see DamageSystem.
@@ -30,4 +31,13 @@ export const diamondsPerAscend = 300;
 export const diamondExchangeConfig = {
   diamondsPerExchange: 10,
   goldPerExchange: 5000,
+};
+
+// 每日登入奖励 - granted once per calendar day on first load (see
+// GachaSystem.tickDailyLoginReward), same size as a premium 10-pull so it
+// reads as a real freebie, not a token amount. Reuses pullCostDiamonds
+// instead of a hardcoded number so it automatically stays in sync if that
+// cost is retuned - same amount tickGachaWelcomeBonus already grants.
+export const dailyLoginRewardConfig = {
+  diamonds: gachaPullConfig.pullCostDiamonds * 10,
 };

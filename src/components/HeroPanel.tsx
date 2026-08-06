@@ -2,10 +2,11 @@ import { useEffect, useState, type RefObject } from 'react';
 import { heroRosterConfig, type HeroDefinition } from '../data/heroRosterConfig';
 import { skillDefinitions } from '../data/skillConfig';
 import { getMaxDeployedHeroes } from '../data/castleConfig';
-import { heroUpgradeConfig, type UpgradeableStat } from '../data/heroConfig';
+import { heroEvolutionConfig, heroUpgradeConfig, type HeroClass, type UpgradeableStat } from '../data/heroConfig';
 import { MAX_STAR_LEVEL, gachaRarityConfig, getStarUpCost, type GachaRarity } from '../data/gachaConfig';
 import { getActiveBondCounts, type BondId } from '../data/bondConfig';
 import { isHeroUpgradeMaxed, previewHeroUpgradeBulk } from '../engine/systems/UpgradeSystem';
+import { canEvolveHero, getEffectiveHeroClass } from '../engine/systems/HeroSystem';
 import { formatBigNumber } from '../data/scaling';
 import type { HeroState } from '../engine/types';
 import { t } from '../locales/i18n';
@@ -98,6 +99,23 @@ const BOND_ICON: Record<BondId, string> = {
   guardian: '🛡️',
   support: '✨',
   assassin: '🗡️',
+};
+
+const CLASS_LABEL_KEYS: Record<HeroClass, string> = {
+  warrior: 'class.warrior',
+  mage: 'class.mage',
+  paladin: 'class.paladin',
+  summoner: 'class.summoner',
+};
+
+// Distinct from BOND_ICON above - class and bond are independent axes (see
+// heroRosterConfig.ts's HeroDefinition doc comments), each gets its own
+// glyph so the two never read as the same thing at a glance.
+const CLASS_ICON: Record<HeroClass, string> = {
+  warrior: '⚔️',
+  mage: '🔥',
+  paladin: '🛐',
+  summoner: '👻',
 };
 
 const RARITY_LABEL_KEYS: Record<GachaRarity, string> = {
@@ -244,6 +262,90 @@ interface Materials {
   diamonds: number;
 }
 
+// 分支进化 - locked hint below unlockLevel, a flashy one-tap-away confirm
+// once eligible, a plain readout once the hero has already committed to a
+// branch. Picking is two steps (pick a card, then confirm) so a stray tap
+// can't burn this permanent, one-shot choice (HeroSystem.evolveHero).
+function HeroEvolutionSection({ definition, hero }: { definition: HeroDefinition; hero: HeroState }) {
+  const evolveHero = useGameStore((state) => state.evolveHero);
+  const [choosing, setChoosing] = useState(false);
+  const [pendingBranchId, setPendingBranchId] = useState<string | null>(null);
+
+  if (hero.evolutionBranchId) {
+    const branch = definition.evolutionBranches.find((candidate) => candidate.id === hero.evolutionBranchId);
+    return (
+      <div className="item-detail" style={{ marginTop: 8 }}>
+        ✨ {t('hero.evolved')}: {branch ? t(branch.nameKey) : hero.evolutionBranchId}
+      </div>
+    );
+  }
+
+  if (!canEvolveHero(hero)) {
+    return (
+      <div className="text-faint" style={{ marginTop: 8 }}>
+        {t('hero.evolutionLocked')} Lv.{heroEvolutionConfig.unlockLevel}
+      </div>
+    );
+  }
+
+  if (!choosing) {
+    return (
+      <button type="button" className="btn btn-evolve btn-block" style={{ marginTop: 8 }} onClick={() => setChoosing(true)}>
+        ✨ {t('hero.evolveButton')} ✨
+      </button>
+    );
+  }
+
+  return (
+    <div className="evolve-picker">
+      <div className="evolve-picker-title">{t('hero.evolveButton')}</div>
+      <div className="card-grid-sm">
+        {definition.evolutionBranches.map((branch) => (
+          <button
+            key={branch.id}
+            type="button"
+            className={`mini-card selectable${pendingBranchId === branch.id ? ' active' : ''}`}
+            onClick={() => setPendingBranchId(branch.id)}
+          >
+            <div className="mini-card-name">
+              {CLASS_ICON[branch.resultClass]} {t(branch.nameKey)}
+            </div>
+            <div className="mini-card-sub">{t(CLASS_LABEL_KEYS[branch.resultClass])}</div>
+            <div className="mini-card-sub">
+              {t('hero.attackDamage')} ×{branch.statMultiplier.attackDamage} · {t('hero.maxHp')} ×{branch.statMultiplier.maxHp}
+            </div>
+          </button>
+        ))}
+      </div>
+      <div className="item-actions" style={{ marginTop: 8 }}>
+        <button
+          type="button"
+          className="btn btn-sm"
+          onClick={() => {
+            setChoosing(false);
+            setPendingBranchId(null);
+          }}
+        >
+          {t('hero.evolveCancel')}
+        </button>
+        <button
+          type="button"
+          className="btn btn-sm btn-evolve"
+          disabled={!pendingBranchId}
+          onClick={() => {
+            if (pendingBranchId && evolveHero(definition.id, pendingBranchId)) {
+              setChoosing(false);
+              setPendingBranchId(null);
+            }
+          }}
+        >
+          {t('hero.evolveConfirm')}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // Everything that was previously always-visible in the item-card now lives
 // in the detail pane for whichever hero is selected in the master list -
 // full stats, bond count, skill readiness, and the star-up/deploy actions.
@@ -279,11 +381,16 @@ function HeroDetail({
     gold >= nextCost.gold &&
     (!nextCost.material || (materialKey !== undefined && materials[materialKey] >= nextCost.material));
 
+  const effectiveClass = getEffectiveHeroClass(hero);
+
   return (
     <div className={`detail-card ${RARITY_BORDER_CLASS[definition.rarity]}`}>
       <div className={`detail-title ${RARITY_CLASS[definition.rarity]}`}>
         {BOND_ICON[definition.bondId]} {heroLabel(definition)}{' '}
         <span className="text-faint">Lv.{hero.level} · ★{currentStar}/{MAX_STAR_LEVEL}</span>
+      </div>
+      <div className="item-detail">
+        {CLASS_ICON[effectiveClass]} {t(CLASS_LABEL_KEYS[effectiveClass])}
       </div>
 
       <div className="bar-track">
@@ -320,6 +427,8 @@ function HeroDetail({
         {isDeployed ? t('squad.undeploy') : squadFull ? t('squad.full') : t('squad.deploy')}
       </button>
 
+      <HeroEvolutionSection definition={definition} hero={hero} />
+
       <div className="item-actions" style={{ marginTop: 8, alignItems: 'center' }}>
         <span className="text-faint">
           {t('star.shards')} {shards}
@@ -351,6 +460,21 @@ function HeroDetail({
             </div>
           );
         })}
+        {hero.evolutionBranchId &&
+          (() => {
+            const branch = definition.evolutionBranches.find((candidate) => candidate.id === hero.evolutionBranchId);
+            if (!branch) {
+              return null;
+            }
+            const skillDef = skillDefinitions[branch.skillUnlock.skillId];
+            const cooldownRemaining = hero.skills[branch.skillUnlock.skillId]?.cooldownRemaining ?? 0;
+            return (
+              <div className="text-faint" style={{ marginTop: 2 }}>
+                ✨ {t(skillDef.nameKey)} ({t('hero.evolveButton')}):{' '}
+                {cooldownRemaining > 0 ? `${cooldownRemaining.toFixed(1)}s` : t('skill.ready')}
+              </div>
+            );
+          })()}
       </Accordion>
 
       <Accordion title={t('hero.upgradeSection')}>
@@ -459,7 +583,9 @@ function HeroPanel({ gameScreenRef }: { gameScreenRef: RefObject<HTMLDivElement>
                   >
                     <div className={`mini-card-name ${RARITY_CLASS[definition.rarity]}`}>
                       <span>
-                        {BOND_ICON[definition.bondId]} {heroLabel(definition)}
+                        {BOND_ICON[definition.bondId]}
+                        {CLASS_ICON[getEffectiveHeroClass(hero)]} {heroLabel(definition)}
+                        {hero.evolutionBranchId ? ' ✨' : ''}
                       </span>
                       <span className={`status-dot${isDeployed ? ' on' : ''}`} title={isDeployed ? t('squad.deployed') : t('squad.benched')} />
                     </div>

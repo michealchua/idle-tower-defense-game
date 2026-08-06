@@ -1,6 +1,7 @@
 import { getExpToNextLevel } from '../../data/heroConfig';
 import { ascensionConfig } from '../../data/ascensionConfig';
 import { diamondsPerAscend } from '../../data/diamondConfig';
+import { getHeroDefinition } from '../../data/heroRosterConfig';
 import { createInitialHeroUpgrades } from '../entities/Hero';
 import { getStrongestHeroLevel, recomputeHeroStats } from './HeroStatsSystem';
 import { createInitialWaveState, getGlobalWaveNumber } from './WaveSystem';
@@ -37,6 +38,19 @@ export function ascend(state: GameState): boolean {
     hero.unlockedSkillIds = [];
     hero.skills = {};
     hero.upgrades = createInitialHeroUpgrades();
+
+    // evolutionBranchId itself is permanent (see its doc comment in
+    // types.ts) - but it was granted its exclusive skill via
+    // unlockedSkillIds, which the reset above just wiped. Re-add it
+    // immediately rather than leaving an already-evolved hero's branch
+    // skill locked behind re-leveling (its level-gated skillUnlocks are
+    // fine relocking, that skill was never level-gated to begin with).
+    if (hero.evolutionBranchId) {
+      const branch = getHeroDefinition(hero.id).evolutionBranches.find((candidate) => candidate.id === hero.evolutionBranchId);
+      if (branch) {
+        hero.unlockedSkillIds.push(branch.skillUnlock.skillId);
+      }
+    }
   }
 
   state.wave = createInitialWaveState();

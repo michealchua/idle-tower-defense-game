@@ -1,5 +1,5 @@
 import { heroBaseConfig, heroLevelConfig, heroUpgradeConfig, type UpgradeableStat } from '../../data/heroConfig';
-import { getHeroDefinition } from '../../data/heroRosterConfig';
+import { getHeroDefinition, type HeroDefinition } from '../../data/heroRosterConfig';
 import { getPetDefinition } from '../../data/petRosterConfig';
 import { evolutionConfig } from '../../data/evolutionConfig';
 import { getAscensionPowerMultiplier } from '../../data/ascensionConfig';
@@ -79,6 +79,25 @@ function getStarMultiplier(stars: Record<string, number>, id: string): number {
   return 1 + (stars[id] ?? 0) * starBonusPerStar;
 }
 
+// A hero's base statMultiplier, boosted by its chosen 分支进化 branch (if
+// any) - see heroRosterConfig.ts's HeroEvolutionBranch.statMultiplier doc
+// comment. Still just the base multiplier for a hero that hasn't evolved
+// yet (evolutionBranchId null), so this is safe to call unconditionally.
+function getEffectiveStatMultiplier(definition: HeroDefinition, hero: HeroState): Record<UpgradeableStat, number> {
+  const branch = hero.evolutionBranchId
+    ? definition.evolutionBranches.find((candidate) => candidate.id === hero.evolutionBranchId)
+    : undefined;
+  if (!branch) {
+    return definition.statMultiplier;
+  }
+  return {
+    attackDamage: definition.statMultiplier.attackDamage * branch.statMultiplier.attackDamage,
+    maxHp: definition.statMultiplier.maxHp * branch.statMultiplier.maxHp,
+    attackSpeed: definition.statMultiplier.attackSpeed * branch.statMultiplier.attackSpeed,
+    criticalChance: definition.statMultiplier.criticalChance * branch.statMultiplier.criticalChance,
+  };
+}
+
 // The single place hero combat/HP stats are written. Called after any input
 // changes: level-up, per-hero upgrade purchase, equip/unequip/sell, hero/pet
 // unlock, ascend. Also refreshes pets (see recomputePetStats) so every
@@ -116,33 +135,34 @@ export function recomputeHeroStats(state: GameState): void {
   for (const hero of state.heroes) {
     const equipmentBonus = computeHeroEquipmentBonuses(hero);
     const template = getHeroDefinition(hero.id);
+    const effectiveStatMultiplier = getEffectiveStatMultiplier(template, hero);
     const powerMultiplier = getEvolutionMultiplier(hero.level) * getStarMultiplier(state.heroStars, hero.id);
     const levelSteps = hero.level - 1;
     const oldMaxHp = hero.maxHp;
 
     const attackDamage =
-      heroBaseConfig.attackDamage * template.statMultiplier.attackDamage * powerMultiplier +
+      heroBaseConfig.attackDamage * effectiveStatMultiplier.attackDamage * powerMultiplier +
       levelSteps * heroLevelConfig.perLevel.attackDamage +
       hero.upgrades.attackDamage * heroUpgradeConfig.attackDamage.valuePerLevel +
       (equipmentBonus.attackDamage ?? 0) +
       (petBonus.attackDamage ?? 0);
 
     const maxHp =
-      heroBaseConfig.maxHp * template.statMultiplier.maxHp * powerMultiplier +
+      heroBaseConfig.maxHp * effectiveStatMultiplier.maxHp * powerMultiplier +
       levelSteps * heroLevelConfig.perLevel.maxHp +
       hero.upgrades.maxHp * heroUpgradeConfig.maxHp.valuePerLevel +
       (equipmentBonus.maxHp ?? 0) +
       (petBonus.maxHp ?? 0);
 
     const attackSpeed =
-      heroBaseConfig.attackSpeed * template.statMultiplier.attackSpeed +
+      heroBaseConfig.attackSpeed * effectiveStatMultiplier.attackSpeed +
       levelSteps * heroLevelConfig.perLevel.attackSpeed +
       hero.upgrades.attackSpeed * heroUpgradeConfig.attackSpeed.valuePerLevel +
       (equipmentBonus.attackSpeed ?? 0) +
       (petBonus.attackSpeed ?? 0);
 
     const criticalChanceRaw =
-      heroBaseConfig.criticalChance * template.statMultiplier.criticalChance +
+      heroBaseConfig.criticalChance * effectiveStatMultiplier.criticalChance +
       hero.upgrades.criticalChance * heroUpgradeConfig.criticalChance.valuePerLevel +
       (equipmentBonus.criticalChance ?? 0) +
       (petBonus.criticalChance ?? 0);

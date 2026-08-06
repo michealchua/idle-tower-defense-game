@@ -1,4 +1,5 @@
-import type { UpgradeableStat } from './heroConfig';
+import type { UpgradeableStat, HeroClass } from './heroConfig';
+import { heroClasses } from './heroConfig';
 import type { GachaRarity } from './gachaConfig';
 import type { UnlockCondition } from './unlockConditionConfig';
 import { bondIds, type BondId } from './bondConfig';
@@ -6,6 +7,27 @@ import { bondIds, type BondId } from './bondConfig';
 export interface HeroSkillUnlock {
   level: number;
   skillId: string;
+}
+
+// One 分支进化 (branch evolution) option - see heroConfig.ts's
+// heroEvolutionConfig doc comment for the full mechanic. Every hero of a
+// given class shares the same two branches (see heroClassEvolutionBranches
+// below) rather than each of the 100 heroes needing bespoke branch content.
+export interface HeroEvolutionBranch {
+  id: string;
+  nameKey: string;
+  // The class this branch's hero becomes once chosen - matches the base
+  // class for most branches (a mage stays a mage), but nothing stops a
+  // branch from shifting it.
+  resultClass: HeroClass;
+  // Multiplicative boost layered on top of the hero's own statMultiplier
+  // (see getEffectiveStatMultiplier in HeroStatsSystem.ts) - this is what
+  // makes evolving "获得大幅属性成长" instead of a cosmetic-only change.
+  statMultiplier: Record<UpgradeableStat, number>;
+  // Exclusive skill granted immediately on evolving, from skillConfig.ts's
+  // existing pool - added straight into hero.unlockedSkillIds by
+  // HeroSystem.evolveHero, no separate level gate of its own.
+  skillUnlock: { skillId: string };
 }
 
 export interface HeroDefinition {
@@ -21,6 +43,12 @@ export interface HeroDefinition {
   // Class/theme tag - see bondConfig.ts. Fielding several heroes sharing a
   // bond grants a team-wide bonus (HeroStatsSystem.recomputeHeroStats).
   bondId: BondId;
+  // Archetype tag (heroConfig.ts's HeroClass) - independent axis from
+  // bondId, drives which two evolutionBranches this hero can pick from.
+  class: HeroClass;
+  // The two 分支进化 options available once this hero reaches
+  // heroEvolutionConfig.unlockLevel - see HeroSystem.evolveHero.
+  evolutionBranches: HeroEvolutionBranch[];
   // This hero's own skill unlock schedule - unlike the old shared
   // milestoneConfig skillUnlock rewards, every hero now has an independent
   // set of skills (from skillConfig.ts's pool) coming online at these
@@ -31,6 +59,78 @@ export interface HeroDefinition {
   // UnlockSystem.unlockHeroByCondition once every entry here is satisfied.
   unlockConditions?: UnlockCondition[];
 }
+
+// Two branches per class (8 total), shared by every hero of that class
+// instead of hand-authoring branch content per roster entry - same
+// "compact table reused across the roster" approach the rarity/role tables
+// above already use. Each branch buffs two stats hard and holds/lightly
+// trims a third, giving each evolved hero a clear build identity.
+const heroClassEvolutionBranches: Record<HeroClass, HeroEvolutionBranch[]> = {
+  warrior: [
+    {
+      id: 'warrior-berserker',
+      nameKey: 'evolutionBranch.warriorBerserker',
+      resultClass: 'warrior',
+      statMultiplier: { attackDamage: 1.7, maxHp: 0.85, attackSpeed: 1.2, criticalChance: 1.3 },
+      skillUnlock: { skillId: 'skill-earthquake' },
+    },
+    {
+      id: 'warrior-guardian',
+      nameKey: 'evolutionBranch.warriorGuardian',
+      resultClass: 'warrior',
+      statMultiplier: { attackDamage: 0.9, maxHp: 1.9, attackSpeed: 0.95, criticalChance: 1.0 },
+      skillUnlock: { skillId: 'skill-guardianPulse' },
+    },
+  ],
+  mage: [
+    {
+      id: 'mage-pyromancer',
+      nameKey: 'evolutionBranch.magePyromancer',
+      resultClass: 'mage',
+      statMultiplier: { attackDamage: 1.8, maxHp: 0.9, attackSpeed: 1.05, criticalChance: 1.25 },
+      skillUnlock: { skillId: 'skill-meteor' },
+    },
+    {
+      id: 'mage-cryomancer',
+      nameKey: 'evolutionBranch.mageCryomancer',
+      resultClass: 'mage',
+      statMultiplier: { attackDamage: 1.3, maxHp: 1.4, attackSpeed: 1.15, criticalChance: 1.1 },
+      skillUnlock: { skillId: 'skill-iceBurst' },
+    },
+  ],
+  paladin: [
+    {
+      id: 'paladin-lightbringer',
+      nameKey: 'evolutionBranch.paladinLightBringer',
+      resultClass: 'paladin',
+      statMultiplier: { attackDamage: 1.2, maxHp: 1.8, attackSpeed: 1.0, criticalChance: 1.1 },
+      skillUnlock: { skillId: 'skill-sanctuary' },
+    },
+    {
+      id: 'paladin-inquisitor',
+      nameKey: 'evolutionBranch.paladinInquisitor',
+      resultClass: 'paladin',
+      statMultiplier: { attackDamage: 1.75, maxHp: 1.1, attackSpeed: 1.1, criticalChance: 1.35 },
+      skillUnlock: { skillId: 'skill-voidChain' },
+    },
+  ],
+  summoner: [
+    {
+      id: 'summoner-soul',
+      nameKey: 'evolutionBranch.summonerSoul',
+      resultClass: 'summoner',
+      statMultiplier: { attackDamage: 1.4, maxHp: 1.2, attackSpeed: 1.1, criticalChance: 1.15 },
+      skillUnlock: { skillId: 'skill-spiritLink' },
+    },
+    {
+      id: 'summoner-elemental',
+      nameKey: 'evolutionBranch.summonerElemental',
+      resultClass: 'summoner',
+      statMultiplier: { attackDamage: 1.5, maxHp: 1.3, attackSpeed: 1.0, criticalChance: 1.15 },
+      skillUnlock: { skillId: 'skill-novaBlast' },
+    },
+  ],
+};
 
 interface RoleProfile {
   attackDamage: number;
@@ -153,12 +253,15 @@ function generateHeroRoster(): HeroDefinition[] {
     for (let n = 1; n <= tier.count; n += 1) {
       const id = `${tier.rarity}-${n}`;
       const role = roleProfiles[globalIndex % roleProfiles.length];
+      const heroClass = heroClasses[globalIndex % heroClasses.length];
 
       roster.push({
         id,
         rarity: tier.rarity,
         statMultiplier: buildStatMultiplier(tier.powerMultiplier, role),
         bondId: bondIds[globalIndex % bondIds.length],
+        class: heroClass,
+        evolutionBranches: heroClassEvolutionBranches[heroClass],
         skillUnlocks: buildSkillUnlocks(globalIndex, tier.skillCount),
         unlockConditions: unlockConditionOverrides[id],
       });

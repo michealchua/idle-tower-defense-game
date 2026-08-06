@@ -1,5 +1,4 @@
 import { skillDefinitions, type SkillDefinition, type SkillTargetingStrategyKey } from '../../data/skillConfig';
-import { getHeroDefinition } from '../../data/heroRosterConfig';
 import { effectLifetimes } from '../../data/effectConfig';
 import {
   TargetingStrategies,
@@ -35,13 +34,14 @@ export function tickSkills(state: GameState, deltaSeconds: number): void {
 }
 
 function tickHeroSkills(state: GameState, hero: HeroState, deltaSeconds: number): void {
-  const skillIds = getHeroDefinition(hero.id).skillUnlocks.map((unlock) => unlock.skillId);
-
-  for (const skillId of skillIds) {
-    if (!hero.unlockedSkillIds.includes(skillId)) {
-      continue;
-    }
-
+  // hero.unlockedSkillIds is the authoritative "skills this hero currently
+  // has" list - populated from the hero's own heroRosterConfig.skillUnlocks
+  // by LevelSystem, and (for evolved heroes) from its chosen
+  // evolutionBranches entry's exclusive skill by HeroSystem.evolveHero.
+  // Iterating it directly (instead of re-deriving just the level-gated
+  // subset from the roster definition) means a newly evolved hero's branch
+  // skill actually casts, not just shows as unlocked in the UI.
+  for (const skillId of hero.unlockedSkillIds) {
     const definition = skillDefinitions[skillId];
 
     let runtime = hero.skills[skillId];

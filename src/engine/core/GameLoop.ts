@@ -7,7 +7,7 @@ import { tickLevelUp } from '../systems/LevelSystem';
 import { tickEffects } from '../systems/EffectsSystem';
 import { tickWaveProgress } from '../systems/WaveSystem';
 import { tickCastleIncome } from '../systems/CastleSystem';
-import { tickGachaWelcomeBonus } from '../systems/GachaSystem';
+import { tickGachaWelcomeBonus, tickDailyLoginReward } from '../systems/GachaSystem';
 import type { GameState } from '../types';
 
 const FIXED_TIMESTEP_SECONDS = 0.1;
@@ -61,6 +61,7 @@ export class GameLoop {
       tickWaveProgress(this.state, FIXED_TIMESTEP_SECONDS);
       tickCastleIncome(this.state, FIXED_TIMESTEP_SECONDS);
       tickGachaWelcomeBonus(this.state);
+      tickDailyLoginReward(this.state);
       tickEffects(this.state, FIXED_TIMESTEP_SECONDS);
       this.accumulatorSeconds -= FIXED_TIMESTEP_SECONDS;
     }

@@ -22,6 +22,7 @@ import {
   swapDeployedHeroes as swapDeployedHeroesInEngine,
   equipItemToHero as equipItemToHeroInEngine,
   unequipHeroSlot as unequipHeroSlotInEngine,
+  evolveHero as evolveHeroInEngine,
 } from '../engine/systems/HeroSystem';
 import { unlockPet as unlockPetInEngine } from '../engine/systems/PetSystem';
 import { upgradeCastle as upgradeCastleInEngine, setCastleType as setCastleTypeInEngine } from '../engine/systems/CastleSystem';
@@ -110,6 +111,7 @@ function snapshotGameState(state: GameState) {
     difficultyScore: getDifficultyScore(state),
     inventory: state.inventory.map((item) => ({ ...item })),
     reforgeDust: state.reforgeDust,
+    lastLoginDate: state.lastLoginDate,
   };
 }
 
@@ -153,6 +155,7 @@ interface GameStore {
   upgradeHeroStat: (heroId: string, stat: UpgradeableStat, count: number) => void;
   inventory: EquipmentItem[];
   reforgeDust: number;
+  lastLoginDate: string | null;
   equipItemToHero: (heroId: string, instanceId: number) => void;
   unequipHeroSlot: (heroId: string, slot: EquipmentSlot) => void;
   sellItem: (instanceId: number) => void;
@@ -164,6 +167,7 @@ interface GameStore {
   deployHero: (heroId: string) => void;
   undeployHero: (heroId: string) => void;
   swapDeployedHeroes: (heroIdA: string, heroIdB: string) => void;
+  evolveHero: (heroId: string, branchId: string) => boolean;
   unlockHeroByCondition: (heroId: string) => void;
   unlockPetByCondition: (petId: string) => void;
   ascend: () => void;
@@ -250,6 +254,13 @@ export const useGameStore = create<GameStore>((set) => ({
     if (swapDeployedHeroesInEngine(gameState, heroIdA, heroIdB)) {
       set(snapshotGameState(gameState));
     }
+  },
+  evolveHero: (heroId, branchId) => {
+    const didEvolve = evolveHeroInEngine(gameState, heroId, branchId);
+    if (didEvolve) {
+      set(snapshotGameState(gameState));
+    }
+    return didEvolve;
   },
   upgradeCastle: () => {
     if (upgradeCastleInEngine(gameState)) {

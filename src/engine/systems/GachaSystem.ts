@@ -1,6 +1,6 @@
 import { weightedPick } from '../../data/scaling';
 import { gachaPullConfig, gachaRarityConfig, type GachaRarity } from '../../data/gachaConfig';
-import { diamondExchangeConfig } from '../../data/diamondConfig';
+import { diamondExchangeConfig, dailyLoginRewardConfig } from '../../data/diamondConfig';
 import { gachaPityConfig, type PityPoolId } from '../../data/pityConfig';
 import { panelUnlockWave } from '../../data/unlockConditionConfig';
 import { heroRosterConfig } from '../../data/heroRosterConfig';
@@ -184,6 +184,27 @@ export function tickGachaWelcomeBonus(state: GameState): void {
   }
   state.diamonds += gachaPullConfig.pullCostDiamonds * 10;
   state.hasGrantedFirstGachaBonus = true;
+}
+
+// Called every GameLoop tick, same shape as tickGachaWelcomeBonus above -
+// grants dailyLoginRewardConfig.diamonds the first time this runs on a new
+// calendar day (local time), stamping lastLoginDate so it won't fire again
+// until the date changes. state.lastLoginDate starts null (see GameState.ts),
+// which never equals a real date string, so the very first tick of a brand
+// new game already counts as "today's first login" and grants immediately -
+// no separate first-run special case needed.
+//
+// Caveat: this project has no save/load persistence yet (see engine/core/
+// GameState.ts), so lastLoginDate lives only in memory - today this reward
+// re-fires once per page load/reload rather than truly once per calendar
+// day. The check itself is correct for whenever persistence lands.
+export function tickDailyLoginReward(state: GameState): void {
+  const today = new Date().toISOString().slice(0, 10);
+  if (state.lastLoginDate === today) {
+    return;
+  }
+  state.diamonds += dailyLoginRewardConfig.diamonds;
+  state.lastLoginDate = today;
 }
 
 // Fixed-chunk exchange (see diamondConfig.ts) - the "universal fallback" use
