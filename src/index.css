@@ -1,0 +1,528 @@
+:root {
+  --bg: #0f1117;
+  --bg-alt: #161a24;
+  --surface: #1c212e;
+  --surface-hover: #242a3a;
+  --border: #2a3040;
+  --text: #eef0f5;
+  --text-muted: #8b93a7;
+  --text-faint: #5b637a;
+  --accent: #5b8cff;
+  --accent-strong: #7aa2ff;
+  --success: #4fd67a;
+  --danger: #ff6b6b;
+  --gold-currency: #ffc857;
+  --radius: 10px;
+  --radius-sm: 6px;
+  --rarity-white: #c7cbd6;
+  --rarity-green: #52d17c;
+  --rarity-blue: #4da3ff;
+  --rarity-purple: #c07bff;
+  --rarity-gold: #ffb648;
+  /* How wide the game shell (HUD + canvas) is allowed to grow on large
+     screens - the canvas itself then fills whatever width that resolves to
+     (see .canvas-stage), capped by viewport height too so it never grows
+     absurdly tall on an ultrawide monitor. Menus (.bottom-nav-inner,
+     .sheet-panel) stay at the original mobile-derived width - only the
+     battle view itself needs to "fill the screen". */
+  --shell-max-width: 1600px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+button,
+select {
+  font-family: inherit;
+}
+
+/* Reference-style shell: compact top HUD, full-width canvas stage with an
+   overlay quick-upgrade box, and bottom-sheet panels opened from an icon nav
+   bar - replaces the old always-inline tab layout. Bottom padding reserves
+   room for the fixed bottom-nav. */
+.game-shell {
+  max-width: var(--shell-max-width);
+  width: 100%;
+  margin: 0 auto;
+  padding: 10px clamp(10px, 3vw, 40px) 84px;
+  position: relative;
+  min-height: 100vh;
+}
+
+/* HUD */
+.hud-compact {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+}
+
+.hud-currency-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.hud-sub-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.hud-gold {
+  color: var(--gold-currency);
+  font-weight: 700;
+}
+
+.bar-track {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--bg-alt);
+  overflow: hidden;
+  margin-top: 4px;
+  border: 1px solid var(--border);
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: 4px;
+}
+
+.bar-fill-hp {
+  background: linear-gradient(90deg, #ff6b6b, #ff9f6b);
+}
+
+.bar-fill-exp {
+  background: linear-gradient(90deg, #ffd54f, #ffb648);
+}
+
+/* Auto-fills whatever space is available: full shell width, 4:3 aspect
+   ratio, but never taller than 60% of the viewport (so it can't push the
+   bottom-nav/HUD off-screen on a short window) - the browser resolves
+   width/height together to satisfy both constraints. BattleScreen's
+   ResizeObserver reads whatever size this settles on and scales canvas
+   drawing to match (see BattleScreen.tsx), so this is the ONLY place canvas
+   size is decided. */
+.canvas-stage {
+  position: relative;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  margin: 8px auto 0;
+  line-height: 0;
+  /* width is the only explicitly-sized axis; height is purely derived from
+     aspect-ratio, so the box is always a true 4:3 rect. 80vh = 60vh * 4/3,
+     i.e. "as wide as the container, but never so wide that height would
+     exceed 60% of the viewport" - min()/aspect-ratio together do the
+     letterboxing that aspect-ratio + max-height alone can't (that combo
+     clamps height without shrinking width, which would distort the game
+     world - see BattleScreen.tsx's canvas scaling). */
+  width: min(100%, 80vh);
+  aspect-ratio: 4 / 3;
+}
+
+.game-over-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(10, 11, 16, 0.72);
+  color: #ffffff;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+/* Persistent overlay box docked to the game view, same idea as the
+   reference's always-visible "UPGRADE CASTLE / UPGRADE ARCHER" box. */
+.quick-upgrade-box {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: rgba(12, 14, 20, 0.82);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 150px;
+}
+
+.quick-upgrade-btn {
+  text-align: left;
+  line-height: 1.3;
+  padding: 4px 6px;
+}
+
+.stat-btn-label {
+  display: block;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.stat-btn-value {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* Bottom icon nav - replaces the old top tab bar. Tapping an icon opens the
+   matching panel as a bottom sheet (see .sheet-*) instead of swapping inline
+   content. */
+.bottom-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
+  z-index: 20;
+  overflow-x: auto;
+}
+
+.bottom-nav-inner {
+  display: flex;
+  gap: 2px;
+  max-width: 480px;
+  width: 100%;
+}
+
+.bottom-nav-btn {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  padding: 4px 2px;
+  border-radius: var(--radius-sm);
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.bottom-nav-btn.active {
+  color: var(--accent-strong);
+  background: var(--surface-hover);
+}
+
+.bottom-nav-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+/* Bottom-sheet overlay panel - same content as the old inline tab-panel,
+   just presented as a modal sheet instead of always-inline. */
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 7, 11, 0.55);
+  z-index: 30;
+}
+
+.sheet-panel {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-width: 480px;
+  margin: 0 auto;
+  max-height: 78vh;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: 16px 16px 0 0;
+  z-index: 31;
+  overflow-y: auto;
+  padding: 12px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+}
+
+.sheet-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.sheet-title {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.sheet-close {
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  color: var(--text);
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* Cards */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin-bottom: 10px;
+}
+
+.card-title {
+  font-weight: 700;
+  font-size: 14px;
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.card-subtitle {
+  font-size: 12px;
+  color: var(--text-faint);
+  margin-top: -4px;
+  margin-bottom: 8px;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.scroll-list {
+  max-height: 360px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+/* Items */
+.item-card {
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+}
+
+.item-card + .item-card {
+  margin-top: 6px;
+}
+
+.item-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.item-detail {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.item-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+/* Buttons */
+.btn {
+  background: var(--surface-hover);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) {
+  border-color: var(--accent-strong);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+
+.btn-danger {
+  background: transparent;
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.btn-sm {
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+.btn-block {
+  width: 100%;
+}
+
+/* Forms */
+.select {
+  background: var(--bg-alt);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 5px 8px;
+  font-size: 12px;
+}
+
+.filter-bar {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.filter-label {
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+.filter-count {
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-left: auto;
+}
+
+/* Badges */
+.badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.rarity-white {
+  color: var(--rarity-white);
+}
+.rarity-green {
+  color: var(--rarity-green);
+}
+.rarity-blue {
+  color: var(--rarity-blue);
+}
+.rarity-purple {
+  color: var(--rarity-purple);
+}
+.rarity-gold {
+  color: var(--rarity-gold);
+}
+
+.border-rarity-white {
+  border-left-color: var(--rarity-white);
+}
+.border-rarity-green {
+  border-left-color: var(--rarity-green);
+}
+.border-rarity-blue {
+  border-left-color: var(--rarity-blue);
+}
+.border-rarity-purple {
+  border-left-color: var(--rarity-purple);
+}
+.border-rarity-gold {
+  border-left-color: var(--rarity-gold);
+}
+
+.empty-state {
+  color: var(--text-faint);
+  font-size: 12px;
+  padding: 14px 0;
+  text-align: center;
+}
+
+.locked {
+  opacity: 0.55;
+}
+
+.text-muted {
+  color: var(--text-muted);
+}
+
+.text-faint {
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+/* Debug panel */
+.debug-toggle {
+  position: fixed;
+  top: 8px;
+  right: 8px;
+  z-index: 1001;
+  background: rgba(0, 0, 0, 0.85);
+  color: #fff;
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-family: monospace;
+  cursor: pointer;
+}
+
+.debug-panel {
+  position: fixed;
+  top: 40px;
+  right: 8px;
+  background: rgba(0, 0, 0, 0.9);
+  color: #ffffff;
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-family: monospace;
+  z-index: 1000;
+  min-width: 170px;
+  max-height: calc(100vh - 56px);
+  overflow-y: auto;
+}

@@ -1,0 +1,129 @@
+import { skillDefinitions, type SkillDefinition, type SkillTargetingStrategyKey } from '../../data/skillConfig';
+import { effectLifetimes } from '../../data/effectConfig';
+import {
+  TargetingStrategies,
+  getEnemiesInRange,
+  heroDefaultStrategy,
+  pickBestTarget,
+  pickTopTargets,
+  type TargetComparator,
+  type TargetingContext,
+} from './TargetingSystem';
+import { calculateDamage, applyDamage } from './DamageSystem';
+import { spawnVisualEffect } from './EffectsSystem';
+import { getDeployedHeroes } from './HeroStatsSystem';
+import type { GameState, HeroState } from '../types';
+
+const strategyLookup: Record<SkillTargetingStrategyKey, TargetComparator> = {
+  heroDefault: heroDefaultStrategy,
+  closestToBase: TargetingStrategies.closestToBase,
+  closestToHero: TargetingStrategies.closestToHero,
+  lowestHp: TargetingStrategies.lowestHp,
+  highestHp: TargetingStrategies.highestHp,
+  strongest: TargetingStrategies.strongest,
+  random: TargetingStrategies.random,
+};
+
+// Each hero casts its own unlocked skills independently - pets don't get
+// skills in v1.
+export function tickSkills(state: GameState, deltaSeconds: number): void {
+  for (const hero of getDeployedHeroes(state)) {
+    tickHeroSkills(state, hero, deltaSeconds);
+  }
+}
+
+function tickHeroSkills(state: GameState, hero: HeroState, deltaSeconds: number): void {
+  for (const skillId of Object.keys(skillDefinitions)) {
+    if (!hero.unlockedMilestoneIds.includes(skillId)) {
+      continue;
+    }
+
+    const definition = skillDefinitions[skillId];
+
+    let runtime = hero.skills[skillId];
+    if (!runtime) {
+      runtime = { cooldownRemaining: 0 };
+      hero.skills[skillId] = runtime;
+    }
+
+    runtime.cooldownRemaining = Math.max(0, runtime.cooldownRemaining - deltaSeconds);
+
+    if (runtime.cooldownRemaining > 0) {
+      continue;
+    }
+
+    if (tryCastSkill(state, hero, definition)) {
+      runtime.cooldownRemaining = definition.cooldownSeconds;
+    }
+  }
+}
+
+// Each effectType owns its own target-finding, because they need different
+// shapes of it: aoeDamage needs one impact point, chainDamage needs the top
+// N targets directly. tryCastSkill is just the dispatcher.
+function tryCastSkill(state: GameState, hero: HeroState, definition: SkillDefinition): boolean {
+  switch (definition.effectType) {
+    case 'aoeDamage':
+      return castAoeDamage(state, hero, definition);
+    case 'chainDamage':
+      return castChainDamage(state, hero, definition);
+    default:
+      return false;
+  }
+}
+
+function castAoeDamage(state: GameState, hero: HeroState, definition: SkillDefinition): boolean {
+  const strategy = strategyLookup[definition.targetingStrategy];
+  const context: TargetingContext = { basePosition: state.base.position, originPosition: hero.position };
+  const candidates = getEnemiesInRange(state.enemies, hero.position, definition.range);
+  const impactTarget = pickBestTarget(candidates, strategy, context);
+
+  if (!impactTarget) {
+    return false;
+  }
+
+  const aoeRadius = definition.aoeRadius ?? 0;
+  const hitEnemies = getEnemiesInRange(state.enemies, impactTarget.position, aoeRadius);
+
+  spawnVisualEffect(state, {
+    kind: 'skillImpact',
+    x: impactTarget.position.x,
+    y: impactTarget.position.y,
+    radius: aoeRadius,
+    lifetime: effectLifetimes.skillImpact,
+  });
+
+  for (const enemy of hitEnemies) {
+    const damageResult = calculateDamage(hero.attackDamage * definition.damageMultiplier, 0);
+    applyDamage(state, enemy, damageResult);
+  }
+
+  return true;
+}
+
+function castChainDamage(state: GameState, hero: HeroState, definition: SkillDefinition): boolean {
+  const strategy = strategyLookup[definition.targetingStrategy];
+  const context: TargetingContext = { basePosition: state.base.position, originPosition: hero.position };
+  const candidates = getEnemiesInRange(state.enemies, hero.position, definition.range);
+  const targets = pickTopTargets(candidates, strategy, context, definition.targetCount ?? 1);
+
+  if (targets.length === 0) {
+    return false;
+  }
+
+  for (const target of targets) {
+    spawnVisualEffect(state, {
+      kind: 'lightningBolt',
+      x: hero.position.x,
+      y: hero.position.y,
+      targetX: target.position.x,
+      targetY: target.position.y,
+      lifetime: effectLifetimes.lightningBolt,
+    });
+
+    const damageResult = calculateDamage(hero.attackDamage * definition.damageMultiplier, 0);
+    applyDamage(state, target, damageResult);
+  }
+
+  return true;
+}
