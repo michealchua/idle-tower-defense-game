@@ -1,0 +1,8 @@
+{
+  "name": "idle-tower-defense-shell",
+  "version": "0.0.1",
+  "private": true,
+  "main": "main.cjs",
+  "dependencies": {},
+  "packageManager": "traversal@1.0.0"
+}

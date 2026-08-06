@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.1",
   "type": "module",
-  "main": "electron/main.cjs",
+  "packageManager": "traversal@1.0.0",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -28,14 +28,16 @@
   "build": {
     "appId": "com.michealchua.idletowerdefense",
     "productName": "放置塔防",
-    "files": [
-      "electron/**/*"
-    ],
     "directories": {
+      "app": "electron",
       "output": "release"
     },
     "win": {
       "target": "nsis"
     }
+  },
+  "allowScripts": {
+    "esbuild@0.21.5": true,
+    "electron-winstaller@5.4.0": true
   }
 }
