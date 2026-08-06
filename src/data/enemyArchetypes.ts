@@ -64,6 +64,12 @@ export interface EnemyArchetype {
   hasShield?: boolean;
   revive?: ReviveBehavior;
   summonAbility?: SummonAbility;
+  // See MovementSystem.tickMovement - once within this x-distance of the
+  // base, the enemy stops advancing instead of continuing on to
+  // baseArrivalDistance, and so never deals damageToBase. It just holds
+  // position and fights whatever's in range - "boss engages heroes, never
+  // the base" without needing a separate targeting mode.
+  stationaryEngageDistance?: number;
 }
 
 export const enemyArchetypes: Record<EnemyArchetypeId, EnemyArchetype> = {
@@ -214,7 +220,13 @@ export const enemyArchetypes: Record<EnemyArchetypeId, EnemyArchetype> = {
   },
   // Deterministic single spawn for a chapter's wave-10 big boss. berserker
   // enrage past 50% HP gives a simple "gets scarier near the end" beat
-  // without a full multi-phase system.
+  // without a full multi-phase system. stationaryEngageDistance=130 stops it
+  // just past mapConfig.heroPosition (base-to-hero distance is 120), so it
+  // always halts within easy reach of the deployed squad's attackRange=100
+  // but well short of baseArrivalDistance=10 - it only ever fights heroes,
+  // never the base, which makes damageToBaseMultiplier below permanently
+  // inert (kept for type-shape consistency with every other archetype, not
+  // because anything reads it for boss).
   boss: {
     id: 'boss',
     hpMultiplier: 20,
@@ -224,5 +236,6 @@ export const enemyArchetypes: Record<EnemyArchetypeId, EnemyArchetype> = {
     expRewardMultiplier: 20,
     threatValue: 15,
     berserker: { hpRatioThreshold: 0.5, speedMultiplier: 1.6 },
+    stationaryEngageDistance: 130,
   },
 };

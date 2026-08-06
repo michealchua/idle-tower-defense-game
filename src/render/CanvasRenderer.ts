@@ -62,7 +62,11 @@ const ENEMY_VISUAL_STYLES: Record<string, EnemyVisualStyle> = {
   zombie: { color: '#556b2f', radiusMultiplier: 1.1 },
   witch: { color: '#6a1b9a', radiusMultiplier: 0.95 },
   miniboss: { color: '#b71c1c', radiusMultiplier: 1.8 },
-  boss: { color: '#000000', radiusMultiplier: 2.2 },
+  // Deliberately far above every other archetype (next-largest is giant at
+  // 1.6) - stationaryEngageDistance means it holds one spot for the whole
+  // fight, so it reads as a looming wall the squad has to bring down rather
+  // than just another circle in the crowd.
+  boss: { color: '#000000', radiusMultiplier: 3.5 },
 };
 
 const DEFAULT_ENEMY_VISUAL_STYLE: EnemyVisualStyle = { color: '#8bc34a', radiusMultiplier: 1 };

@@ -36,7 +36,22 @@ export function tickMovement(state: GameState, deltaSeconds: number): void {
       }
     }
 
+    const archetype = enemyArchetypes[enemy.archetypeId];
     const direction = enemy.position.x >= base.position.x ? -1 : 1;
+
+    // Stationary archetypes (currently just Boss) close the distance until
+    // they're within their own engage range, then hold - CombatSystem's
+    // range checks are pure distance, not movement-state-dependent, so a
+    // parked enemy is still fully attackable/attacking once in range. They
+    // never reach baseArrivalDistance below, so they never damage the base.
+    if (archetype.stationaryEngageDistance !== undefined) {
+      if (Math.abs(enemy.position.x - base.position.x) > archetype.stationaryEngageDistance) {
+        enemy.position.x += direction * getEffectiveSpeed(enemy) * deltaSeconds;
+      }
+      survivors.push(enemy);
+      continue;
+    }
+
     enemy.position.x += direction * getEffectiveSpeed(enemy) * deltaSeconds;
 
     const distanceToBase = Math.abs(enemy.position.x - base.position.x);
