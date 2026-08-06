@@ -4,7 +4,7 @@ import { getPetDefinition } from '../../data/petRosterConfig';
 import { evolutionConfig } from '../../data/evolutionConfig';
 import { getAscensionPowerMultiplier } from '../../data/ascensionConfig';
 import { starBonusPerStar } from '../../data/gachaConfig';
-import { getEquipmentMainStatValue } from '../../data/equipmentConfig';
+import { getEquipmentMainStatValue, getEquipmentSetStatBonuses } from '../../data/equipmentConfig';
 import { getVisualTierForLevel } from '../../data/milestoneConfig';
 import { getTalentFlatBonus, getTalentMultiplier } from '../../data/talentConfig';
 import { getAscensionShopFlatBonus, getAscensionShopMultiplier } from '../../data/ascensionShopConfig';
@@ -33,11 +33,12 @@ export function getStrongestHeroLevel(state: GameState): number {
   return getDeployedHeroes(state).reduce((max, hero) => Math.max(max, hero.level), 0);
 }
 
-// Equipment is one shared loadout (see EquipmentSystem.ts) applied to every
-// deployed hero, not per-hero gear.
-function computeEquipmentBonuses(state: GameState): Partial<Record<UpgradeableStat, number>> {
+// Per-hero gear (see HeroState.equipment/EquipmentSystem.ts) - each hero's
+// bonus is computed from their own loadout only, plus whatever set bonuses
+// (equipmentConfig.equipmentSets) that loadout currently unlocks.
+function computeHeroEquipmentBonuses(hero: HeroState): Partial<Record<UpgradeableStat, number>> {
   const bonuses: Partial<Record<UpgradeableStat, number>> = {};
-  for (const item of Object.values(state.equipped)) {
+  for (const item of Object.values(hero.equipment)) {
     if (!item) {
       continue;
     }
@@ -46,6 +47,9 @@ function computeEquipmentBonuses(state: GameState): Partial<Record<UpgradeableSt
     for (const affix of item.affixes) {
       bonuses[affix.stat] = (bonuses[affix.stat] ?? 0) + affix.value;
     }
+  }
+  for (const [stat, value] of Object.entries(getEquipmentSetStatBonuses(hero.equipment)) as [UpgradeableStat, number][]) {
+    bonuses[stat] = (bonuses[stat] ?? 0) + value;
   }
   return bonuses;
 }
@@ -80,7 +84,6 @@ function getStarMultiplier(stars: Record<string, number>, id: string): number {
 // unlock, ascend. Also refreshes pets (see recomputePetStats) so every
 // call site only has to remember one function.
 export function recomputeHeroStats(state: GameState): void {
-  const equipmentBonus = computeEquipmentBonuses(state);
   const petBonus = computePetPassiveBonuses(state);
   // Talent tree (talentConfig.ts) - permanent, ascension-surviving
   // percentage bonuses spent with skill points, applied as a final
@@ -111,6 +114,7 @@ export function recomputeHeroStats(state: GameState): void {
   const ascensionPowerMultiplier = getAscensionPowerMultiplier(state.ascensionLevel);
 
   for (const hero of state.heroes) {
+    const equipmentBonus = computeHeroEquipmentBonuses(hero);
     const template = getHeroDefinition(hero.id);
     const powerMultiplier = getEvolutionMultiplier(hero.level) * getStarMultiplier(state.heroStars, hero.id);
     const levelSteps = hero.level - 1;

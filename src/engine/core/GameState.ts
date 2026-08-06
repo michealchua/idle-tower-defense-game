@@ -69,7 +69,6 @@ export function createInitialGameState(): GameState {
     nextVisualEffectId: 1,
     spawnCooldownRemaining: 0,
     inventory: [],
-    equipped: { weapon: null, armor: null, trinket: null },
     nextEquipmentInstanceId: 1,
   };
 

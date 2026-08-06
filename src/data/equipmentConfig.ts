@@ -2,7 +2,7 @@ import type { UpgradeableStat } from './heroConfig';
 import { weightedPick } from './scaling';
 import { MAX_STAR_LEVEL, type GachaRarity } from './gachaConfig';
 
-export type EquipmentSlot = 'weapon' | 'armor' | 'trinket';
+export type EquipmentSlot = 'weapon' | 'armor' | 'trinket' | 'boots';
 // Reuses the same white/green/blue/purple/gold ladder as hero/pet gacha
 // rarity (see gachaConfig.ts) instead of a second common/rare/epic/legendary
 // vocabulary - one rarity concept, one set of i18n labels (locales/zh-CN.ts
@@ -126,7 +126,7 @@ export interface SlotDefinition {
   baseValueByStat: Partial<Record<UpgradeableStat, number>>;
 }
 
-// Each slot rolls from its own stat pool so weapon/armor/trinket stay
+// Each slot rolls from its own stat pool so weapon/armor/trinket/boots stay
 // thematically distinct instead of being interchangeable stat-sticks.
 export const equipmentSlots: Record<EquipmentSlot, SlotDefinition> = {
   weapon: {
@@ -140,6 +140,10 @@ export const equipmentSlots: Record<EquipmentSlot, SlotDefinition> = {
   trinket: {
     possibleStats: ['attackSpeed'],
     baseValueByStat: { attackSpeed: 0.06 },
+  },
+  boots: {
+    possibleStats: ['maxHp', 'attackSpeed'],
+    baseValueByStat: { maxHp: 10, attackSpeed: 0.04 },
   },
 };
 
@@ -183,6 +187,114 @@ export interface EquipmentRoll {
   value: number;
   affixes: EquipmentAffix[];
   legendaryEffectId?: string;
+  setId?: EquipmentSetId;
+}
+
+//套装 (set) system - a hero wearing multiple pieces tagged with the same
+// setId gets extra stat bonuses at 2 and 4 pieces, on top of each item's own
+// main stat/affixes. Sets are per-hero (see HeroState.equipment), not a
+// squad-wide effect.
+export type EquipmentSetId = 'ironWill' | 'stormblade' | 'shadowVeil';
+
+export interface EquipmentSetBonus {
+  count: 2 | 4;
+  statBonuses: Partial<Record<UpgradeableStat, number>>;
+  // Flavor-only label for the 4pc bonus, same convention as legendaryEffects
+  // above - not wired into CombatSystem, just surfaced in the UI.
+  specialEffectLabelKey?: string;
+}
+
+export interface EquipmentSetDefinition {
+  id: EquipmentSetId;
+  nameKey: string;
+  bonuses: EquipmentSetBonus[];
+}
+
+export const equipmentSets: Record<EquipmentSetId, EquipmentSetDefinition> = {
+  ironWill: {
+    id: 'ironWill',
+    nameKey: 'equipment.setIronWill',
+    bonuses: [
+      { count: 2, statBonuses: { maxHp: 40 } },
+      { count: 4, statBonuses: { maxHp: 100 }, specialEffectLabelKey: 'equipment.setIronWillEffect' },
+    ],
+  },
+  stormblade: {
+    id: 'stormblade',
+    nameKey: 'equipment.setStormblade',
+    bonuses: [
+      { count: 2, statBonuses: { attackDamage: 12 } },
+      { count: 4, statBonuses: { attackDamage: 30, criticalChance: 0.05 }, specialEffectLabelKey: 'equipment.setStormbladeEffect' },
+    ],
+  },
+  shadowVeil: {
+    id: 'shadowVeil',
+    nameKey: 'equipment.setShadowVeil',
+    bonuses: [
+      { count: 2, statBonuses: { criticalChance: 0.04 } },
+      { count: 4, statBonuses: { criticalChance: 0.08, attackSpeed: 0.1 }, specialEffectLabelKey: 'equipment.setShadowVeilEffect' },
+    ],
+  },
+};
+
+// Only blue+ items can roll as part of a set - keeps white/green drops as
+// plain stat-sticks and set pieces feeling like a mid/high-rarity hook.
+const SET_ELIGIBLE_RARITIES: EquipmentRarity[] = ['blue', 'purple', 'gold', 'red', 'rainbow'];
+const SET_ITEM_CHANCE = 0.25;
+
+function pickSetId(): EquipmentSetId {
+  const ids = Object.keys(equipmentSets) as EquipmentSetId[];
+  return ids[Math.floor(Math.random() * ids.length)];
+}
+
+// Structural subset of engine/types.ts's EquipmentItem - defined locally
+// instead of imported to avoid a circular dependency (types.ts imports
+// EquipmentSlot/EquipmentRarity/EquipmentAffix from this file already). Any
+// real EquipmentItem satisfies this shape.
+interface SetTaggedItem {
+  setId?: EquipmentSetId;
+}
+
+// Counts how many of a hero's equipped items belong to each set, and returns
+// every bonus tier that count actually unlocks (2pc, plus 4pc once all four
+// slots share a set). Order follows equipmentSets' declaration order.
+export function getActiveSetBonuses(
+  equipment: Partial<Record<EquipmentSlot, SetTaggedItem | null>>,
+): { set: EquipmentSetDefinition; count: number; activeBonuses: EquipmentSetBonus[] }[] {
+  const counts: Partial<Record<EquipmentSetId, number>> = {};
+  for (const item of Object.values(equipment)) {
+    if (item?.setId) {
+      counts[item.setId] = (counts[item.setId] ?? 0) + 1;
+    }
+  }
+
+  const results: { set: EquipmentSetDefinition; count: number; activeBonuses: EquipmentSetBonus[] }[] = [];
+  for (const [setId, count] of Object.entries(counts) as [EquipmentSetId, number][]) {
+    if (count < 2) {
+      continue;
+    }
+    const set = equipmentSets[setId];
+    const activeBonuses = set.bonuses.filter((bonus) => count >= bonus.count);
+    results.push({ set, count, activeBonuses });
+  }
+  return results;
+}
+
+// Flattens every active set-bonus tier's statBonuses into one bonus object,
+// the same shape computeHeroEquipmentBonuses (HeroStatsSystem.ts) already
+// works with for main stats/affixes.
+export function getEquipmentSetStatBonuses(
+  equipment: Partial<Record<EquipmentSlot, SetTaggedItem | null>>,
+): Partial<Record<UpgradeableStat, number>> {
+  const bonuses: Partial<Record<UpgradeableStat, number>> = {};
+  for (const { activeBonuses } of getActiveSetBonuses(equipment)) {
+    for (const tier of activeBonuses) {
+      for (const [stat, value] of Object.entries(tier.statBonuses) as [UpgradeableStat, number][]) {
+        bonuses[stat] = (bonuses[stat] ?? 0) + value;
+      }
+    }
+  }
+  return bonuses;
 }
 
 // Effective (star-scaled) value of an item's primary stat - the "升星成长
@@ -228,6 +340,8 @@ export function rollEquipment(): EquipmentRoll {
   const variance = 0.85 + Math.random() * 0.3;
   const def = equipmentRarities[rarity];
 
+  const rollsSet = SET_ELIGIBLE_RARITIES.includes(rarity) && Math.random() < SET_ITEM_CHANCE;
+
   return {
     slot,
     rarity,
@@ -235,6 +349,7 @@ export function rollEquipment(): EquipmentRoll {
     value: roundStatValue(stat, baseValue * def.baseMultiplier * variance),
     affixes: rollAffixes(rarity, stat),
     legendaryEffectId: def.hasLegendaryEffect ? pickLegendaryEffect() : undefined,
+    setId: rollsSet ? pickSetId() : undefined,
   };
 }
 

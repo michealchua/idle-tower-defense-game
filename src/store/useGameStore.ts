@@ -10,16 +10,16 @@ import { spawnEnemyNow } from '../engine/systems/SpawnSystem';
 import { handleDeath } from '../engine/systems/DamageSystem';
 import {
   debugForceDropEquipment,
-  equipItem as equipItemInEngine,
   sellItem as sellItemInEngine,
   starUpEquipment as starUpEquipmentInEngine,
-  unequipSlot as unequipSlotInEngine,
 } from '../engine/systems/EquipmentSystem';
 import {
   unlockHero as unlockHeroInEngine,
   deployHero as deployHeroInEngine,
   undeployHero as undeployHeroInEngine,
   swapDeployedHeroes as swapDeployedHeroesInEngine,
+  equipItemToHero as equipItemToHeroInEngine,
+  unequipHeroSlot as unequipHeroSlotInEngine,
 } from '../engine/systems/HeroSystem';
 import { unlockPet as unlockPetInEngine } from '../engine/systems/PetSystem';
 import { upgradeCastle as upgradeCastleInEngine, setCastleType as setCastleTypeInEngine } from '../engine/systems/CastleSystem';
@@ -107,7 +107,6 @@ function snapshotGameState(state: GameState) {
     isGameOver: state.isGameOver,
     difficultyScore: getDifficultyScore(state),
     inventory: state.inventory.map((item) => ({ ...item })),
-    equipped: { ...state.equipped },
   };
 }
 
@@ -150,9 +149,8 @@ interface GameStore {
   difficultyScore: number;
   upgradeHeroStat: (heroId: string, stat: UpgradeableStat, count: number) => void;
   inventory: EquipmentItem[];
-  equipped: Record<EquipmentSlot, EquipmentItem | null>;
-  equipItem: (instanceId: number) => void;
-  unequipSlot: (slot: EquipmentSlot) => void;
+  equipItemToHero: (heroId: string, instanceId: number) => void;
+  unequipHeroSlot: (heroId: string, slot: EquipmentSlot) => void;
   sellItem: (instanceId: number) => void;
   starUpEquipment: (instanceId: number) => void;
   unlockHero: (heroId: string) => void;
@@ -192,13 +190,13 @@ export const useGameStore = create<GameStore>((set) => ({
       set(snapshotGameState(gameState));
     }
   },
-  equipItem: (instanceId) => {
-    if (equipItemInEngine(gameState, instanceId)) {
+  equipItemToHero: (heroId, instanceId) => {
+    if (equipItemToHeroInEngine(gameState, heroId, instanceId)) {
       set(snapshotGameState(gameState));
     }
   },
-  unequipSlot: (slot) => {
-    if (unequipSlotInEngine(gameState, slot)) {
+  unequipHeroSlot: (heroId, slot) => {
+    if (unequipHeroSlotInEngine(gameState, heroId, slot)) {
       set(snapshotGameState(gameState));
     }
   },

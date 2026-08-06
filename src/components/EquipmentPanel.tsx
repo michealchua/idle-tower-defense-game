@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import {
   equipmentRarities,
+  equipmentSets,
   getEquipmentMainStatValue,
   getEquipmentStarUpCost,
   legendaryEffects,
@@ -14,7 +15,7 @@ import { t } from '../locales/i18n';
 import { useGameStore } from '../store/useGameStore';
 import Accordion from './Accordion';
 
-const SLOT_IDS: EquipmentSlot[] = ['weapon', 'armor', 'trinket'];
+export const SLOT_IDS: EquipmentSlot[] = ['weapon', 'armor', 'trinket', 'boots'];
 const RARITY_IDS: EquipmentRarity[] = ['white', 'green', 'blue', 'purple', 'gold', 'red', 'rainbow'];
 const RARITY_RANK: Record<EquipmentRarity, number> = Object.fromEntries(
   RARITY_IDS.map((rarity, index) => [rarity, index]),
@@ -24,16 +25,18 @@ type SlotFilter = 'all' | EquipmentSlot;
 type RarityFilter = 'all' | EquipmentRarity;
 type SortMode = 'newest' | 'rarity' | 'star';
 
-const SLOT_LABEL_KEYS: Record<EquipmentSlot, string> = {
+export const SLOT_LABEL_KEYS: Record<EquipmentSlot, string> = {
   weapon: 'equipment.slotWeapon',
   armor: 'equipment.slotArmor',
   trinket: 'equipment.slotTrinket',
+  boots: 'equipment.slotBoots',
 };
 
-const SLOT_ICON: Record<EquipmentSlot, string> = {
+export const SLOT_ICON: Record<EquipmentSlot, string> = {
   weapon: '🗡️',
   armor: '🛡️',
   trinket: '💍',
+  boots: '👢',
 };
 
 const RARITY_LABEL_KEYS: Record<EquipmentRarity, string> = {
@@ -93,17 +96,18 @@ function itemTitle(item: EquipmentItem): string {
   return `${SLOT_ICON[item.slot]} ${rarity}${slot} ★${item.starLevel}/${MAX_STAR_LEVEL}`;
 }
 
-// Default view is just icon/name/main-stat/primary-button - the affix list
-// and legendary-effect blurb (secondary, only matters once you're deciding
-// between two similar items) fold into the Accordion instead of always
-// taking up card space.
-function ItemCard({ item, actions, labelPrefix }: { item: EquipmentItem; actions: ReactNode; labelPrefix?: string }) {
+// Default view is just icon/name/main-stat/primary-button - the affix list,
+// legendary-effect blurb, and set name (secondary, only matters once you're
+// deciding between two similar items) fold into the Accordion instead of
+// always taking up card space. Exported so HeroPanel's per-hero equipment
+// slots can render the exact same card instead of duplicating this markup.
+export function ItemCard({ item, actions, labelPrefix }: { item: EquipmentItem; actions: ReactNode; labelPrefix?: string }) {
   const gold = useGameStore((state) => state.gold);
   const starUpEquipment = useGameStore((state) => state.starUpEquipment);
   const nextCost = getEquipmentStarUpCost(item.rarity, item.starLevel);
   const canStarUp = nextCost !== undefined && gold >= nextCost;
   const mainStatValue = getEquipmentMainStatValue(item.rarity, item.value, item.starLevel);
-  const hasSecondaryInfo = item.affixes.length > 0 || !!item.legendaryEffectId;
+  const hasSecondaryInfo = item.affixes.length > 0 || !!item.legendaryEffectId || !!item.setId;
 
   return (
     <div className={`mini-card ${RARITY_BORDER_CLASS[item.rarity]}`}>
@@ -114,6 +118,7 @@ function ItemCard({ item, actions, labelPrefix }: { item: EquipmentItem; actions
       <div className="mini-card-sub">
         {t(STAT_LABEL_KEYS[item.stat])} {formatStatBonus(item.stat, mainStatValue)}
       </div>
+      {item.setId && <div className="text-faint">{t(equipmentSets[item.setId].nameKey)}</div>}
       <div className="item-actions" style={{ marginTop: 6 }}>
         <button className="btn btn-sm" onClick={() => starUpEquipment(item.instanceId)} disabled={!nextCost || !canStarUp}>
           {nextCost ? `${t('star.upgrade')} (${nextCost}${t('battle.gold')})` : t('star.maxed')}
@@ -134,11 +139,11 @@ function ItemCard({ item, actions, labelPrefix }: { item: EquipmentItem; actions
   );
 }
 
+// Equipping now happens per-hero from HeroPanel's detail pane (each hero has
+// its own weapon/armor/trinket/boots loadout) - this panel is just the
+// shared unequipped-item pool: browse, star-up, and sell.
 function EquipmentPanel() {
-  const equipped = useGameStore((state) => state.equipped);
   const inventory = useGameStore((state) => state.inventory);
-  const equipItem = useGameStore((state) => state.equipItem);
-  const unequipSlot = useGameStore((state) => state.unequipSlot);
   const sellItem = useGameStore((state) => state.sellItem);
 
   const [slotFilter, setSlotFilter] = useState<SlotFilter>('all');
@@ -174,35 +179,8 @@ function EquipmentPanel() {
   return (
     <div>
       <div className="card">
-        <div className="card-title">{t('equipment.title')}</div>
-        <div className="card-grid-sm">
-          {SLOT_IDS.map((slot) => {
-            const item = equipped[slot];
-            return item ? (
-              <ItemCard
-                key={slot}
-                item={item}
-                labelPrefix={`${t(SLOT_LABEL_KEYS[slot])}: `}
-                actions={
-                  <button className="btn btn-sm" onClick={() => unequipSlot(slot)}>
-                    {t('equipment.unequip')}
-                  </button>
-                }
-              />
-            ) : (
-              <div key={slot} className="mini-card">
-                <div className="mini-card-name">
-                  {SLOT_ICON[slot]} {t(SLOT_LABEL_KEYS[slot])}
-                </div>
-                <div className="mini-card-sub">{t('equipment.empty')}</div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="card">
         <div className="card-title">{t('equipment.inventory')}</div>
+        <div className="card-subtitle">{t('equipment.equipHint')}</div>
 
         {inventory.length === 0 ? (
           <div className="empty-state">{t('equipment.inventoryEmpty')}</div>
@@ -254,14 +232,9 @@ function EquipmentPanel() {
                       key={item.instanceId}
                       item={item}
                       actions={
-                        <>
-                          <button className="btn btn-sm btn-primary" onClick={() => equipItem(item.instanceId)}>
-                            {t('equipment.equip')}
-                          </button>
-                          <button className="btn btn-sm btn-danger" onClick={() => sellItem(item.instanceId)}>
-                            {t('equipment.sell')} ({equipmentRarities[item.rarity].sellValue} {t('battle.gold')})
-                          </button>
-                        </>
+                        <button className="btn btn-sm btn-danger" onClick={() => sellItem(item.instanceId)}>
+                          {t('equipment.sell')} ({equipmentRarities[item.rarity].sellValue} {t('battle.gold')})
+                        </button>
                       }
                     />
                   ))}

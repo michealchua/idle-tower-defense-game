@@ -12,6 +12,8 @@ import { t } from '../locales/i18n';
 import { upgradeableStats, useGameStore } from '../store/useGameStore';
 import { useDeploySlotDrag } from './useDeploySlotDrag';
 import Accordion from './Accordion';
+import { ItemCard, SLOT_ICON, SLOT_IDS, SLOT_LABEL_KEYS } from './EquipmentPanel';
+import { getActiveSetBonuses, type EquipmentSlot } from '../data/equipmentConfig';
 
 const STAT_LABEL_KEYS: Record<UpgradeableStat, string> = {
   attackDamage: 'hero.attackDamage',
@@ -138,6 +140,104 @@ function heroLabel(definition: HeroDefinition): string {
   return `${t(RARITY_LABEL_KEYS[definition.rarity])}${definition.id.split('-')[1]}`;
 }
 
+// Per-hero gear (see HeroState.equipment) - 4 slots (weapon/armor/trinket/
+// boots), each either showing the equipped ItemCard (same card
+// EquipmentPanel's inventory list uses, with an unequip action instead of
+// sell) or, if empty, a dropdown of same-slot inventory items to equip
+// directly without leaving the hero's detail pane. Active set bonuses (see
+// equipmentConfig.getActiveSetBonuses) are listed below the slots.
+function HeroEquipmentSection({ heroId }: { heroId: string }) {
+  const hero = useGameStore((state) => state.heroes.find((candidate) => candidate.id === heroId));
+  const inventory = useGameStore((state) => state.inventory);
+  const equipItemToHero = useGameStore((state) => state.equipItemToHero);
+  const unequipHeroSlot = useGameStore((state) => state.unequipHeroSlot);
+
+  if (!hero) {
+    return null;
+  }
+
+  const activeSetBonuses = getActiveSetBonuses(hero.equipment);
+
+  return (
+    <div>
+      <div className="card-grid-sm">
+        {SLOT_IDS.map((slot: EquipmentSlot) => {
+          const item = hero.equipment[slot];
+          const slotInventory = inventory.filter((candidate) => candidate.slot === slot);
+
+          if (item) {
+            return (
+              <ItemCard
+                key={slot}
+                item={item}
+                labelPrefix={`${t(SLOT_LABEL_KEYS[slot])}: `}
+                actions={
+                  <button className="btn btn-sm" onClick={() => unequipHeroSlot(heroId, slot)}>
+                    {t('equipment.unequip')}
+                  </button>
+                }
+              />
+            );
+          }
+
+          return (
+            <div key={slot} className="mini-card">
+              <div className="mini-card-name">
+                {SLOT_ICON[slot]} {t(SLOT_LABEL_KEYS[slot])}
+              </div>
+              <div className="mini-card-sub">{t('equipment.empty')}</div>
+              {slotInventory.length > 0 && (
+                <select
+                  className="select"
+                  style={{ marginTop: 6 }}
+                  value=""
+                  onChange={(e) => {
+                    const instanceId = Number(e.target.value);
+                    if (instanceId) {
+                      equipItemToHero(heroId, instanceId);
+                    }
+                  }}
+                >
+                  <option value="" disabled>
+                    {t('equipment.equip')}
+                  </option>
+                  {slotInventory.map((candidate) => (
+                    <option key={candidate.instanceId} value={candidate.instanceId}>
+                      {t(RARITY_LABEL_KEYS[candidate.rarity])} ★{candidate.starLevel}/{MAX_STAR_LEVEL}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {activeSetBonuses.length > 0 && (
+        <div style={{ marginTop: 8 }}>
+          {activeSetBonuses.map(({ set, count, activeBonuses }) => (
+            <div key={set.id} style={{ marginTop: 4 }}>
+              <div className="text-faint">
+                {t(set.nameKey)} ({count}/4)
+              </div>
+              {activeBonuses.map((bonus) => (
+                <div key={bonus.count} className="item-detail">
+                  {bonus.count}
+                  {t('equipment.setPieceSuffix')}:{' '}
+                  {(Object.entries(bonus.statBonuses) as [UpgradeableStat, number][])
+                    .map(([stat, value]) => `${t(STAT_LABEL_KEYS[stat])} ${formatBonusValue(stat, value)}`)
+                    .join(' · ')}
+                  {bonus.specialEffectLabelKey && ` · ${t(bonus.specialEffectLabelKey)}`}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface Materials {
   epicSourceStone: number;
   legendarySourceStone: number;
@@ -233,6 +333,10 @@ function HeroDetail({
             : t('star.maxed')}
         </button>
       </div>
+
+      <Accordion title={t('equipment.heroSection')}>
+        <HeroEquipmentSection heroId={definition.id} />
+      </Accordion>
 
       <Accordion title={t('hero.skillsSection')}>
         {definition.skillUnlocks.map((unlock) => {

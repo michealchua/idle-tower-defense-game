@@ -1,6 +1,7 @@
 import { createHero } from '../entities/Hero';
 import { layoutHeroPositions } from '../../data/mapConfig';
 import { getMaxDeployedHeroes } from '../../data/castleConfig';
+import type { EquipmentSlot } from '../../data/equipmentConfig';
 import { recomputeHeroStats } from './HeroStatsSystem';
 import type { GameState } from '../types';
 
@@ -89,5 +90,50 @@ export function swapDeployedHeroes(state: GameState, heroIdA: string, heroIdB: s
   state.deployedHeroIds[indexA] = heroIdB;
   state.deployedHeroIds[indexB] = heroIdA;
   relayoutDeployedHeroes(state);
+  return true;
+}
+
+// Equipment is per-hero (see HeroState.equipment) - equipping pulls an item
+// out of the shared inventory pool and into this specific hero's slot,
+// bumping whatever was already there back into inventory. Star-up/sell/roll
+// stay hero-agnostic and live in EquipmentSystem.ts; only the "which hero
+// wears this" decision lives here alongside the rest of hero-state mutation.
+export function equipItemToHero(state: GameState, heroId: string, instanceId: number): boolean {
+  const hero = state.heroes.find((candidate) => candidate.id === heroId);
+  if (!hero) {
+    return false;
+  }
+
+  const index = state.inventory.findIndex((item) => item.instanceId === instanceId);
+  if (index === -1) {
+    return false;
+  }
+
+  const [item] = state.inventory.splice(index, 1);
+  const currentlyEquipped = hero.equipment[item.slot];
+  if (currentlyEquipped) {
+    state.inventory.push(currentlyEquipped);
+  }
+  hero.equipment[item.slot] = item;
+
+  recomputeHeroStats(state);
+  return true;
+}
+
+export function unequipHeroSlot(state: GameState, heroId: string, slot: EquipmentSlot): boolean {
+  const hero = state.heroes.find((candidate) => candidate.id === heroId);
+  if (!hero) {
+    return false;
+  }
+
+  const item = hero.equipment[slot];
+  if (!item) {
+    return false;
+  }
+
+  hero.equipment[slot] = null;
+  state.inventory.push(item);
+
+  recomputeHeroStats(state);
   return true;
 }

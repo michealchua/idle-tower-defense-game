@@ -1,10 +1,4 @@
-import {
-  equipmentDropConfig,
-  equipmentRarities,
-  getEquipmentStarUpCost,
-  rollEquipment,
-  type EquipmentSlot,
-} from '../../data/equipmentConfig';
+import { equipmentDropConfig, equipmentRarities, getEquipmentStarUpCost, rollEquipment } from '../../data/equipmentConfig';
 import { MAX_STAR_LEVEL } from '../../data/gachaConfig';
 import { recomputeHeroStats } from './HeroStatsSystem';
 import type { EquipmentItem, GameState } from '../types';
@@ -34,41 +28,9 @@ export function debugForceDropEquipment(state: GameState): EquipmentItem {
   return item;
 }
 
-// Equipment is one shared loadout applied to every deployed hero (see
-// HeroStatsSystem.computeEquipmentBonuses), so equip/unequip/sell just
-// mutate inventory/equipped and let recomputeHeroStats derive every hero's
-// stats fresh - no manual add/remove bonus or currentHp clamping here
-// anymore.
-export function equipItem(state: GameState, instanceId: number): boolean {
-  const index = state.inventory.findIndex((item) => item.instanceId === instanceId);
-  if (index === -1) {
-    return false;
-  }
-
-  const [item] = state.inventory.splice(index, 1);
-  const currentlyEquipped = state.equipped[item.slot];
-  if (currentlyEquipped) {
-    state.inventory.push(currentlyEquipped);
-  }
-  state.equipped[item.slot] = item;
-
-  recomputeHeroStats(state);
-  return true;
-}
-
-export function unequipSlot(state: GameState, slot: EquipmentSlot): boolean {
-  const item = state.equipped[slot];
-  if (!item) {
-    return false;
-  }
-
-  state.equipped[slot] = null;
-  state.inventory.push(item);
-
-  recomputeHeroStats(state);
-  return true;
-}
-
+// Equip/unequip are per-hero now - see HeroSystem.equipItemToHero/
+// unequipHeroSlot. Sell/star-up stay here since they don't care which hero
+// (if any) currently wears the item.
 export function sellItem(state: GameState, instanceId: number): boolean {
   const index = state.inventory.findIndex((item) => item.instanceId === instanceId);
   if (index === -1) {
@@ -81,15 +43,21 @@ export function sellItem(state: GameState, instanceId: number): boolean {
 }
 
 function findItemByInstanceId(state: GameState, instanceId: number): EquipmentItem | undefined {
-  return (
-    state.inventory.find((item) => item.instanceId === instanceId) ??
-    Object.values(state.equipped).find((item) => item?.instanceId === instanceId) ??
-    undefined
-  );
+  const inInventory = state.inventory.find((item) => item.instanceId === instanceId);
+  if (inInventory) {
+    return inInventory;
+  }
+  for (const hero of state.heroes) {
+    const equipped = Object.values(hero.equipment).find((item) => item?.instanceId === instanceId);
+    if (equipped) {
+      return equipped;
+    }
+  }
+  return undefined;
 }
 
-// Works on both equipped and inventory items - star level is a property of
-// the item instance, not of where it's currently stored.
+// Works on both equipped (by any hero) and inventory items - star level is a
+// property of the item instance, not of where it's currently stored.
 export function starUpEquipment(state: GameState, instanceId: number): boolean {
   const item = findItemByInstanceId(state, instanceId);
   if (!item || item.starLevel >= MAX_STAR_LEVEL) {
@@ -105,8 +73,8 @@ export function starUpEquipment(state: GameState, instanceId: number): boolean {
   state.goldSpentTotal += cost;
   item.starLevel += 1;
 
-  if (state.equipped[item.slot]?.instanceId === instanceId) {
-    recomputeHeroStats(state);
-  }
+  // Cheap either way - simpler than checking whether this specific item is
+  // currently equipped on some hero before deciding to recompute.
+  recomputeHeroStats(state);
   return true;
 }

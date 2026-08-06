@@ -1,6 +1,6 @@
 import type { UpgradeableStat } from '../data/heroConfig';
 import type { EnemyArchetypeId } from '../data/enemyArchetypes';
-import type { EquipmentAffix, EquipmentRarity, EquipmentSlot } from '../data/equipmentConfig';
+import type { EquipmentAffix, EquipmentRarity, EquipmentSetId, EquipmentSlot } from '../data/equipmentConfig';
 import type { BossKind } from '../data/waveConfig';
 import type { AscensionShopId } from '../data/ascensionShopConfig';
 import type { PityPoolId } from '../data/pityConfig';
@@ -50,6 +50,11 @@ export interface HeroState {
   // AscensionSystem.ascend.
   upgrades: Record<UpgradeableStat, number>;
   position: Position;
+  // Per-hero gear, one item per slot - each hero has their own independent
+  // loadout, replacing the old GameState-level shared `equipped` map (see
+  // EquipmentSystem.ts/HeroSystem.ts). Set on createHero, mutated only by
+  // HeroSystem.equipItemToHero/unequipHeroSlot.
+  equipment: Record<EquipmentSlot, EquipmentItem | null>;
 }
 
 export interface PetState {
@@ -147,6 +152,10 @@ export interface EquipmentItem {
   starLevel: number;
   affixes: EquipmentAffix[];
   legendaryEffectId?: string;
+  // Which 套装 (equipment set) this item belongs to, if any - see
+  // equipmentConfig.equipmentSets/getActiveSetBonuses. Only blue+ rarity
+  // items can roll one.
+  setId?: EquipmentSetId;
 }
 
 export type VisualEffectKind =
@@ -267,7 +276,8 @@ export interface GameState {
   visualEffects: VisualEffect[];
   nextVisualEffectId: number;
   spawnCooldownRemaining: number;
+  // Unequipped items only - equipped gear lives on the owning hero's own
+  // HeroState.equipment instead (see EquipmentSystem.ts/HeroSystem.ts).
   inventory: EquipmentItem[];
-  equipped: Record<EquipmentSlot, EquipmentItem | null>;
   nextEquipmentInstanceId: number;
 }

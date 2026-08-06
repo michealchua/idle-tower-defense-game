@@ -26,6 +26,7 @@ export function createHero(heroId: string, position: Position): HeroState {
     skills: {},
     upgrades: createInitialHeroUpgrades(),
     position: { ...position },
+    equipment: { weapon: null, armor: null, trinket: null, boots: null },
   };
 }
 
