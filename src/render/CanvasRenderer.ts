@@ -734,7 +734,27 @@ function advanceBackgroundScroll(hasActiveEncounter: boolean, nowMs: number): vo
   }
 }
 
-function drawBackground(ctx: CanvasRenderingContext2D, canvasWidth: number, canvasHeight: number, biome: BiomeDefinition): void {
+// Exported so BattleScreen can call this directly at full device-pixel
+// resolution (canvas.width x canvas.height), at the identity transform,
+// *before* it applies the scale+offset transform that confines everything
+// else (renderScene's entities, effects, tower) to the fixed 400x300 logical
+// letterbox box. Previously this only ever ran inside renderScene, i.e.
+// already inside that letterboxed transform - the background was cover-fit
+// correctly, but only within the scaled sub-rectangle, so any viewport whose
+// aspect ratio wasn't 4:3 showed solid-color letterbox bars (BattleScreen's
+// old fillRect) outside it instead of background. Calling this once against
+// the real canvas dimensions before the letterbox transform is what actually
+// makes the image cover the full screen edge-to-edge on any aspect ratio -
+// the cover-fit math below was already correct, it just needed the right
+// dimensions and the right transform to run in.
+//
+// hasActiveEncounter drives the same "pause the march while fighting" scroll
+// behavior as before - folded in here (rather than left as a separate call
+// in renderScene) since this is now the sole place background-related state
+// is touched per frame.
+export function drawBackground(ctx: CanvasRenderingContext2D, canvasWidth: number, canvasHeight: number, biome: BiomeDefinition, hasActiveEncounter: boolean): void {
+  advanceBackgroundScroll(hasActiveEncounter, performance.now());
+
   const image = getImage(biome.backgroundImage);
   if (!image) {
     ctx.fillStyle = biome.fallbackColor;
@@ -742,12 +762,13 @@ function drawBackground(ctx: CanvasRenderingContext2D, canvasWidth: number, canv
     return;
   }
 
-  // "Cover" fit (like CSS background-size: cover), not a plain stretch -
-  // source art is 1920x1080 (16:9) while the logical canvas is 400x300
-  // (4:3), so an independent x/y stretch would visibly squash it. Scale
-  // uniformly to fill the canvas height completely; unlike the old static
-  // draw this no longer centers horizontally, since the tiling loop below
-  // needs the full drawWidth to repeat edge-to-edge.
+  // "Cover" fit (like CSS object-fit: cover), not a plain stretch - scale
+  // uniformly (never independent x/y) so the image is never squashed,
+  // cropping whichever axis overflows. Fed the real canvas dimensions (see
+  // doc comment above), this fills every pixel of whatever the actual screen
+  // aspect ratio is, not just a fixed 4:3 sub-rectangle - unlike the old
+  // static draw this no longer centers horizontally either, since the tiling
+  // loop below needs the full drawWidth to repeat edge-to-edge.
   const scale = Math.max(canvasWidth / image.width, canvasHeight / image.height);
   const drawWidth = image.width * scale;
   const drawHeight = image.height * scale;
@@ -826,11 +847,17 @@ export function drawSwapGhost(ctx: CanvasRenderingContext2D, kind: 'hero' | 'pet
 // entirely avoids paying for it every frame once a shake has mostly decayed.
 const SCREEN_SHAKE_MIN_INTENSITY = 0.05;
 
+// Draws everything confined to the fixed 400x300 logical letterbox box
+// (tower, heroes, pets, enemies, visual effects) - the background is no
+// longer this function's concern, see drawBackground's doc comment for why
+// it moved to its own call at a different transform/resolution entirely.
+// This also means no clearRect here: drawBackground already repaints every
+// pixel of the canvas every frame (real image or fallback color, either way
+// fully opaque), so clearing this sub-region first would just erase the
+// background BattleScreen already drew there a moment ago before entities
+// get a chance to draw on top of it.
 export function renderScene(
   ctx: CanvasRenderingContext2D,
-  canvasWidth: number,
-  canvasHeight: number,
-  biome: BiomeDefinition,
   heroes: HeroState[],
   pets: PetState[],
   enemies: EnemyState[],
@@ -840,12 +867,6 @@ export function renderScene(
 ): void {
   const nowMs = performance.now();
   const nowSeconds = nowMs / 1000;
-  advanceBackgroundScroll(enemies.length > 0, nowMs);
-
-  // clearRect runs at the un-shaken transform so the full canvas is always
-  // wiped regardless of this frame's jitter offset - only the actual scene
-  // contents below get displaced.
-  ctx.clearRect(0, 0, canvasWidth, canvasHeight);
 
   // Resizing the canvas element (BattleScreen's ResizeObserver) resets all
   // context state, including this - set on every frame rather than once, so
@@ -864,8 +885,6 @@ export function renderScene(
       (Math.random() * 2 - 1) * screenShakeIntensity,
     );
   }
-
-  drawBackground(ctx, canvasWidth, canvasHeight, biome);
 
   const towerSprite = getImage(getTowerSpriteSrc());
   if (towerSprite) {

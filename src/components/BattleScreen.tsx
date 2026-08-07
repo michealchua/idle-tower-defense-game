@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
 import { ensureGameLoopStarted, ensureAutosaveStarted, useGameStore } from '../store/useGameStore';
-import { renderScene, drawDeploySlots, drawSwapHighlight, drawSwapGhost, preloadBattleSprites, HERO_RADIUS } from '../render/CanvasRenderer';
+import { renderScene, drawBackground, drawDeploySlots, drawSwapHighlight, drawSwapGhost, preloadBattleSprites, HERO_RADIUS } from '../render/CanvasRenderer';
 import { t } from '../locales/i18n';
 import { getNormalWaveEnemyCount } from '../data/waveConfig';
 import { getBiomeForChapter, bossMusicTracks } from '../data/biomeConfig';
@@ -189,12 +189,17 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
     }
 
     // Render at native device resolution (crisp on high-DPI screens) while
-    // every draw call still targets the fixed CANVAS_WIDTH/CANVAS_HEIGHT
-    // coordinate space. .canvas-stage fills the whole viewport (see
-    // index.css) instead of a 4:3 letterboxed box, so its aspect ratio can
-    // differ wildly from the game world's - a uniform scale (not
-    // independent x/y stretch) plus centering keeps the world undistorted,
-    // with the leftover space filled as letterbox bars instead of stretched.
+    // every entity/effect draw call still targets the fixed CANVAS_WIDTH/
+    // CANVAS_HEIGHT coordinate space. .canvas-stage fills the whole viewport
+    // (see index.css) instead of a 4:3 box, so its aspect ratio can differ
+    // wildly from the game world's - a uniform scale (not independent x/y
+    // stretch) plus centering keeps the world undistorted rather than
+    // stretched. The background is the one thing that does NOT go through
+    // this scale/letterbox transform - see drawBackground's doc comment for
+    // why: drawn here first, at the identity transform and the real
+    // pixelWidth/pixelHeight, it cover-fits the actual screen edge-to-edge
+    // (any leftover margin around the letterboxed entity layer is real
+    // background, not a solid color bar).
     const devicePixelRatio = window.devicePixelRatio || 1;
     const pixelWidth = Math.round(displaySize.width * devicePixelRatio);
     const pixelHeight = Math.round(displaySize.height * devicePixelRatio);
@@ -206,15 +211,15 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
     }
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = '#0f1117';
-    ctx.fillRect(0, 0, pixelWidth, pixelHeight);
+    ctx.imageSmoothingEnabled = false;
+    drawBackground(ctx, pixelWidth, pixelHeight, biome, enemies.length > 0);
 
     const scale = Math.min(pixelWidth / CANVAS_WIDTH, pixelHeight / CANVAS_HEIGHT);
     const offsetX = (pixelWidth - CANVAS_WIDTH * scale) / 2;
     const offsetY = (pixelHeight - CANVAS_HEIGHT * scale) / 2;
     ctx.setTransform(scale, 0, 0, scale, offsetX, offsetY);
 
-    renderScene(ctx, CANVAS_WIDTH, CANVAS_HEIGHT, biome, heroes, pets, enemies, base, visualEffects, screenShakeIntensity);
+    renderScene(ctx, heroes, pets, enemies, base, visualEffects, screenShakeIntensity);
 
     if (dragPreviewKind === 'hero') {
       drawDeploySlots(ctx, layoutHeroPositions(getMaxDeployedHeroes(castleLevel)), heroes.length);
