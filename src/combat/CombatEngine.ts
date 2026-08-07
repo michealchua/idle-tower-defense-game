@@ -2,7 +2,7 @@ import { MechanicTag } from '../data/skills/skillTypes';
 import { BattleHero } from './BattleHero';
 import { BattleEnemy } from './BattleEnemy';
 import type { SkillAction } from './SkillAction';
-import { cellKey, type GridCell } from './gridConfig';
+import { cellKey, isPathCell, type GridCell } from './gridConfig';
 
 /** Armor-formula constant: actualDamage = rawDamage * (ARMOR_CONSTANT / (ARMOR_CONSTANT + defense)). */
 const ARMOR_CONSTANT = 100;
@@ -23,6 +23,8 @@ export interface CombatEngineCallbacks {
   onDamageDealt?: (event: DamageDealtEvent) => void;
   /** Fired once per enemy the instant its HP hits 0, before it's dropped from the engine. */
   onEnemyDefeated?: (enemy: BattleEnemy) => void;
+  /** Fired once per enemy that walks past ENEMY_PATH's final waypoint - not a kill (no reward), just "it got through". A future base-HP system reacts here instead of anything in this engine. */
+  onEnemyReachedEnd?: (enemy: BattleEnemy) => void;
 }
 
 /**
@@ -62,8 +64,9 @@ export class CombatEngine {
     this.addHero(hero);
   }
 
+  /** True if a hero already sits at (col, row), or the cell lies on ENEMY_PATH - the enemy route counts as permanently occupied so it can never be built on. */
   isCellOccupied(col: number, row: number): boolean {
-    return this.occupiedCells.has(cellKey(col, row));
+    return isPathCell(col, row) || this.occupiedCells.has(cellKey(col, row));
   }
 
   addEnemy(enemy: BattleEnemy): void {
@@ -106,7 +109,7 @@ export class CombatEngine {
       this.resolveSkillAction(hero, action, aliveEnemies);
     }
 
-    this.cleanupDefeatedEnemies();
+    this.cleanupRemovedEnemies();
   }
 
   private resolveSkillAction(caster: BattleHero, action: SkillAction, aliveEnemies: BattleEnemy[]): void {
@@ -150,11 +153,15 @@ export class CombatEngine {
     return actualDamage;
   }
 
-  private cleanupDefeatedEnemies(): void {
+  /** Drops both enemies that died to damage this tick (onEnemyDefeated, with reward) and enemies that walked past the path's end (onEnemyReachedEnd, no reward) - the two are mutually exclusive per enemy since reaching the end doesn't zero its HP. */
+  private cleanupRemovedEnemies(): void {
     for (const [instanceId, enemy] of this.enemies) {
       if (!enemy.isAlive) {
         this.enemies.delete(instanceId);
         this.callbacks.onEnemyDefeated?.(enemy);
+      } else if (enemy.hasReachedEnd) {
+        this.enemies.delete(instanceId);
+        this.callbacks.onEnemyReachedEnd?.(enemy);
       }
     }
   }

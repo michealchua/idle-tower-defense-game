@@ -11,6 +11,8 @@ const WAVE_DELAY_SECONDS = 2;
 export interface GameManagerCallbacks {
   onDamageDealt?: (event: DamageDealtEvent) => void;
   onEnemyDefeated?: (enemy: BattleEnemy, goldGained: number, expGained: number) => void;
+  /** An enemy walked past ENEMY_PATH's final waypoint uncontested - no reward, no penalty yet either (base HP doesn't exist yet; this is the seam a future "base takes damage" system hooks into). */
+  onEnemyReachedEnd?: (enemy: BattleEnemy) => void;
   onWaveComplete?: (waveId: string, nextDelaySeconds: number) => void;
   onWaveStart?: (config: WaveConfig, waveIndex: number) => void;
 }
@@ -53,6 +55,7 @@ export class GameManager {
     this.combatEngine = new CombatEngine({
       onDamageDealt: (event) => this.callbacks.onDamageDealt?.(event),
       onEnemyDefeated: (enemy) => this.handleEnemyDefeated(enemy),
+      onEnemyReachedEnd: (enemy) => this.callbacks.onEnemyReachedEnd?.(enemy),
     });
     this.waveManager = new WaveManager(this.combatEngine);
   }

@@ -58,3 +58,53 @@ export function gridCellCenter(col: number, row: number): { x: number; y: number
 export function gridCellTopLeft(col: number, row: number): { x: number; y: number } {
   return { x: GRID_OFFSET_X + col * CELL_SIZE, y: GRID_OFFSET_Y + row * CELL_SIZE };
 }
+
+// --- Enemy waypoint path -------------------------------------------------
+//
+// A classic "Z" route: enters at the left edge, runs right, drops down,
+// then runs right again to exit at the right edge - two corners (the
+// middle two waypoints), well clear of the grid's col/row bounds
+// (GRID_COLS=16 -> valid cols 0-15, GRID_ROWS=9 -> valid rows 0-8).
+export const ENEMY_PATH: readonly GridCell[] = [
+  { col: 0, row: 2 },
+  { col: 5, row: 2 },
+  { col: 5, row: 6 },
+  { col: 15, row: 6 },
+];
+
+/**
+ * Walks ENEMY_PATH's waypoints and fills in every grid cell actually
+ * crossed between each consecutive pair (not just the waypoints
+ * themselves) - what both "which cells does the path visually cover" (grid
+ * rendering) and "which cells are blocked for hero placement" (occupancy)
+ * actually need. Assumes each waypoint-to-waypoint segment is axis-aligned
+ * (pure horizontal or pure vertical), which is how ENEMY_PATH above is
+ * authored - a diagonal segment would need real interpolation, not this
+ * unit-step walk.
+ */
+function expandPathToCells(waypoints: readonly GridCell[]): GridCell[] {
+  const cells: GridCell[] = [waypoints[0]];
+  for (let i = 1; i < waypoints.length; i += 1) {
+    const from = waypoints[i - 1];
+    const to = waypoints[i];
+    const stepCol = Math.sign(to.col - from.col);
+    const stepRow = Math.sign(to.row - from.row);
+
+    let { col, row } = from;
+    while (col !== to.col || row !== to.row) {
+      col += stepCol;
+      row += stepRow;
+      cells.push({ col, row });
+    }
+  }
+  return cells;
+}
+
+export const ENEMY_PATH_CELLS: readonly GridCell[] = expandPathToCells(ENEMY_PATH);
+
+const ENEMY_PATH_CELL_KEYS = new Set(ENEMY_PATH_CELLS.map((cell) => cellKey(cell.col, cell.row)));
+
+/** True for every cell ENEMY_PATH actually crosses (not just its waypoints) - CombatEngine.isCellOccupied treats these as permanently occupied so heroes can never be placed on the enemy route. */
+export function isPathCell(col: number, row: number): boolean {
+  return ENEMY_PATH_CELL_KEYS.has(cellKey(col, row));
+}

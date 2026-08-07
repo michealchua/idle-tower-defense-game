@@ -38,6 +38,12 @@ const gameManager = new GameManager(
     onWaveComplete: (waveId, delaySeconds) => {
       waveLabel = `${waveId} 已完成，${delaySeconds}s 后进入下一波`;
     },
+    // No base HP yet (see GameManagerCallbacks doc comment) - just surfaced
+    // in the HUD so this step's path-walking is visibly confirmable end to
+    // end without needing to watch enemy HP bars for a kill instead.
+    onEnemyReachedEnd: (enemy) => {
+      showMessage(`${enemy.archetypeId} 突破了路径终点！`);
+    },
   },
   { startingGold: STARTING_GOLD },
 );

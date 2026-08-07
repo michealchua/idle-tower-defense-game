@@ -2,7 +2,19 @@ import type { GameManager } from '../combat/GameManager';
 import type { BattleHero } from '../combat/BattleHero';
 import type { BattleEnemy } from '../combat/BattleEnemy';
 import { heroCatalog } from '../combat/heroCatalog';
-import { CELL_SIZE, GRID_COLS, GRID_ROWS, GRID_OFFSET_X, GRID_OFFSET_Y, GRID_WIDTH, GRID_HEIGHT } from '../combat/gridConfig';
+import {
+  CELL_SIZE,
+  GRID_COLS,
+  GRID_ROWS,
+  GRID_OFFSET_X,
+  GRID_OFFSET_Y,
+  GRID_WIDTH,
+  GRID_HEIGHT,
+  ENEMY_PATH,
+  ENEMY_PATH_CELLS,
+  gridCellCenter,
+  gridCellTopLeft,
+} from '../combat/gridConfig';
 import type { InputManager } from '../input/InputManager';
 import { getImage, getEnemySpriteSrc, getHeroSpriteSrc } from './assetLoader';
 
@@ -16,13 +28,14 @@ const OCCUPIED_PLACEHOLDER_COLOR = '#ef4444';
 const FREE_PLACEHOLDER_COLOR = '#3b82f6';
 const GRID_LINE_COLOR = 'rgba(255, 255, 255, 0.12)';
 
-const ENEMY_ROW_Y = 300;
-const ENEMY_START_X = 560;
-const ENEMY_SPACING = 150;
-const ENEMY_SIZE = 110;
+const ENEMY_SIZE = CELL_SIZE * 0.75;
 
 const HP_BAR_HEIGHT = 8;
 const HP_BAR_OFFSET_Y = 10;
+
+const PATH_TINT_COLOR = 'rgba(139, 111, 78, 0.4)';
+const PATH_LINE_COLOR = 'rgba(255, 235, 180, 0.85)';
+const PATH_ARROW_SIZE = 12;
 
 // Matches CanvasRenderer's SPRITE_SHEET_CONFIG convention: hero/enemy sheets
 // dropped into public/sprites/ are laid out as 32x32 cells (row 0 = walk).
@@ -64,14 +77,16 @@ export class GameRenderer {
   render(): void {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     this.drawBackground();
+    this.drawEnemyPath();
     this.drawGridLines();
 
     for (const hero of this.gameManager.combatEngine.getHeroes()) {
       this.drawHero(hero);
     }
 
-    const enemies = this.gameManager.combatEngine.getAliveEnemies();
-    enemies.forEach((enemy, index) => this.drawEnemy(enemy, index));
+    for (const enemy of this.gameManager.combatEngine.getAliveEnemies()) {
+      this.drawEnemy(enemy);
+    }
 
     this.drawBuildModePlaceholder();
   }
@@ -84,6 +99,56 @@ export class GameRenderer {
       this.ctx.fillStyle = '#1a1a1a';
       this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     }
+  }
+
+  /**
+   * Tints every cell ENEMY_PATH_CELLS covers (not just the waypoints - the
+   * straight runs between them too) so the player can see exactly which
+   * ground enemies walk on, then overlays a dashed centerline through the
+   * waypoints with an arrowhead at the exit, showing direction of travel.
+   * Drawn as part of the background pass, under the grid lines/entities.
+   */
+  private drawEnemyPath(): void {
+    this.ctx.save();
+    this.ctx.fillStyle = PATH_TINT_COLOR;
+    for (const cell of ENEMY_PATH_CELLS) {
+      const { x, y } = gridCellTopLeft(cell.col, cell.row);
+      this.ctx.fillRect(x, y, CELL_SIZE, CELL_SIZE);
+    }
+    this.ctx.restore();
+
+    this.ctx.save();
+    this.ctx.strokeStyle = PATH_LINE_COLOR;
+    this.ctx.lineWidth = 3;
+    this.ctx.setLineDash([10, 6]);
+    this.ctx.beginPath();
+    ENEMY_PATH.forEach((waypoint, index) => {
+      const center = gridCellCenter(waypoint.col, waypoint.row);
+      if (index === 0) {
+        this.ctx.moveTo(center.x, center.y);
+      } else {
+        this.ctx.lineTo(center.x, center.y);
+      }
+    });
+    this.ctx.stroke();
+    this.ctx.setLineDash([]);
+
+    const exitFrom = gridCellCenter(ENEMY_PATH[ENEMY_PATH.length - 2].col, ENEMY_PATH[ENEMY_PATH.length - 2].row);
+    const exitTo = gridCellCenter(ENEMY_PATH[ENEMY_PATH.length - 1].col, ENEMY_PATH[ENEMY_PATH.length - 1].row);
+    this.drawArrowHead(exitFrom, exitTo);
+    this.ctx.restore();
+  }
+
+  /** Filled triangle at `to`, pointing along the from->to direction - the "which way do enemies travel" indicator at the path's exit. */
+  private drawArrowHead(from: { x: number; y: number }, to: { x: number; y: number }): void {
+    const angle = Math.atan2(to.y - from.y, to.x - from.x);
+    this.ctx.fillStyle = PATH_LINE_COLOR;
+    this.ctx.beginPath();
+    this.ctx.moveTo(to.x, to.y);
+    this.ctx.lineTo(to.x - PATH_ARROW_SIZE * Math.cos(angle - Math.PI / 6), to.y - PATH_ARROW_SIZE * Math.sin(angle - Math.PI / 6));
+    this.ctx.lineTo(to.x - PATH_ARROW_SIZE * Math.cos(angle + Math.PI / 6), to.y - PATH_ARROW_SIZE * Math.sin(angle + Math.PI / 6));
+    this.ctx.closePath();
+    this.ctx.fill();
   }
 
   /** Faint debug/placement-aid grid overlay - purely visual, doesn't affect worldToGridCell's own math (see gridConfig.ts). */
@@ -162,12 +227,14 @@ export class GameRenderer {
     this.drawLabel(label, snap.worldPosition.x, topLeftY + HERO_SIZE + 14, occupied ? OCCUPIED_PLACEHOLDER_COLOR : undefined);
   }
 
-  private drawEnemy(enemy: BattleEnemy, index: number): void {
-    const x = ENEMY_START_X + index * ENEMY_SPACING;
-    const y = ENEMY_ROW_Y;
-    this.drawSprite(getEnemySpriteSrc(enemy.archetypeId), x, y, ENEMY_SIZE, '#dc2626');
-    this.drawHpBar(x, y, ENEMY_SIZE, enemy.currentHp, enemy.maxHp);
-    this.drawLabel(enemy.archetypeId, x + ENEMY_SIZE / 2, y + ENEMY_SIZE + 14);
+  // BattleEnemy.x/y (see BattleEnemy.moveAlongPath) are the enemy's center
+  // point, same top-left-offset convention as drawHero.
+  private drawEnemy(enemy: BattleEnemy): void {
+    const topLeftX = enemy.x - ENEMY_SIZE / 2;
+    const topLeftY = enemy.y - ENEMY_SIZE / 2;
+    this.drawSprite(getEnemySpriteSrc(enemy.archetypeId), topLeftX, topLeftY, ENEMY_SIZE, '#dc2626');
+    this.drawHpBar(topLeftX, topLeftY, ENEMY_SIZE, enemy.currentHp, enemy.maxHp);
+    this.drawLabel(enemy.archetypeId, enemy.x, topLeftY + ENEMY_SIZE + 14);
   }
 
   /**
