@@ -4,3 +4,4 @@ export * from './BattleEnemy';
 export * from './CombatEngine';
 export * from './EnemyFactory';
 export * from './WaveManager';
+export * from './GameManager';
