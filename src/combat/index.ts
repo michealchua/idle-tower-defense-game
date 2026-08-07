@@ -9,4 +9,5 @@ export * from './WaveManager';
 export * from './sampleLevelConfig';
 export * from './GameManager';
 export * from './heroCatalog';
+export * from './heroEvolution';
 export * from './gridConfig';

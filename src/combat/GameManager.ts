@@ -4,6 +4,7 @@ import type { LevelConfig, WaveConfig } from './WaveConfig';
 import type { BattleHero } from './BattleHero';
 import type { BattleEnemy } from './BattleEnemy';
 import { heroCatalog, createBattleHeroFromCatalog } from './heroCatalog';
+import { heroEvolutions } from './heroEvolution';
 import { gridCellCenter, type GridCell } from './gridConfig';
 
 /** Coarse run state - GameManager.update becomes a no-op the instant this leaves Playing, and tryPlaceHero starts rejecting every request. */
@@ -41,6 +42,17 @@ export interface GameManagerOptions {
 export type PlaceHeroResult =
   | { success: true; hero: BattleHero }
   | { success: false; reason: 'unknown_hero_type' | 'insufficient_gold' | 'cell_occupied' | 'game_over' };
+
+export type UpgradeHeroResult =
+  | { success: true; hero: BattleHero }
+  | { success: false; reason: 'game_over' | 'unknown_hero' | 'insufficient_gold' };
+
+export type EvolveHeroResult =
+  | { success: true; hero: BattleHero }
+  | {
+      success: false;
+      reason: 'game_over' | 'unknown_hero' | 'already_evolved' | 'no_evolution_available' | 'level_too_low' | 'unknown_evolution_option' | 'insufficient_gold';
+    };
 
 /**
  * Top-level orchestrator that owns the run's CombatEngine + WaveManager and
@@ -131,6 +143,81 @@ export class GameManager {
     this.gold -= entry.cost;
     const hero = createBattleHeroFromCatalog(entry, gridCellCenter(cell.col, cell.row));
     this.combatEngine.addHeroAtCell(hero, cell);
+    return { success: true, hero };
+  }
+
+  /**
+   * Validates the run state, that `heroInstanceId` names a hero actually
+   * on the field, and current gold against BattleHero.getUpgradeCost() -
+   * in that order, gold last, so a rejected upgrade never costs anything.
+   * Only once every check passes does it deduct cost and call
+   * hero.upgrade(). Same typed-result-over-thrown-error pattern as
+   * tryPlaceHero.
+   */
+  tryUpgradeHero(heroInstanceId: string): UpgradeHeroResult {
+    if (this.isRunOver) {
+      return { success: false, reason: 'game_over' };
+    }
+
+    const hero = this.combatEngine.getHero(heroInstanceId);
+    if (!hero) {
+      return { success: false, reason: 'unknown_hero' };
+    }
+
+    const cost = hero.getUpgradeCost();
+    if (this.gold < cost) {
+      return { success: false, reason: 'insufficient_gold' };
+    }
+
+    this.gold -= cost;
+    hero.upgrade();
+    return { success: true, hero };
+  }
+
+  /**
+   * Validates, in order: run state, that `heroInstanceId` names a hero on
+   * the field, that it hasn't already evolved, that heroEvolutions even
+   * has an entry for its heroTypeId, that its level meets that entry's
+   * requiredLevel, that `evolutionOptionId` names one of that entry's
+   * actual options, and finally that there's enough gold for that
+   * option's cost - gold checked dead last, same "never charge for a
+   * rejected action" rule tryPlaceHero/tryUpgradeHero already follow. Only
+   * once everything passes does it deduct cost and call hero.evolveInto.
+   */
+  tryEvolveHero(heroInstanceId: string, evolutionOptionId: string): EvolveHeroResult {
+    if (this.isRunOver) {
+      return { success: false, reason: 'game_over' };
+    }
+
+    const hero = this.combatEngine.getHero(heroInstanceId);
+    if (!hero) {
+      return { success: false, reason: 'unknown_hero' };
+    }
+
+    if (hero.evolvedInto) {
+      return { success: false, reason: 'already_evolved' };
+    }
+
+    const evolutionConfig = heroEvolutions[hero.heroTypeId];
+    if (!evolutionConfig) {
+      return { success: false, reason: 'no_evolution_available' };
+    }
+
+    if (hero.level < evolutionConfig.requiredLevel) {
+      return { success: false, reason: 'level_too_low' };
+    }
+
+    const option = evolutionConfig.options.find((candidate) => candidate.id === evolutionOptionId);
+    if (!option) {
+      return { success: false, reason: 'unknown_evolution_option' };
+    }
+
+    if (this.gold < option.cost) {
+      return { success: false, reason: 'insufficient_gold' };
+    }
+
+    this.gold -= option.cost;
+    hero.evolveInto(option);
     return { success: true, hero };
   }
 

@@ -19,7 +19,7 @@ import {
   gridCellTopLeft,
 } from '../combat/gridConfig';
 import type { InputManager } from '../input/InputManager';
-import { getImage, getEnemySpriteSrc, getHeroSpriteSrc } from './assetLoader';
+import { getImage, getEnemySpriteSrc, getHeroSpriteSrc, getHeroEvolvedSpriteSrc } from './assetLoader';
 
 const BACKGROUND_SRC = '/backgrounds/ancient-ruins.jpg';
 
@@ -60,6 +60,9 @@ const SLOW_STATUS_COLOR = '#60a5fa';
 const DOT_STATUS_COLOR = '#f97316';
 const DEFAULT_PROJECTILE_COLOR = '#e5e7eb';
 const STATUS_RING_RADIUS_OFFSET = 6;
+
+const SELECTION_RING_COLOR = '#facc15';
+const LEVEL_BADGE_COLOR = '#facc15';
 
 // Matches CanvasRenderer's SPRITE_SHEET_CONFIG convention: hero/enemy sheets
 // dropped into public/sprites/ are laid out as 32x32 cells (row 0 = walk).
@@ -296,9 +299,40 @@ export class GameRenderer {
   private drawHero(hero: BattleHero): void {
     const topLeftX = hero.x - HERO_SIZE / 2;
     const topLeftY = hero.y - HERO_SIZE / 2;
-    this.drawSprite(getHeroSpriteSrc(hero.heroClass), topLeftX, topLeftY, HERO_SIZE, '#3b82f6');
+    // An evolved hero (hero.evolvedInto set, see BattleHero.evolveInto)
+    // draws from its dedicated evolved-branch sprite instead of the plain
+    // heroClass one - same fallback-to-class-sprite convention the old
+    // CanvasRenderer already established for the save-game hero system.
+    const spriteSrc = hero.evolvedInto ? getHeroEvolvedSpriteSrc(hero.evolvedInto) : getHeroSpriteSrc(hero.heroClass);
+    this.drawSprite(spriteSrc, topLeftX, topLeftY, HERO_SIZE, '#3b82f6');
     this.drawHpBar(topLeftX, topLeftY, HERO_SIZE, hero.stats.currentHp, hero.stats.maxHp);
-    this.drawLabel(hero.heroClass, hero.x, topLeftY + HERO_SIZE + 14);
+    this.drawLabel(hero.evolvedInto ?? hero.heroClass, hero.x, topLeftY + HERO_SIZE + 14);
+    this.drawLevelBadge(hero, topLeftX, topLeftY);
+    if (this.inputManager?.selectedHeroInstanceId === hero.instanceId) {
+      this.drawSelectionRing(hero);
+    }
+  }
+
+  /** Small "Lv.N" tag in the sprite's top-left corner - always visible (not just on hover/selection), since level is core to step 17's upgrade loop. */
+  private drawLevelBadge(hero: BattleHero, topLeftX: number, topLeftY: number): void {
+    this.ctx.save();
+    this.ctx.fillStyle = LEVEL_BADGE_COLOR;
+    this.ctx.font = 'bold 11px sans-serif';
+    this.ctx.textAlign = 'left';
+    this.ctx.fillText(`Lv.${hero.level}`, topLeftX, topLeftY - 2);
+    this.ctx.restore();
+  }
+
+  /** Dashed gold ring around whichever hero InputManager.selectedHeroInstanceId names - the visual half of step 17's "click a placed hero to select it" flow, purely reflecting state InputManager/main.ts already own. */
+  private drawSelectionRing(hero: BattleHero): void {
+    this.ctx.save();
+    this.ctx.strokeStyle = SELECTION_RING_COLOR;
+    this.ctx.lineWidth = 2;
+    this.ctx.setLineDash([5, 4]);
+    this.ctx.beginPath();
+    this.ctx.arc(hero.x, hero.y, HERO_SIZE / 2 + 6, 0, Math.PI * 2);
+    this.ctx.stroke();
+    this.ctx.restore();
   }
 
   /**

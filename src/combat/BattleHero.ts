@@ -1,6 +1,7 @@
 import type { SkillDefinition } from '../data/skills/skillTypes';
 import type { HeroClass, HeroInstance } from '../data/hero/heroTypes';
 import type { SkillAction } from './SkillAction';
+import type { EvolutionOption } from './heroEvolution';
 
 /**
  * Live, battle-scoped stats. Seeded from HeroInstance.currentStats but
@@ -16,28 +17,46 @@ export interface BattleHeroStats {
   currentCrit: number;
 }
 
+/** Gold cost of the *next* upgrade grows by this factor per level - level 1->2 costs BASE_UPGRADE_COST, level 2->3 costs BASE_UPGRADE_COST*this, etc. */
+const UPGRADE_COST_GROWTH_RATE = 1.35;
+const BASE_UPGRADE_COST = 30;
+/** Fractional stat growth applied on every upgrade() call - +12% compounding per level. currentCrit is deliberately excluded (see upgrade()'s doc comment). */
+const STAT_GROWTH_PER_LEVEL = 0.12;
+
 /**
  * Battlefield-facing wrapper around a HeroInstance. Owns everything that
- * only makes sense mid-battle (live HP/stat buffs, skill cooldowns) so the
- * persisted HeroInstance stays pure progression/save data - see
- * heroTypes.ts's HeroInstance doc comment.
+ * only makes sense mid-battle (live HP/stat buffs, skill cooldowns, level/
+ * evolution progress) so the persisted HeroInstance stays pure progression/
+ * save data - see heroTypes.ts's HeroInstance doc comment.
  */
 export class BattleHero {
   readonly instanceId: string;
   readonly heroClass: HeroClass;
+  /** heroCatalog.ts key this instance was purchased under (e.g. 'apprenticeMage') - what GameManager.tryEvolveHero looks up in heroEvolutions with. Defaults to the underlying HeroInstance's templateId for callers (e.g. test-run.ts's direct constructions) that don't go through heroCatalog and have no evolution options anyway. */
+  readonly heroTypeId: string;
   readonly stats: BattleHeroStats;
   /** World-space placement, set by whoever deploys this hero (e.g. GameManager.tryPlaceHero) - purely presentational, CombatEngine doesn't target off of it yet. */
   x: number;
   y: number;
 
+  level = 1;
+  /** Set once evolveInto commits a branch - the evolved sprite id (see heroEvolution.ts's EvolutionOption.id doc comment) GameRenderer draws instead of the plain heroClass sprite, and what blocks a second evolution. Null while unevolved. */
+  evolvedInto: string | null = null;
+
   private readonly skillDefinitions = new Map<string, SkillDefinition>();
   private readonly skillCooldowns = new Map<string, number>();
-  /** Unlocked, owned skill ids in cast-priority order: growth skills (slot order) first, base skill last. */
+  /** Unlocked, owned skill ids in cast-priority order: growth skills (slot order) first, base skill last. Mutated wholesale by evolveInto - stays a stable array reference (not reassigned) so nothing holding onto it goes stale. */
   private readonly skillPriorityOrder: string[];
 
-  constructor(heroInstance: HeroInstance, skills: SkillDefinition[], position: { x: number; y: number } = { x: 0, y: 0 }) {
+  constructor(
+    heroInstance: HeroInstance,
+    skills: SkillDefinition[],
+    position: { x: number; y: number } = { x: 0, y: 0 },
+    heroTypeId: string = heroInstance.templateId,
+  ) {
     this.instanceId = heroInstance.instanceId;
     this.heroClass = heroInstance.heroClass;
+    this.heroTypeId = heroTypeId;
     this.x = position.x;
     this.y = position.y;
 
@@ -98,6 +117,53 @@ export class BattleHero {
 
   isSkillReady(skillId: string): boolean {
     return this.getSkillCooldown(skillId) <= 0;
+  }
+
+  /** Gold cost of the *next* upgrade() call - grows geometrically with level so late-game upgrades cost meaningfully more than early ones, not a flat fee forever. Pure calculation; GameManager.tryUpgradeHero is what actually checks/deducts gold. */
+  getUpgradeCost(): number {
+    return Math.round(BASE_UPGRADE_COST * UPGRADE_COST_GROWTH_RATE ** (this.level - 1));
+  }
+
+  /**
+   * Spends one level: grows maxHp/currentAttack/currentDefense/
+   * currentAttackSpeed by STAT_GROWTH_PER_LEVEL and fully heals (a level-up
+   * reward, not just a bigger number). currentCrit is deliberately left
+   * alone - unlike the others, a percentage stat compounding the same way
+   * would blow past 100% within a handful of levels rather than growing
+   * indefinitely. Does not touch gold - GameManager.tryUpgradeHero deducts
+   * getUpgradeCost() first and only calls this once that's confirmed.
+   */
+  upgrade(): void {
+    this.level += 1;
+    const growth = 1 + STAT_GROWTH_PER_LEVEL;
+    this.stats.maxHp *= growth;
+    this.stats.currentHp = this.stats.maxHp;
+    this.stats.currentAttack *= growth;
+    this.stats.currentDefense *= growth;
+    this.stats.currentAttackSpeed *= growth;
+  }
+
+  /**
+   * Commits an evolution branch: wholesale-replaces this hero's entire
+   * skill set with `option.skill` (not just adding it alongside the old
+   * one - evolving is a Build change, not a buff) and marks evolvedInto so
+   * GameRenderer switches to the evolved sprite and a second evolution
+   * gets rejected. skillPriorityOrder/skillDefinitions/skillCooldowns are
+   * mutated in place (cleared and refilled) rather than reassigned, so
+   * they stay the exact same object references update()/executeSkill/
+   * getSkillDefinition already close over.
+   */
+  evolveInto(option: EvolutionOption): void {
+    this.skillDefinitions.clear();
+    this.skillDefinitions.set(option.skill.id, option.skill);
+
+    this.skillPriorityOrder.length = 0;
+    this.skillPriorityOrder.push(option.skill.id);
+
+    this.skillCooldowns.clear();
+    this.skillCooldowns.set(option.skill.id, 0);
+
+    this.evolvedInto = option.id;
   }
 
   /**

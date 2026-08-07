@@ -85,6 +85,11 @@ export class CombatEngine {
     return [...this.heroes.values()];
   }
 
+  /** Single-hero lookup by instanceId - what GameManager.tryUpgradeHero/tryEvolveHero use, so callers don't have to filter getHeroes() themselves. */
+  getHero(instanceId: string): BattleHero | undefined {
+    return this.heroes.get(instanceId);
+  }
+
   getAliveEnemies(): BattleEnemy[] {
     return [...this.enemies.values()].filter((enemy) => enemy.isAlive);
   }

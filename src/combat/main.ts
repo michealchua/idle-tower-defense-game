@@ -5,7 +5,9 @@
 import { GameManager, GameState } from './GameManager';
 import { WaveState } from './WaveManager';
 import { heroCatalog } from './heroCatalog';
+import { heroEvolutions } from './heroEvolution';
 import { sampleLevelConfig } from './sampleLevelConfig';
+import { CELL_SIZE } from './gridConfig';
 import { GameRenderer } from '../render/GameRenderer';
 import { InputManager } from '../input/InputManager';
 
@@ -54,6 +56,7 @@ const hudExp = document.getElementById('hud-exp') as HTMLSpanElement;
 const hudWave = document.getElementById('hud-wave') as HTMLSpanElement;
 const hudMessage = document.getElementById('hud-message') as HTMLDivElement;
 const buildPanel = document.getElementById('build-panel') as HTMLDivElement;
+const heroPanel = document.getElementById('hero-panel') as HTMLDivElement;
 
 let messageTimeoutId: number | undefined;
 function showMessage(text: string): void {
@@ -85,6 +88,18 @@ const inputManager = new InputManager(canvas, {
     // The gameLoop's per-frame updateHud() picks up the real post-placement
     // state on the very next frame instead.
     return result.success;
+  },
+  onCanvasClick: (worldX, worldY) => {
+    // Hit-test against every placed hero's real x/y - CELL_SIZE/2 is a
+    // generous-enough radius for "did the player mean to click this hero"
+    // without needing GameRenderer's exact sprite size exported just for
+    // this. A click that doesn't land on anyone clears the selection.
+    const hitRadius = CELL_SIZE / 2;
+    const hero = gameManager.combatEngine
+      .getHeroes()
+      .find((candidate) => Math.hypot(candidate.x - worldX, candidate.y - worldY) <= hitRadius);
+    inputManager.setSelectedHero(hero?.instanceId ?? null);
+    refreshHeroPanel();
   },
 });
 
@@ -137,6 +152,79 @@ function refreshBuildPanel(): void {
   forceStartButton.disabled = runOver || gameManager.waveManager.state !== WaveState.Waiting;
 }
 
+/**
+ * Rebuilds #hero-panel's content from scratch every call (cheap - at most
+ * a level line, 4 stat lines, an upgrade button, and up to 2 evolution
+ * buttons) rather than diffing, so it never drifts out of sync with
+ * whatever's actually selected. Hides the panel entirely once nothing's
+ * selected or the selected hero's gone (can't currently happen - heroes
+ * never die in this engine - but kept as a safety net rather than assumed).
+ */
+function refreshHeroPanel(): void {
+  const selectedId = inputManager.selectedHeroInstanceId;
+  if (!selectedId) {
+    heroPanel.style.display = 'none';
+    heroPanel.innerHTML = '';
+    return;
+  }
+
+  const hero = gameManager.combatEngine.getHero(selectedId);
+  if (!hero) {
+    inputManager.setSelectedHero(null);
+    heroPanel.style.display = 'none';
+    heroPanel.innerHTML = '';
+    return;
+  }
+
+  const runOver = gameManager.gameState !== GameState.Playing;
+  const displayName = hero.evolvedInto ? (heroEvolutions[hero.heroTypeId]?.options.find((o) => o.id === hero.evolvedInto)?.displayName ?? hero.evolvedInto) : (heroCatalog[hero.heroTypeId]?.displayName ?? hero.heroTypeId);
+  const upgradeCost = hero.getUpgradeCost();
+
+  heroPanel.style.display = 'block';
+  heroPanel.innerHTML = `
+    <div class="hero-panel-title">${displayName} · Lv.${hero.level}</div>
+    <div class="hero-panel-stats">
+      攻击力: ${hero.stats.currentAttack.toFixed(1)}<br>
+      攻速: ${hero.stats.currentAttackSpeed.toFixed(2)}<br>
+      防御: ${hero.stats.currentDefense.toFixed(1)}<br>
+      生命: ${hero.stats.currentHp.toFixed(0)} / ${hero.stats.maxHp.toFixed(0)}
+    </div>
+  `;
+
+  const upgradeButton = document.createElement('button');
+  upgradeButton.textContent = `升级 (${upgradeCost}金币)`;
+  upgradeButton.disabled = runOver || gameManager.gold < upgradeCost;
+  upgradeButton.addEventListener('click', () => {
+    const result = gameManager.tryUpgradeHero(hero.instanceId);
+    showMessage(result.success ? `升级成功！当前 Lv.${hero.level}` : '升级失败：金币不足');
+    refreshHeroPanel();
+  });
+  heroPanel.appendChild(upgradeButton);
+
+  const evolutionConfig = heroEvolutions[hero.heroTypeId];
+  if (evolutionConfig && !hero.evolvedInto) {
+    if (hero.level >= evolutionConfig.requiredLevel) {
+      for (const option of evolutionConfig.options) {
+        const evolveButton = document.createElement('button');
+        evolveButton.textContent = `进化为 ${option.displayName} (${option.cost}金币)`;
+        evolveButton.disabled = runOver || gameManager.gold < option.cost;
+        evolveButton.addEventListener('click', () => {
+          const result = gameManager.tryEvolveHero(hero.instanceId, option.id);
+          showMessage(result.success ? `进化成功：${option.displayName}！` : '进化失败：金币不足');
+          refreshHeroPanel();
+        });
+        heroPanel.appendChild(evolveButton);
+      }
+    } else {
+      const hint = document.createElement('div');
+      hint.textContent = `Lv.${evolutionConfig.requiredLevel} 解锁进化`;
+      hint.style.marginTop = '6px';
+      hint.style.opacity = '0.7';
+      heroPanel.appendChild(hint);
+    }
+  }
+}
+
 function updateHud(): void {
   hudGold.textContent = String(gameManager.gold);
   hudExp.textContent = String(gameManager.experience);
@@ -152,6 +240,7 @@ function updateHud(): void {
     inputManager.cancelBuildMode();
   }
   refreshBuildPanel();
+  refreshHeroPanel();
 }
 
 let lastTimestamp: number | null = null;

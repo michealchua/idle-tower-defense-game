@@ -15,6 +15,7 @@ import { pyromancerTemplate } from '../data/hero/mageTemplates';
 import { bladeSlashSkill, bloodFurySkill, bloodrageSlashSkill } from '../data/skills/warriorSkills';
 import { fireballSkill } from '../data/skills/mageSkills';
 import { StatusEffectType } from '../data/skills/skillTypes';
+import { heroEvolutions } from './heroEvolution';
 import { gridCellCenter } from './gridConfig';
 
 // --- forceStartNextWave edge cases -----------------------------------
@@ -182,6 +183,83 @@ console.log('=== 边界测试 2：DOT 是否能在英雄停止攻击后依然按
   }
 }
 console.log('[PASS] DOT 边界测试通过：命中后即使英雄完全停止攻击，燃烧伤害依然按秒结算并致死。\n');
+
+// --- Leveling/evolution boundary test 3 --------------------------------
+//
+// Place a base hero -> inject gold -> upgrade repeatedly to the evolution
+// threshold -> evolve -> verify both the stat growth and the wholesale
+// skill swap (arcane bolt, no status effect -> fireball, a Projectile
+// skill carrying a Dot statusEffectOnHit).
+console.log('=== 边界测试 3：升级与分支进化流程 ===');
+{
+  // Ample gold up front - this test is about the upgrade/evolve state
+  // machine itself, not about earning the gold to afford it (that's
+  // already covered by step 15's economy tests).
+  const gm = new GameManager(sampleLevelConfig, {}, { startingGold: 100000 });
+
+  const placeResult = gm.tryPlaceHero('apprenticeMage', { col: 1, row: 3 });
+  if (!placeResult.success) {
+    throw new Error('Expected placing the base apprenticeMage hero to succeed with ample gold.');
+  }
+  const hero = placeResult.hero;
+
+  const initialAttack = hero.stats.currentAttack;
+  const initialMaxHp = hero.stats.maxHp;
+  const preEvolutionSkill = hero.getSkillDefinition('skill-arcane-bolt');
+  console.log(`  初始状态: Lv.${hero.level}, 攻击力=${initialAttack.toFixed(2)}, maxHp=${initialMaxHp.toFixed(2)}, 技能=${preEvolutionSkill?.id} (statusEffectOnHit=${preEvolutionSkill?.statusEffectOnHit ?? 'none'})`);
+  if (!preEvolutionSkill || preEvolutionSkill.statusEffectOnHit) {
+    throw new Error('Expected the pre-evolution base skill to be the plain, status-effect-free arcane bolt.');
+  }
+
+  const evolutionConfig = heroEvolutions.apprenticeMage;
+  let upgradeCount = 0;
+  while (hero.level < evolutionConfig.requiredLevel) {
+    const result = gm.tryUpgradeHero(hero.instanceId);
+    if (!result.success) {
+      throw new Error(`tryUpgradeHero unexpectedly failed at level ${hero.level} (reason: ${result.reason}) despite ample gold.`);
+    }
+    upgradeCount += 1;
+  }
+  console.log(`  连续调用 tryUpgradeHero ${upgradeCount} 次后: Lv.${hero.level}, 攻击力=${hero.stats.currentAttack.toFixed(2)}, maxHp=${hero.stats.maxHp.toFixed(2)}`);
+  if (hero.level !== evolutionConfig.requiredLevel) {
+    throw new Error(`Expected hero level to land exactly on the evolution threshold ${evolutionConfig.requiredLevel}, got ${hero.level}.`);
+  }
+  if (hero.stats.currentAttack <= initialAttack || hero.stats.maxHp <= initialMaxHp) {
+    throw new Error('Expected attack and maxHp to have grown proportionally from repeated upgrade() calls.');
+  }
+
+  const evolveResult = gm.tryEvolveHero(hero.instanceId, 'mage-pyromancer');
+  if (!evolveResult.success) {
+    throw new Error(`Expected evolution into mage-pyromancer to succeed at the threshold level (reason: ${'reason' in evolveResult ? evolveResult.reason : 'n/a'}).`);
+  }
+  console.log(`  进化选择: ${hero.evolvedInto}`);
+  if (hero.evolvedInto !== 'mage-pyromancer') {
+    throw new Error(`Expected evolvedInto to be "mage-pyromancer", got "${hero.evolvedInto}".`);
+  }
+
+  // The whole skill set should now be fireballSkill - a Projectile-based
+  // skill (projectileSpeed set) carrying a Dot statusEffectOnHit - and the
+  // old arcane bolt should be entirely gone, not just added alongside it.
+  const evolvedSkill = hero.getSkillDefinition(fireballSkill.id);
+  console.log(`  新技能: ${evolvedSkill?.id}, projectileSpeed=${evolvedSkill?.projectileSpeed}, statusEffectOnHit.type=${evolvedSkill?.statusEffectOnHit?.type}`);
+  if (!evolvedSkill || evolvedSkill.projectileSpeed === undefined) {
+    throw new Error('Expected the evolved hero to own fireballSkill with a defined projectileSpeed (i.e. a ranged, non-melee attack).');
+  }
+  if (evolvedSkill.statusEffectOnHit?.type !== StatusEffectType.Dot) {
+    throw new Error('Expected the evolved fireballSkill to carry a Dot statusEffectOnHit.');
+  }
+  if (hero.getSkillDefinition('skill-arcane-bolt')) {
+    throw new Error('Expected the pre-evolution arcane bolt skill to be fully removed after evolveInto, not left alongside the new one.');
+  }
+
+  // A second evolution must be rejected - evolvedInto is already set.
+  const secondEvolveResult = gm.tryEvolveHero(hero.instanceId, 'mage-cryomancer');
+  console.log(`  二次进化尝试: success=${secondEvolveResult.success}${secondEvolveResult.success ? '' : `, reason=${secondEvolveResult.reason}`}`);
+  if (secondEvolveResult.success || secondEvolveResult.reason !== 'already_evolved') {
+    throw new Error('Expected a second evolution attempt to be rejected with reason "already_evolved".');
+  }
+}
+console.log('[PASS] 升级/进化边界测试通过：属性按比例放大，技能被整体替换为携带 Projectile + 状态效果的新技能，且拒绝二次进化。\n');
 
 // A single melee hero's DPS (~4.3/s from blade slash's 4s cooldown) can't
 // out-damage a goblin (50hp) within the ~3.5s window one range circle

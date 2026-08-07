@@ -1,9 +1,31 @@
-import { frostBoltSkill, fireballSkill } from '../skills/mageSkills';
+import { frostBoltSkill, fireballSkill, arcaneBoltSkill } from '../skills/mageSkills';
 import { HeroClass, type HeroTemplate, type SkillSlot } from './heroTypes';
 
 function emptySlot(): SkillSlot {
   return { skillId: null, unlocked: false };
 }
+
+/**
+ * 见习法师 (Apprentice Mage) - the step-17 base hero for the
+ * cryomancer/pyromancer evolution branch: cheap, generically ranged, no
+ * status effect of its own. See heroEvolution.ts for what it becomes at
+ * Lv.10 - the evolved forms below are still directly purchasable in their
+ * own right (step 16), evolution is just a second way to reach the same
+ * skill/sprite outcome, not the only one.
+ */
+export const apprenticeMageTemplate: HeroTemplate = {
+  id: 'mage-apprentice',
+  nameKey: 'hero.mageApprentice',
+  heroClass: HeroClass.Mage,
+  baseStats: { hp: 70, attack: 10, defense: 3, attackSpeed: 1.0, crit: 0.05 },
+  skills: {
+    baseSkill: { skillId: arcaneBoltSkill.id, unlocked: true },
+    growthSkills: [emptySlot(), emptySlot()],
+  },
+  evolution: {
+    nodes: [],
+  },
+};
 
 // Two ranged Mage prototypes for heroCatalog.ts's step-16 entries -
 // squishier and cheaper on attack than the Warrior line, trading raw
@@ -39,4 +61,4 @@ export const pyromancerTemplate: HeroTemplate = {
   },
 };
 
-export const mageTemplates: HeroTemplate[] = [cryomancerTemplate, pyromancerTemplate];
+export const mageTemplates: HeroTemplate[] = [apprenticeMageTemplate, cryomancerTemplate, pyromancerTemplate];

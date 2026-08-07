@@ -32,7 +32,26 @@ export const fireballSkill: SkillDefinition = {
   statusEffectOnHit: { type: StatusEffectType.Dot, duration: 4, magnitude: 8 },
 };
 
+/**
+ * 见习法师 (Apprentice Mage)'s starting base skill - a plain, unspecialized
+ * bolt with no statusEffectOnHit (step 17). Establishes the "generic
+ * ranged attacker" role the base hero is meant to hold; evolving into
+ * Cryomancer/Pyromancer swaps this out for frostBoltSkill/fireballSkill
+ * entirely rather than layering a bonus on top of it.
+ */
+export const arcaneBoltSkill: SkillDefinition = {
+  id: 'skill-arcane-bolt',
+  name: '奥术弹',
+  description: '发射一枚基础奥术弹，造成少量伤害，尚未具备特殊效果。',
+  cooldown: 3,
+  range: 160,
+  damageMultiplier: 0.5,
+  mechanicTags: [],
+  projectileSpeed: 380,
+};
+
 export const mageSkillDefinitions: Record<string, SkillDefinition> = {
   [frostBoltSkill.id]: frostBoltSkill,
   [fireballSkill.id]: fireballSkill,
+  [arcaneBoltSkill.id]: arcaneBoltSkill,
 };

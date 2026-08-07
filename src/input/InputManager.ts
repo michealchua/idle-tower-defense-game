@@ -9,6 +9,8 @@ export interface SnappedPlacement {
 export interface InputManagerCallbacks {
   /** Fired on a canvas click while in build mode, with the click already snapped to a grid cell. Returns whether the placement actually succeeded (e.g. enough gold, cell free), purely for the caller's own bookkeeping - InputManager itself always exits build mode after a click regardless of the outcome. */
   onPlaceHero: (heroTypeId: string, cell: GridCell) => boolean;
+  /** Fired on a canvas click while NOT in build mode, with the click left in raw world coordinates (not grid-snapped - a placed hero's x/y is a cell center, but hit-testing against it doesn't need cell math). The caller does its own hit-testing against combatEngine.getHeroes() and, if it matches one, reports the selection back via setSelectedHero. */
+  onCanvasClick?: (worldX: number, worldY: number) => void;
 }
 
 /**
@@ -29,6 +31,8 @@ export class InputManager {
   private hoverSnap: SnappedPlacement | null = null;
   /** Raw (unsnapped) world position, tracked regardless of build mode - what GameRenderer's optional hero-range hover debug circle hit-tests against. */
   private pointerPosition: { x: number; y: number } | null = null;
+  /** Whichever hero instanceId main.ts's onCanvasClick hit-test last resolved to (or null) - purely storage, set via setSelectedHero; GameRenderer reads it to draw a selection ring. InputManager never does the hit-test itself, it has no access to combatEngine. */
+  private selectedHeroId: string | null = null;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -55,6 +59,16 @@ export class InputManager {
   /** Raw world-space pointer position, tracked independent of build mode - null once the pointer leaves the canvas. */
   get pointerWorldPosition(): { x: number; y: number } | null {
     return this.pointerPosition;
+  }
+
+  /** The currently-selected hero's instanceId, as last set via setSelectedHero - null if nothing's selected. */
+  get selectedHeroInstanceId(): string | null {
+    return this.selectedHeroId;
+  }
+
+  /** Records which hero (if any) main.ts's onCanvasClick hit-test resolved the last click to - pass null to clear the selection (e.g. a click that hit empty ground). */
+  setSelectedHero(instanceId: string | null): void {
+    this.selectedHeroId = instanceId;
   }
 
   /** Arms build mode for the given hero type - the next canvas click attempts to place it at whatever cell it lands on. */
@@ -117,6 +131,8 @@ export class InputManager {
 
   private readonly handlePointerDown = (event: PointerEvent): void => {
     if (!this.buildModeHeroTypeId) {
+      const world = this.toWorldPosition(event.clientX, event.clientY);
+      this.callbacks.onCanvasClick?.(world.x, world.y);
       return;
     }
     const snap = this.toSnappedPlacement(event.clientX, event.clientY);

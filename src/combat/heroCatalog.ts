@@ -2,9 +2,9 @@ import { HeroFactory } from '../data/hero/HeroFactory';
 import type { HeroTemplate } from '../data/hero/heroTypes';
 import type { SkillDefinition } from '../data/skills/skillTypes';
 import { swordsmanTemplate, berserkerTemplate } from '../data/hero/warriorTemplates';
-import { cryomancerTemplate, pyromancerTemplate } from '../data/hero/mageTemplates';
+import { cryomancerTemplate, pyromancerTemplate, apprenticeMageTemplate } from '../data/hero/mageTemplates';
 import { bladeSlashSkill } from '../data/skills/warriorSkills';
-import { frostBoltSkill, fireballSkill } from '../data/skills/mageSkills';
+import { frostBoltSkill, fireballSkill, arcaneBoltSkill } from '../data/skills/mageSkills';
 import { BattleHero } from './BattleHero';
 
 export interface HeroCatalogEntry {
@@ -46,6 +46,15 @@ export const heroCatalog: Record<string, HeroCatalogEntry> = {
     template: pyromancerTemplate,
     baseSkill: fireballSkill,
   },
+  // heroEvolutions (heroEvolution.ts) is keyed by this exact 'apprenticeMage'
+  // id - GameManager.tryEvolveHero looks up hero.heroTypeId against it.
+  apprenticeMage: {
+    heroTypeId: 'apprenticeMage',
+    displayName: '见习法师',
+    cost: 40,
+    template: apprenticeMageTemplate,
+    baseSkill: arcaneBoltSkill,
+  },
 };
 
 /**
@@ -58,5 +67,5 @@ export const heroCatalog: Record<string, HeroCatalogEntry> = {
 export function createBattleHeroFromCatalog(entry: HeroCatalogEntry, position: { x: number; y: number }): BattleHero {
   const heroInstance = HeroFactory.createHero(entry.template);
   heroInstance.skills.baseSkill = { skillId: entry.baseSkill.id, unlocked: true };
-  return new BattleHero(heroInstance, [entry.baseSkill], position);
+  return new BattleHero(heroInstance, [entry.baseSkill], position, entry.heroTypeId);
 }
