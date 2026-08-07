@@ -48,9 +48,10 @@ const BASE_HP_FULL_COLOR = '#ef4444';
 const BASE_HP_LOST_COLOR = 'rgba(255, 255, 255, 0.4)';
 const BASE_HP_BAR_Y = 22;
 
-const GAME_OVER_OVERLAY_COLOR = 'rgba(0, 0, 0, 0.65)';
+const END_OVERLAY_COLOR = 'rgba(0, 0, 0, 0.65)';
 const GAME_OVER_TEXT_COLOR = '#ef4444';
-const GAME_OVER_SUBTEXT_COLOR = '#f5f5f5';
+const VICTORY_TEXT_COLOR = '#22c55e';
+const END_SUBTEXT_COLOR = '#f5f5f5';
 
 // Matches CanvasRenderer's SPRITE_SHEET_CONFIG convention: hero/enemy sheets
 // dropped into public/sprites/ are laid out as 32x32 cells (row 0 = walk).
@@ -107,7 +108,7 @@ export class GameRenderer {
     this.drawHoveredHeroRange();
     this.drawBuildModePlaceholder();
     this.drawBaseHpBar();
-    this.drawGameOverOverlay();
+    this.drawEndOverlay();
   }
 
   private drawBackground(): void {
@@ -241,26 +242,39 @@ export class GameRenderer {
     this.drawLabel(`大本营 HP ${baseHp}/${maxBaseHp}`, CANVAS_WIDTH / 2, BASE_HP_BAR_Y + 22);
   }
 
-  /** Full-canvas dim wash + centered "GAME OVER" once gameState is GameOver - drawn last so it sits on top of every other layer. Purely visual; the actual interaction lockout is GameManager.tryPlaceHero rejecting placements and main.ts canceling build mode once it observes GameOver. */
-  private drawGameOverOverlay(): void {
-    if (this.gameManager.gameState !== GameState.GameOver) {
+  /**
+   * Full-canvas dim wash + centered "GAME OVER"/"VICTORY" once the run has
+   * ended, drawn last so it sits on top of every other layer. Purely
+   * visual; the actual interaction lockout is GameManager.tryPlaceHero
+   * rejecting placements and main.ts canceling build mode once it observes
+   * gameState leaving Playing.
+   */
+  private drawEndOverlay(): void {
+    const { gameState } = this.gameManager;
+    if (gameState !== GameState.GameOver && gameState !== GameState.Victory) {
       return;
     }
 
+    const isVictory = gameState === GameState.Victory;
+
     this.ctx.save();
-    this.ctx.fillStyle = GAME_OVER_OVERLAY_COLOR;
+    this.ctx.fillStyle = END_OVERLAY_COLOR;
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
     this.ctx.textAlign = 'center';
     this.ctx.textBaseline = 'middle';
 
-    this.ctx.fillStyle = GAME_OVER_TEXT_COLOR;
+    this.ctx.fillStyle = isVictory ? VICTORY_TEXT_COLOR : GAME_OVER_TEXT_COLOR;
     this.ctx.font = 'bold 64px sans-serif';
-    this.ctx.fillText('GAME OVER', this.canvas.width / 2, this.canvas.height / 2);
+    this.ctx.fillText(isVictory ? 'VICTORY' : 'GAME OVER', this.canvas.width / 2, this.canvas.height / 2);
 
-    this.ctx.fillStyle = GAME_OVER_SUBTEXT_COLOR;
+    this.ctx.fillStyle = END_SUBTEXT_COLOR;
     this.ctx.font = '18px sans-serif';
-    this.ctx.fillText('大本营已被攻陷', this.canvas.width / 2, this.canvas.height / 2 + 46);
+    this.ctx.fillText(
+      isVictory ? '所有波次已清空，大本营存活' : '大本营已被攻陷',
+      this.canvas.width / 2,
+      this.canvas.height / 2 + 46,
+    );
     this.ctx.restore();
   }
 

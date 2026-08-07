@@ -1,17 +1,16 @@
 import { CombatEngine, type DamageDealtEvent } from './CombatEngine';
-import { WaveManager, type WaveConfig } from './WaveManager';
+import { WaveManager } from './WaveManager';
+import type { LevelConfig, WaveConfig } from './WaveConfig';
 import type { BattleHero } from './BattleHero';
 import type { BattleEnemy } from './BattleEnemy';
 import { heroCatalog, createBattleHeroFromCatalog } from './heroCatalog';
 import { gridCellCenter, type GridCell } from './gridConfig';
 
-/** Seconds of downtime between one wave finishing and the next one starting. */
-const WAVE_DELAY_SECONDS = 2;
-
-/** Coarse run state - GameManager.update becomes a no-op the instant this flips to GameOver, and tryPlaceHero starts rejecting every request. */
+/** Coarse run state - GameManager.update becomes a no-op the instant this leaves Playing, and tryPlaceHero starts rejecting every request. */
 export enum GameState {
   Playing = 'playing',
   GameOver = 'gameOver',
+  Victory = 'victory',
 }
 
 export interface GameManagerCallbacks {
@@ -19,10 +18,13 @@ export interface GameManagerCallbacks {
   onEnemyDefeated?: (enemy: BattleEnemy, goldGained: number, expGained: number) => void;
   /** An enemy walked past ENEMY_PATH's final waypoint uncontested - fired *after* GameManager has already applied its baseDamage to baseHp (and, if that dropped baseHp to 0, after gameState has already flipped to GameOver and onGameOver has already fired). */
   onEnemyReachedEnd?: (enemy: BattleEnemy) => void;
-  onWaveComplete?: (waveId: string, nextDelaySeconds: number) => void;
   onWaveStart?: (config: WaveConfig, waveIndex: number) => void;
+  /** `nextDelaySeconds` is the upcoming wave's own delayBeforeStart, or null if the wave that just cleared was the level's last one (about to trigger onVictory, baseHp permitting). */
+  onWaveComplete?: (waveId: string, waveIndex: number, nextDelaySeconds: number | null) => void;
   /** Fires exactly once, the instant baseHp first reaches 0. */
   onGameOver?: () => void;
+  /** Fires exactly once, the instant the level's last wave clears with baseHp still above 0. */
+  onVictory?: () => void;
 }
 
 export interface GameManagerOptions {
@@ -38,9 +40,11 @@ export type PlaceHeroResult =
 
 /**
  * Top-level orchestrator that owns the run's CombatEngine + WaveManager and
- * the persistent gold/experience totals earned across every wave. Also owns
- * the wave-to-wave state machine: once a wave finishes, it counts down
- * WAVE_DELAY_SECONDS before auto-starting the next configured wave (if any).
+ * the persistent gold/experience/baseHp totals across the whole level.
+ * Wave-to-wave progression (delays, spawn pacing, level-cleared detection)
+ * all lives in WaveManager now - GameManager just constructs it with the
+ * LevelConfig, starts it, and each tick checks whether it's time to end the
+ * run (GameOver via baseHp, or Victory via WaveManager.isLevelCleared()).
  */
 export class GameManager {
   readonly combatEngine: CombatEngine;
@@ -53,16 +57,9 @@ export class GameManager {
   baseHp: number;
   gameState: GameState = GameState.Playing;
 
-  autoNextWave = true;
-
-  private readonly waveConfigs: WaveConfig[];
-  private currentWaveIndex = -1;
-  private waveDelayTimer: number | null = null;
-
   private readonly callbacks: GameManagerCallbacks;
 
-  constructor(waveConfigs: WaveConfig[], callbacks: GameManagerCallbacks = {}, options: GameManagerOptions = {}) {
-    this.waveConfigs = waveConfigs;
+  constructor(levelConfig: LevelConfig, callbacks: GameManagerCallbacks = {}, options: GameManagerOptions = {}) {
     this.callbacks = callbacks;
     this.gold = options.startingGold ?? 0;
     this.maxBaseHp = options.maxBaseHp ?? 10;
@@ -73,7 +70,10 @@ export class GameManager {
       onEnemyDefeated: (enemy) => this.handleEnemyDefeated(enemy),
       onEnemyReachedEnd: (enemy) => this.handleEnemyReachedEnd(enemy),
     });
-    this.waveManager = new WaveManager(this.combatEngine);
+    this.waveManager = new WaveManager(this.combatEngine, levelConfig, {
+      onWaveStart: (config, index) => this.callbacks.onWaveStart?.(config, index),
+      onWaveComplete: (waveId, index, nextDelay) => this.callbacks.onWaveComplete?.(waveId, index, nextDelay),
+    });
   }
 
   addHero(hero: BattleHero): void {
@@ -81,28 +81,30 @@ export class GameManager {
   }
 
   // A plain boolean-typed getter, not a direct `this.gameState ===
-  // GameState.GameOver` comparison, at both call sites in update() below -
-  // TypeScript's control-flow narrowing otherwise "remembers" the first
-  // check's result (gameState is GameState.Playing) straight through the
-  // combatEngine.update() call in between, even though that call can - via
-  // handleEnemyReachedEnd - mutate gameState out from under it, and flags
-  // the second comparison as an impossible literal-type overlap.
-  private get isGameOver(): boolean {
-    return this.gameState === GameState.GameOver;
+  // GameState.X` comparison, at every call site in update() below -
+  // TypeScript's control-flow narrowing otherwise "remembers" an earlier
+  // check's result straight through the combatEngine.update()/
+  // waveManager.update() calls in between, even though those calls can (via
+  // handleEnemyReachedEnd / the level-cleared check) mutate gameState out
+  // from under it, and flags a later comparison as an impossible literal-
+  // type overlap.
+  private get isRunOver(): boolean {
+    return this.gameState !== GameState.Playing;
   }
 
   /**
-   * Validates the requested heroCatalog entry against the target grid
-   * cell's occupancy and current gold, in that order - the cell must be
-   * free *before* gold is ever touched, so a rejected placement never costs
-   * anything. Only once both checks pass does it deduct cost, build the
-   * hero via createBattleHeroFromCatalog positioned at the cell's center,
-   * and register it in the CombatEngine at that cell. Read-only callers
-   * (InputManager, UI) get a typed result back instead of a thrown error,
-   * since both failure modes are expected everyday outcomes here, not bugs.
+   * Validates the requested heroCatalog entry against the run's state, the
+   * target grid cell's occupancy, and current gold, in that order - the
+   * cell must be free *before* gold is ever touched, so a rejected
+   * placement never costs anything. Only once every check passes does it
+   * deduct cost, build the hero via createBattleHeroFromCatalog positioned
+   * at the cell's center, and register it in the CombatEngine at that
+   * cell. Read-only callers (InputManager, UI) get a typed result back
+   * instead of a thrown error, since every failure mode here is an
+   * expected everyday outcome, not a bug.
    */
   tryPlaceHero(heroTypeId: string, cell: GridCell): PlaceHeroResult {
-    if (this.isGameOver) {
+    if (this.isRunOver) {
       return { success: false, reason: 'game_over' };
     }
 
@@ -126,12 +128,9 @@ export class GameManager {
     return { success: true, hero };
   }
 
-  /** Starts the first configured wave. No-op if there are no waves or a wave is already running. */
+  /** Starts the level's first wave. No-op if already started or the level has no waves (see WaveManager.start). */
   start(): void {
-    if (this.currentWaveIndex >= 0) {
-      return;
-    }
-    this.advanceToNextWave();
+    this.waveManager.start();
   }
 
   private handleEnemyDefeated(enemy: BattleEnemy): void {
@@ -145,10 +144,13 @@ export class GameManager {
    * drains it to 0, flips gameState to GameOver and fires onGameOver -
    * exactly once, since the top-of-function guard below stops a second
    * enemy reaching the end in the same tick (CombatEngine's cleanup can
-   * call this more than once per update()) from re-entering the <=0 branch.
+   * call this more than once per update()) from re-entering the <=0 branch
+   * or firing a redundant GameOver once the run's already decided (also
+   * covers the (unreachable in practice, since a cleared level stops
+   * spawning) case of a stray reached-end arriving after Victory).
    */
   private handleEnemyReachedEnd(enemy: BattleEnemy): void {
-    if (this.isGameOver) {
+    if (this.isRunOver) {
       this.callbacks.onEnemyReachedEnd?.(enemy);
       return;
     }
@@ -162,55 +164,34 @@ export class GameManager {
     this.callbacks.onEnemyReachedEnd?.(enemy);
   }
 
-  private advanceToNextWave(): void {
-    this.currentWaveIndex += 1;
-    const nextConfig = this.waveConfigs[this.currentWaveIndex];
-    if (!nextConfig) {
-      return;
-    }
-    this.waveDelayTimer = null;
-    this.waveManager.startWave(nextConfig);
-    this.callbacks.onWaveStart?.(nextConfig, this.currentWaveIndex);
-  }
-
   /**
-   * Advances combat and spawning by deltaTime seconds, then drives the wave
-   * state machine: detects wave completion, counts down the inter-wave
-   * delay, and auto-starts the next wave once the delay lapses. A no-op the
-   * instant gameState is GameOver - checked both up front (skips the whole
-   * tick outright once the base has already fallen) and again right after
-   * combatEngine.update (in case *this* tick's enemy-reached-end cleanup is
-   * what just flipped it, so the wave machine below never gets one extra
-   * tick's worth of spawning/timer progress after the loss).
+   * Advances combat and wave progression by deltaTime seconds, then checks
+   * whether the run just ended. A no-op the instant gameState leaves
+   * Playing - checked up front (skips the whole tick once the run's
+   * already decided), again right after combatEngine.update() (in case
+   * *this* tick's enemy-reached-end cleanup is what just triggered
+   * GameOver, so waveManager.update() below never gets one extra tick of
+   * spawning/timer progress after the loss - and, since nothing between
+   * that check and here can mutate gameState again, GameOver this same
+   * tick is guaranteed to have already taken precedence over a level-clear
+   * that would otherwise have coincided with it).
    */
   update(deltaTime: number): void {
-    if (this.isGameOver) {
+    if (this.isRunOver) {
       return;
     }
 
     this.combatEngine.update(deltaTime);
 
-    if (this.isGameOver) {
+    if (this.isRunOver) {
       return;
     }
 
     this.waveManager.update(deltaTime);
 
-    const activeWaveId = this.waveManager.activeWaveId;
-    if (!activeWaveId) {
-      return;
-    }
-
-    if (this.waveManager.isWaveComplete()) {
-      if (this.waveDelayTimer === null) {
-        this.waveDelayTimer = WAVE_DELAY_SECONDS;
-        this.callbacks.onWaveComplete?.(activeWaveId, WAVE_DELAY_SECONDS);
-      } else {
-        this.waveDelayTimer -= deltaTime;
-        if (this.waveDelayTimer <= 0 && this.autoNextWave) {
-          this.advanceToNextWave();
-        }
-      }
+    if (this.waveManager.isLevelCleared() && this.baseHp > 0) {
+      this.gameState = GameState.Victory;
+      this.callbacks.onVictory?.();
     }
   }
 }

@@ -4,7 +4,7 @@
 
 import { GameManager, GameState } from './GameManager';
 import { heroCatalog } from './heroCatalog';
-import type { WaveConfig } from './WaveManager';
+import { sampleLevelConfig } from './sampleLevelConfig';
 import { GameRenderer } from '../render/GameRenderer';
 import { InputManager } from '../input/InputManager';
 
@@ -15,37 +15,26 @@ const STARTING_GOLD = 20;
 const BASE_MAX_HP = 10;
 const BUILD_MESSAGE_DURATION_MS = 2000;
 
-const waveConfigs: WaveConfig[] = [
-  {
-    waveId: 'wave-1-goblins',
-    enemiesToSpawn: [{ enemyTypeId: 'goblin', count: 3 }],
-    spawnInterval: 800,
-  },
-  {
-    waveId: 'wave-2-boss',
-    enemiesToSpawn: [{ enemyTypeId: 'boss_demon', count: 1 }],
-    spawnInterval: 800,
-  },
-];
-
-let waveLabel = '-';
-
 const gameManager = new GameManager(
-  waveConfigs,
+  sampleLevelConfig,
   {
     onWaveStart: (config, index) => {
-      waveLabel = `第 ${index + 1} 波 (${config.waveId})`;
+      showMessage(`第 ${index + 1} 波开始: ${config.waveId}`);
     },
-    onWaveComplete: (waveId, delaySeconds) => {
-      waveLabel = `${waveId} 已完成，${delaySeconds}s 后进入下一波`;
+    onWaveComplete: (waveId, _index, nextDelaySeconds) => {
+      showMessage(nextDelaySeconds === null ? `${waveId} 已完成` : `${waveId} 已完成，${nextDelaySeconds}s 后进入下一波`);
     },
     onEnemyReachedEnd: (enemy) => {
-      if (gameManager.gameState !== GameState.GameOver) {
+      if (gameManager.gameState === GameState.Playing) {
         showMessage(`${enemy.archetypeId} 突破了防线！大本营 HP -${enemy.baseDamage}`);
       }
     },
     onGameOver: () => {
       showMessage('游戏结束！大本营已被攻陷');
+      inputManager.cancelBuildMode();
+    },
+    onVictory: () => {
+      showMessage('胜利！所有波次已清空');
       inputManager.cancelBuildMode();
     },
   },
@@ -122,24 +111,27 @@ cancelButton.addEventListener('click', () => {
 buildPanel.appendChild(cancelButton);
 
 function refreshBuildPanel(): void {
-  const gameOver = gameManager.gameState === GameState.GameOver;
+  const runOver = gameManager.gameState !== GameState.Playing;
   for (const [heroTypeId, button] of buildButtons) {
     const entry = heroCatalog[heroTypeId];
     button.classList.toggle('active', inputManager.activeHeroTypeId === heroTypeId);
-    button.disabled = gameOver || gameManager.gold < entry.cost;
+    button.disabled = runOver || gameManager.gold < entry.cost;
   }
-  cancelButton.disabled = gameOver;
+  cancelButton.disabled = runOver;
 }
 
 function updateHud(): void {
   hudGold.textContent = String(gameManager.gold);
   hudExp.textContent = String(gameManager.experience);
-  hudWave.textContent = waveLabel;
-  // Self-healing rather than relying solely on the onGameOver callback's
-  // one-shot cancelBuildMode() - if build mode somehow got re-armed after
-  // game over (or the callback ordering ever changes), this closes it
-  // again on the very next frame regardless.
-  if (gameManager.gameState === GameState.GameOver) {
+
+  const { currentIndex, totalWaveCount } = gameManager.waveManager;
+  hudWave.textContent = currentIndex >= 0 ? `Wave ${currentIndex + 1} / ${totalWaveCount}` : '-';
+
+  // Self-healing rather than relying solely on the onGameOver/onVictory
+  // callbacks' one-shot cancelBuildMode() - if build mode somehow got
+  // re-armed after the run ended (or the callback ordering ever changes),
+  // this closes it again on the very next frame regardless.
+  if (gameManager.gameState !== GameState.Playing) {
     inputManager.cancelBuildMode();
   }
   refreshBuildPanel();
