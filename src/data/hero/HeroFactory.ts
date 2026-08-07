@@ -22,8 +22,13 @@ export class HeroFactory {
       nameKey: template.nameKey,
       heroClass: template.heroClass,
       baseStats: deepClone(template.baseStats),
+      currentStats: deepClone(template.baseStats),
+      level: 1,
+      exp: 0,
       skills: deepClone(template.skills),
       evolution: deepClone(template.evolution),
+      appliedEvolutionNodeIds: [],
+      visualTier: 0,
     };
   }
 }

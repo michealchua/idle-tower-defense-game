@@ -97,6 +97,11 @@ export interface HeroTemplate {
  * HeroFactory.createHero. Two instances built from the same template never
  * share any nested object/array reference, so mutating one (leveling up,
  * unlocking a skill, picking an evolution path) can never leak into another.
+ *
+ * `baseStats` stays a frozen-in-time copy of the template's authoring
+ * values; `currentStats` is the live panel value HeroManager mutates on
+ * level-up/evolution (level-up growth and evolution statMultipliers are
+ * both scaled off `baseStats`, so it must never itself be overwritten).
  */
 export interface HeroInstance {
   templateId: string;
@@ -104,6 +109,15 @@ export interface HeroInstance {
   nameKey: string;
   heroClass: HeroClass;
   baseStats: HeroBaseStats;
+  currentStats: HeroBaseStats;
+  level: number;
+  exp: number;
   skills: HeroSkillLoadout;
   evolution: EvolutionTree;
+  /** ids of EvolutionNode entries already applied, in application order - HeroManager.applyEvolution guards against re-applying one. */
+  appliedEvolutionNodeIds: string[];
+  /** Mirrors the highest-applied node's visualTier; 0 while unevolved. */
+  visualTier: number;
+  /** Mirrors the highest-applied node's spritePath, once one has been applied. */
+  currentSpritePath?: string;
 }
