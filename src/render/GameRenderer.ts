@@ -1,4 +1,4 @@
-import type { GameManager } from '../combat/GameManager';
+import { GameState, type GameManager } from '../combat/GameManager';
 import type { BattleHero } from '../combat/BattleHero';
 import type { BattleEnemy } from '../combat/BattleEnemy';
 import { heroCatalog } from '../combat/heroCatalog';
@@ -10,6 +10,7 @@ import {
   GRID_OFFSET_Y,
   GRID_WIDTH,
   GRID_HEIGHT,
+  CANVAS_WIDTH,
   ENEMY_PATH,
   ENEMY_PATH_CELLS,
   gridCellCenter,
@@ -38,6 +39,18 @@ const PATH_LINE_COLOR = 'rgba(255, 235, 180, 0.85)';
 const PATH_ARROW_SIZE = 12;
 
 const RANGE_CIRCLE_COLOR = 'rgba(255, 255, 255, 0.6)';
+
+const BASE_MARKER_COLOR = '#8b5a2b';
+const BASE_MARKER_BORDER_COLOR = '#f5deb3';
+const BASE_HP_PIP_RADIUS = 6;
+const BASE_HP_PIP_SPACING = 18;
+const BASE_HP_FULL_COLOR = '#ef4444';
+const BASE_HP_LOST_COLOR = 'rgba(255, 255, 255, 0.4)';
+const BASE_HP_BAR_Y = 22;
+
+const GAME_OVER_OVERLAY_COLOR = 'rgba(0, 0, 0, 0.65)';
+const GAME_OVER_TEXT_COLOR = '#ef4444';
+const GAME_OVER_SUBTEXT_COLOR = '#f5f5f5';
 
 // Matches CanvasRenderer's SPRITE_SHEET_CONFIG convention: hero/enemy sheets
 // dropped into public/sprites/ are laid out as 32x32 cells (row 0 = walk).
@@ -81,6 +94,7 @@ export class GameRenderer {
     this.drawBackground();
     this.drawEnemyPath();
     this.drawGridLines();
+    this.drawBaseMarker();
 
     for (const hero of this.gameManager.combatEngine.getHeroes()) {
       this.drawHero(hero);
@@ -92,6 +106,8 @@ export class GameRenderer {
 
     this.drawHoveredHeroRange();
     this.drawBuildModePlaceholder();
+    this.drawBaseHpBar();
+    this.drawGameOverOverlay();
   }
 
   private drawBackground(): void {
@@ -176,6 +192,75 @@ export class GameRenderer {
       this.ctx.stroke();
     }
 
+    this.ctx.restore();
+  }
+
+  /** Small marker square at ENEMY_PATH's final waypoint - what a hero/enemy sprite would be, if the base had one; ties the numeric HP readout (drawBaseHpBar) to an actual spot on the field. */
+  private drawBaseMarker(): void {
+    const exit = ENEMY_PATH[ENEMY_PATH.length - 1];
+    const center = gridCellCenter(exit.col, exit.row);
+    const size = CELL_SIZE * 0.6;
+
+    this.ctx.save();
+    this.ctx.fillStyle = BASE_MARKER_COLOR;
+    this.ctx.fillRect(center.x - size / 2, center.y - size / 2, size, size);
+    this.ctx.strokeStyle = BASE_MARKER_BORDER_COLOR;
+    this.ctx.lineWidth = 2;
+    this.ctx.strokeRect(center.x - size / 2, center.y - size / 2, size, size);
+    this.ctx.restore();
+  }
+
+  /**
+   * Fixed HUD-style readout at the top of the canvas (rather than anchored
+   * to the base marker itself) - maxBaseHp pips could otherwise overflow
+   * off the right edge, since ENEMY_PATH's exit waypoint sits right up
+   * against the canvas boundary. One filled red pip per remaining baseHp,
+   * one hollow outline pip per point already lost.
+   */
+  private drawBaseHpBar(): void {
+    const { baseHp, maxBaseHp } = this.gameManager;
+    const totalWidth = (maxBaseHp - 1) * BASE_HP_PIP_SPACING;
+    const startX = CANVAS_WIDTH / 2 - totalWidth / 2;
+
+    this.ctx.save();
+    for (let i = 0; i < maxBaseHp; i += 1) {
+      const x = startX + i * BASE_HP_PIP_SPACING;
+      this.ctx.beginPath();
+      this.ctx.arc(x, BASE_HP_BAR_Y, BASE_HP_PIP_RADIUS, 0, Math.PI * 2);
+      if (i < baseHp) {
+        this.ctx.fillStyle = BASE_HP_FULL_COLOR;
+        this.ctx.fill();
+      } else {
+        this.ctx.strokeStyle = BASE_HP_LOST_COLOR;
+        this.ctx.lineWidth = 1.5;
+        this.ctx.stroke();
+      }
+    }
+    this.ctx.restore();
+
+    this.drawLabel(`大本营 HP ${baseHp}/${maxBaseHp}`, CANVAS_WIDTH / 2, BASE_HP_BAR_Y + 22);
+  }
+
+  /** Full-canvas dim wash + centered "GAME OVER" once gameState is GameOver - drawn last so it sits on top of every other layer. Purely visual; the actual interaction lockout is GameManager.tryPlaceHero rejecting placements and main.ts canceling build mode once it observes GameOver. */
+  private drawGameOverOverlay(): void {
+    if (this.gameManager.gameState !== GameState.GameOver) {
+      return;
+    }
+
+    this.ctx.save();
+    this.ctx.fillStyle = GAME_OVER_OVERLAY_COLOR;
+    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+    this.ctx.textAlign = 'center';
+    this.ctx.textBaseline = 'middle';
+
+    this.ctx.fillStyle = GAME_OVER_TEXT_COLOR;
+    this.ctx.font = 'bold 64px sans-serif';
+    this.ctx.fillText('GAME OVER', this.canvas.width / 2, this.canvas.height / 2);
+
+    this.ctx.fillStyle = GAME_OVER_SUBTEXT_COLOR;
+    this.ctx.font = '18px sans-serif';
+    this.ctx.fillText('大本营已被攻陷', this.canvas.width / 2, this.canvas.height / 2 + 46);
     this.ctx.restore();
   }
 

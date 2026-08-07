@@ -6,13 +6,15 @@ export interface EnemyTypeDefinition {
   speed: number;
   goldReward: number;
   expReward: number;
+  /** How much GameManager's baseHp drops if this enemy walks past ENEMY_PATH's final waypoint uncontested. */
+  baseDamage: number;
 }
 
 /** Base stat templates for spawnable enemy types - WaveConfig.enemiesToSpawn references these ids. */
 export const enemyTypeDefinitions: Record<string, EnemyTypeDefinition> = {
-  goblin: { maxHp: 50, defense: 5, speed: 1.2, goldReward: 2, expReward: 1 },
-  orc: { maxHp: 120, defense: 15, speed: 0.9, goldReward: 5, expReward: 3 },
-  boss_demon: { maxHp: 2000, defense: 60, speed: 0.6, goldReward: 200, expReward: 100 },
+  goblin: { maxHp: 50, defense: 5, speed: 1.2, goldReward: 2, expReward: 1, baseDamage: 1 },
+  orc: { maxHp: 120, defense: 15, speed: 0.9, goldReward: 5, expReward: 3, baseDamage: 2 },
+  boss_demon: { maxHp: 2000, defense: 60, speed: 0.6, goldReward: 200, expReward: 100, baseDamage: 5 },
 };
 
 export type EnemyTypeId = keyof typeof enemyTypeDefinitions;
@@ -40,6 +42,7 @@ export class EnemyFactory {
       speed: definition.speed,
       goldReward: definition.goldReward,
       expReward: definition.expReward,
+      baseDamage: definition.baseDamage,
     });
   }
 }

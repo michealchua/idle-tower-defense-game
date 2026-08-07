@@ -19,6 +19,8 @@ export interface BattleEnemyConfig {
   speed: number;
   goldReward: number;
   expReward: number;
+  /** How much GameManager's baseHp drops if this enemy walks past ENEMY_PATH's final waypoint uncontested. */
+  baseDamage: number;
 }
 
 /** Once the distance to the current target waypoint drops below this, the enemy is considered to have arrived and advances to the next one - small enough that "close enough" never reads as a visible stutter. */
@@ -40,6 +42,7 @@ export class BattleEnemy {
   readonly speed: number;
   readonly goldReward: number;
   readonly expReward: number;
+  readonly baseDamage: number;
   readonly debuffs: EnemyDebuff[] = [];
 
   /** World-space position, advanced each update() tick toward ENEMY_PATH[currentWaypointIndex]. */
@@ -58,6 +61,7 @@ export class BattleEnemy {
     this.speed = config.speed;
     this.goldReward = config.goldReward;
     this.expReward = config.expReward;
+    this.baseDamage = config.baseDamage;
 
     const start = gridCellCenter(ENEMY_PATH[0].col, ENEMY_PATH[0].row);
     this.x = start.x;

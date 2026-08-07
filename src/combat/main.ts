@@ -2,7 +2,7 @@
 // (combat-test.html) - independent of the main React app in src/main.tsx,
 // which doesn't wire this system in yet.
 
-import { GameManager } from './GameManager';
+import { GameManager, GameState } from './GameManager';
 import { heroCatalog } from './heroCatalog';
 import type { WaveConfig } from './WaveManager';
 import { GameRenderer } from '../render/GameRenderer';
@@ -12,6 +12,7 @@ import { InputManager } from '../input/InputManager';
 const MAX_DELTA_SECONDS = 0.1;
 /** Enough to afford heroCatalog's cheapest entry (swordsman, 10) the moment the page loads - otherwise gold could never accrue, since it only comes from kills a hero has to already be placed to make happen. */
 const STARTING_GOLD = 20;
+const BASE_MAX_HP = 10;
 const BUILD_MESSAGE_DURATION_MS = 2000;
 
 const waveConfigs: WaveConfig[] = [
@@ -38,14 +39,17 @@ const gameManager = new GameManager(
     onWaveComplete: (waveId, delaySeconds) => {
       waveLabel = `${waveId} 已完成，${delaySeconds}s 后进入下一波`;
     },
-    // No base HP yet (see GameManagerCallbacks doc comment) - just surfaced
-    // in the HUD so this step's path-walking is visibly confirmable end to
-    // end without needing to watch enemy HP bars for a kill instead.
     onEnemyReachedEnd: (enemy) => {
-      showMessage(`${enemy.archetypeId} 突破了路径终点！`);
+      if (gameManager.gameState !== GameState.GameOver) {
+        showMessage(`${enemy.archetypeId} 突破了防线！大本营 HP -${enemy.baseDamage}`);
+      }
+    },
+    onGameOver: () => {
+      showMessage('游戏结束！大本营已被攻陷');
+      inputManager.cancelBuildMode();
     },
   },
-  { startingGold: STARTING_GOLD },
+  { startingGold: STARTING_GOLD, maxBaseHp: BASE_MAX_HP },
 );
 
 gameManager.start();
@@ -76,6 +80,8 @@ const inputManager = new InputManager(canvas, {
       showMessage('金币不足！');
     } else if (result.reason === 'cell_occupied') {
       showMessage('该格子已被占用！');
+    } else if (result.reason === 'game_over') {
+      showMessage('游戏已结束！');
     } else {
       showMessage('未知的英雄类型');
     }
@@ -116,17 +122,26 @@ cancelButton.addEventListener('click', () => {
 buildPanel.appendChild(cancelButton);
 
 function refreshBuildPanel(): void {
+  const gameOver = gameManager.gameState === GameState.GameOver;
   for (const [heroTypeId, button] of buildButtons) {
     const entry = heroCatalog[heroTypeId];
     button.classList.toggle('active', inputManager.activeHeroTypeId === heroTypeId);
-    button.disabled = gameManager.gold < entry.cost;
+    button.disabled = gameOver || gameManager.gold < entry.cost;
   }
+  cancelButton.disabled = gameOver;
 }
 
 function updateHud(): void {
   hudGold.textContent = String(gameManager.gold);
   hudExp.textContent = String(gameManager.experience);
   hudWave.textContent = waveLabel;
+  // Self-healing rather than relying solely on the onGameOver callback's
+  // one-shot cancelBuildMode() - if build mode somehow got re-armed after
+  // game over (or the callback ordering ever changes), this closes it
+  // again on the very next frame regardless.
+  if (gameManager.gameState === GameState.GameOver) {
+    inputManager.cancelBuildMode();
+  }
   refreshBuildPanel();
 }
 
