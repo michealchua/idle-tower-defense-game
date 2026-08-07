@@ -234,6 +234,79 @@ function drawSpriteFrame(
   ctx.drawImage(image, sx, sy, frameWidth, frameHeight, x - size / 2, y - size / 2, size, size);
 }
 
+// Generous upper bound on how many columns/rows a real sheet in this project
+// could plausibly have - SPRITE_SHEET_CONFIG only needs 4 columns x 2 rows
+// today, this leaves headroom for a richer sheet later without needing a
+// matching bump here. The upper bound is what actually matters: a lower-only
+// check (just "wider than one frame") would be trivially true for a huge
+// single illustration too - width >= 64px is nothing for a 1024x1024 image -
+// so width/height both have to land in a believable *sheet-sized* range, not
+// just "big enough to contain 2 frames' worth of pixels".
+const MAX_SHEET_COLUMNS = 12;
+const MAX_SHEET_ROWS = 6;
+
+// A real animated sheet needs at least 2 columns (something to animate
+// between) and both the walk (row 0) and attack (row 1) rows present, all at
+// SPRITE_SHEET_CONFIG's 32x32 cell size, and needs to actually look
+// sheet-sized (see MAX_SHEET_COLUMNS/ROWS above). A single large
+// illustration - e.g. a 1024x1024 AI-generated character portrait, which is
+// exactly what's actually been dropped into public/sprites/ so far - fails
+// the upper bound and is drawn whole instead (see drawStaticSprite) rather
+// than sliced into a meaningless 32x32 corner crop. Once a real multi-frame
+// sheet replaces a portrait at the same path, this starts returning true and
+// the exact same draw call animates automatically - no other code path
+// changes.
+function isFrameSheet(image: HTMLImageElement): boolean {
+  const { frameWidth, frameHeight } = SPRITE_SHEET_CONFIG;
+  const widthInRange = image.width >= frameWidth * 2 && image.width <= frameWidth * MAX_SHEET_COLUMNS;
+  const heightInRange = image.height >= frameHeight * 2 && image.height <= frameHeight * MAX_SHEET_ROWS;
+  return widthInRange && heightInRange;
+}
+
+// Whole-image draw for a sprite that isn't laid out as a frame sheet (see
+// isFrameSheet) - "contain" fit (scale to fit inside size x size, preserving
+// aspect ratio) rather than stretching, so a non-square source like
+// demon_boss.png (1024x592) doesn't get visibly squashed into a square. No
+// animation, but still real art instead of either a broken slice or the
+// geometric fallback - the middle rung of this file's three-tier fallback
+// (animated sheet > static image > geometric shape).
+function drawStaticSprite(ctx: CanvasRenderingContext2D, image: HTMLImageElement, x: number, y: number, size: number, flip: boolean): void {
+  const scale = Math.min(size / image.width, size / image.height);
+  const drawWidth = image.width * scale;
+  const drawHeight = image.height * scale;
+
+  if (flip) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(-1, 1);
+    ctx.drawImage(image, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+    ctx.restore();
+    return;
+  }
+
+  ctx.drawImage(image, x - drawWidth / 2, y - drawHeight / 2, drawWidth, drawHeight);
+}
+
+// Single entry point drawHero/drawEnemy/drawPet call once a sprite has
+// resolved - dispatches to whichever of the two tiers above actually fits
+// the loaded image, so call sites never need to know which one they got.
+function drawEntitySprite(
+  ctx: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+  state: SpriteAnimationState,
+  nowSeconds: number,
+  x: number,
+  y: number,
+  size: number,
+  flip: boolean,
+): void {
+  if (isFrameSheet(image)) {
+    drawSpriteFrame(ctx, image, state, nowSeconds, x, y, size, flip);
+  } else {
+    drawStaticSprite(ctx, image, x, y, size, flip);
+  }
+}
+
 // A hit reads as "just landed" for this long after CombatSystem resets the
 // attacker's cooldown - long enough for a few attack frames to actually
 // play, short enough to fall back to the walk/idle loop well before the next
@@ -491,7 +564,7 @@ function drawHero(ctx: CanvasRenderingContext2D, hero: HeroState, pulseScale: nu
 
   if (sprite) {
     const size = heroRadius * 2;
-    drawSpriteFrame(ctx, sprite, getHeroAnimationState(hero), nowSeconds, hero.position.x, hero.position.y, size, needsFlip('hero'));
+    drawEntitySprite(ctx, sprite, getHeroAnimationState(hero), nowSeconds, hero.position.x, hero.position.y, size, needsFlip('hero'));
   } else {
     ctx.fillStyle = heroStyle.color;
     ctx.beginPath();
@@ -527,7 +600,7 @@ function drawPet(ctx: CanvasRenderingContext2D, pet: PetState, bobSeed: number, 
     // Pets never attack (PetSystem.ts - no combat AI), so this is always
     // 'walk' - the bob above is the only motion a pet ever needs on top of
     // its own walk-cycle frames.
-    drawSpriteFrame(ctx, sprite, 'walk', nowSeconds, pet.position.x, bobY, size, needsFlip('pet'));
+    drawEntitySprite(ctx, sprite, 'walk', nowSeconds, pet.position.x, bobY, size, needsFlip('pet'));
     return;
   }
 
@@ -578,7 +651,7 @@ function drawEnemy(ctx: CanvasRenderingContext2D, enemy: EnemyState, nowSeconds:
 
   if (sprite) {
     const size = enemyRadius * 2;
-    drawSpriteFrame(ctx, sprite, getEnemyAnimationState(enemy), nowSeconds, enemy.position.x, enemy.position.y, size, needsFlip('enemy'));
+    drawEntitySprite(ctx, sprite, getEnemyAnimationState(enemy), nowSeconds, enemy.position.x, enemy.position.y, size, needsFlip('enemy'));
   } else {
     ctx.fillStyle = enemyStyle.color;
     ctx.beginPath();
@@ -796,7 +869,10 @@ export function renderScene(
 
   const towerSprite = getImage(getTowerSpriteSrc());
   if (towerSprite) {
-    ctx.drawImage(towerSprite, base.position.x - BASE_SIZE / 2, base.position.y - BASE_SIZE / 2, BASE_SIZE, BASE_SIZE);
+    // Never animated (no walk/attack states for a stationary base) and never
+    // flipped (no facing direction) - always the static-image tier, aspect-
+    // preserved in case castle.png isn't authored perfectly square.
+    drawStaticSprite(ctx, towerSprite, base.position.x, base.position.y, BASE_SIZE, false);
   } else {
     ctx.fillStyle = '#795548';
     ctx.fillRect(base.position.x - BASE_SIZE / 2, base.position.y - BASE_SIZE / 2, BASE_SIZE, BASE_SIZE);
