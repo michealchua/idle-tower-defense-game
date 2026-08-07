@@ -62,12 +62,14 @@ function showMessage(text: string): void {
 }
 
 const inputManager = new InputManager(canvas, {
-  onPlaceHero: (heroTypeId, worldX, worldY) => {
-    const result = gameManager.tryPlaceHero(heroTypeId, worldX, worldY);
+  onPlaceHero: (heroTypeId, cell) => {
+    const result = gameManager.tryPlaceHero(heroTypeId, cell);
     if (result.success) {
       showMessage(`已放置：${heroCatalog[heroTypeId].displayName}`);
     } else if (result.reason === 'insufficient_gold') {
       showMessage('金币不足！');
+    } else if (result.reason === 'cell_occupied') {
+      showMessage('该格子已被占用！');
     } else {
       showMessage('未知的英雄类型');
     }

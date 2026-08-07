@@ -6,3 +6,4 @@ export * from './EnemyFactory';
 export * from './WaveManager';
 export * from './GameManager';
 export * from './heroCatalog';
+export * from './gridConfig';

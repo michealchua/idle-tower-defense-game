@@ -2,6 +2,7 @@ import { MechanicTag } from '../data/skills/skillTypes';
 import { BattleHero } from './BattleHero';
 import { BattleEnemy } from './BattleEnemy';
 import type { SkillAction } from './SkillAction';
+import { cellKey, type GridCell } from './gridConfig';
 
 /** Armor-formula constant: actualDamage = rawDamage * (ARMOR_CONSTANT / (ARMOR_CONSTANT + defense)). */
 const ARMOR_CONSTANT = 100;
@@ -34,6 +35,8 @@ export class CombatEngine {
   private readonly heroes = new Map<string, BattleHero>();
   private readonly enemies = new Map<string, BattleEnemy>();
   private readonly callbacks: CombatEngineCallbacks;
+  /** Grid occupancy: cellKey(col, row) -> the hero instanceId placed there. Only cells populated via addHeroAtCell are tracked - addHero alone (e.g. test-run.ts's headless setup) never touches this. */
+  private readonly occupiedCells = new Map<string, string>();
 
   constructor(callbacks: CombatEngineCallbacks = {}) {
     this.callbacks = callbacks;
@@ -41,6 +44,26 @@ export class CombatEngine {
 
   addHero(hero: BattleHero): void {
     this.heroes.set(hero.instanceId, hero);
+  }
+
+  /**
+   * Registers `hero` as occupying grid cell `cell` and adds it to the
+   * engine. Callers (GameManager.tryPlaceHero) are expected to have already
+   * checked isCellOccupied - this throws instead of silently overwriting if
+   * that invariant's ever violated, rather than letting two heroes stack
+   * unnoticed.
+   */
+  addHeroAtCell(hero: BattleHero, cell: GridCell): void {
+    const key = cellKey(cell.col, cell.row);
+    if (this.occupiedCells.has(key)) {
+      throw new Error(`CombatEngine: grid cell (${cell.col}, ${cell.row}) is already occupied`);
+    }
+    this.occupiedCells.set(key, hero.instanceId);
+    this.addHero(hero);
+  }
+
+  isCellOccupied(col: number, row: number): boolean {
+    return this.occupiedCells.has(cellKey(col, row));
   }
 
   addEnemy(enemy: BattleEnemy): void {

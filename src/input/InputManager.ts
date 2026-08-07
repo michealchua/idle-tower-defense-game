@@ -1,22 +1,32 @@
+import { worldToGridCell, gridCellCenter, type GridCell } from '../combat/gridConfig';
+
+/** A hovered/clicked grid cell plus its already-snapped world-space center - what GameRenderer/GameManager both actually want, rather than either recomputing the other from scratch. */
+export interface SnappedPlacement {
+  cell: GridCell;
+  worldPosition: { x: number; y: number };
+}
+
 export interface InputManagerCallbacks {
-  /** Fired on a canvas click while in build mode, with the click already converted to world coordinates. Returns whether the placement actually succeeded (e.g. enough gold), purely for the caller's own bookkeeping - InputManager itself always exits build mode after a click regardless of the outcome. */
-  onPlaceHero: (heroTypeId: string, worldX: number, worldY: number) => boolean;
+  /** Fired on a canvas click while in build mode, with the click already snapped to a grid cell. Returns whether the placement actually succeeded (e.g. enough gold, cell free), purely for the caller's own bookkeeping - InputManager itself always exits build mode after a click regardless of the outcome. */
+  onPlaceHero: (heroTypeId: string, cell: GridCell) => boolean;
 }
 
 /**
  * Owns canvas pointer input and the build-mode state machine (idle -> a
  * hero type is "armed" -> click commits a placement and returns to idle).
- * Talks to the rest of the game only through the onPlaceHero callback - it
- * never reads GameManager/CombatEngine state and never draws anything
- * itself; GameRenderer reads this class's public getters (build mode
- * active?, which hero type, current hover position) to draw the
- * translucent placeholder. Data flows one way: Input -> callback -> game
- * state -> renderer reads state (and, separately, this class's own hover
- * state) - never the reverse.
+ * Every hover/click position is snapped to the battlefield grid (see
+ * gridConfig.ts) before it's exposed anywhere - this class knows nothing
+ * about gold or occupancy, purely the geometry of "where is the pointer,
+ * grid-wise". Talks to the rest of the game only through the onPlaceHero
+ * callback; GameRenderer reads this class's public getters (build mode
+ * active?, which hero type, snapped hover cell) to draw the placeholder.
+ * Data flows one way: Input -> callback -> game state -> renderer reads
+ * state (and, separately, this class's own hover state) - never the
+ * reverse.
  */
 export class InputManager {
   private buildModeHeroTypeId: string | null = null;
-  private hoverPosition: { x: number; y: number } | null = null;
+  private hoverSnap: SnappedPlacement | null = null;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -35,12 +45,12 @@ export class InputManager {
     return this.buildModeHeroTypeId;
   }
 
-  /** World-space point the pointer is currently over, or null while not in build mode or the pointer's outside the canvas. */
-  get hoverWorldPosition(): { x: number; y: number } | null {
-    return this.buildModeHeroTypeId ? this.hoverPosition : null;
+  /** The grid cell (+ its snapped world center) the pointer currently hovers, or null while not in build mode, the pointer's outside the canvas, or it's over the centering margin outside the grid. */
+  get hoverSnappedPlacement(): SnappedPlacement | null {
+    return this.buildModeHeroTypeId ? this.hoverSnap : null;
   }
 
-  /** Arms build mode for the given hero type - the next canvas click attempts to place it there. */
+  /** Arms build mode for the given hero type - the next canvas click attempts to place it at whatever cell it lands on. */
   enterBuildMode(heroTypeId: string): void {
     this.buildModeHeroTypeId = heroTypeId;
     this.canvas.style.cursor = 'crosshair';
@@ -48,7 +58,7 @@ export class InputManager {
 
   cancelBuildMode(): void {
     this.buildModeHeroTypeId = null;
-    this.hoverPosition = null;
+    this.hoverSnap = null;
     this.canvas.style.cursor = '';
   }
 
@@ -77,23 +87,35 @@ export class InputManager {
     };
   }
 
+  /** World point -> grid cell -> that cell's snapped center, or null if the point falls outside the grid. */
+  private toSnappedPlacement(clientX: number, clientY: number): SnappedPlacement | null {
+    const world = this.toWorldPosition(clientX, clientY);
+    const cell = worldToGridCell(world.x, world.y);
+    return cell ? { cell, worldPosition: gridCellCenter(cell.col, cell.row) } : null;
+  }
+
   private readonly handlePointerMove = (event: PointerEvent): void => {
     if (!this.buildModeHeroTypeId) {
       return;
     }
-    this.hoverPosition = this.toWorldPosition(event.clientX, event.clientY);
+    this.hoverSnap = this.toSnappedPlacement(event.clientX, event.clientY);
   };
 
   private readonly handlePointerLeave = (): void => {
-    this.hoverPosition = null;
+    this.hoverSnap = null;
   };
 
   private readonly handlePointerDown = (event: PointerEvent): void => {
     if (!this.buildModeHeroTypeId) {
       return;
     }
-    const world = this.toWorldPosition(event.clientX, event.clientY);
-    this.callbacks.onPlaceHero(this.buildModeHeroTypeId, world.x, world.y);
+    const snap = this.toSnappedPlacement(event.clientX, event.clientY);
+    if (!snap) {
+      // Clicked outside the grid (e.g. the centering margin) - ignore and
+      // stay armed so the player can just click again inside the grid.
+      return;
+    }
+    this.callbacks.onPlaceHero(this.buildModeHeroTypeId, snap.cell);
     this.cancelBuildMode();
   };
 }

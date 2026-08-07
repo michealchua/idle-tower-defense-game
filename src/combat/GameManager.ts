@@ -3,6 +3,7 @@ import { WaveManager, type WaveConfig } from './WaveManager';
 import type { BattleHero } from './BattleHero';
 import type { BattleEnemy } from './BattleEnemy';
 import { heroCatalog, createBattleHeroFromCatalog } from './heroCatalog';
+import { gridCellCenter, type GridCell } from './gridConfig';
 
 /** Seconds of downtime between one wave finishing and the next one starting. */
 const WAVE_DELAY_SECONDS = 2;
@@ -21,7 +22,7 @@ export interface GameManagerOptions {
 
 export type PlaceHeroResult =
   | { success: true; hero: BattleHero }
-  | { success: false; reason: 'unknown_hero_type' | 'insufficient_gold' };
+  | { success: false; reason: 'unknown_hero_type' | 'insufficient_gold' | 'cell_occupied' };
 
 /**
  * Top-level orchestrator that owns the run's CombatEngine + WaveManager and
@@ -61,25 +62,33 @@ export class GameManager {
   }
 
   /**
-   * Validates the requested heroCatalog entry against current gold, and -
-   * only if it's affordable - deducts the cost, builds the hero via
-   * createBattleHeroFromCatalog, positions it at (x, y), and adds it to the
-   * CombatEngine. Read-only callers (InputManager, UI) get a typed result
-   * back instead of a thrown error, since "not enough gold" is an expected
-   * everyday outcome here, not a bug.
+   * Validates the requested heroCatalog entry against the target grid
+   * cell's occupancy and current gold, in that order - the cell must be
+   * free *before* gold is ever touched, so a rejected placement never costs
+   * anything. Only once both checks pass does it deduct cost, build the
+   * hero via createBattleHeroFromCatalog positioned at the cell's center,
+   * and register it in the CombatEngine at that cell. Read-only callers
+   * (InputManager, UI) get a typed result back instead of a thrown error,
+   * since both failure modes are expected everyday outcomes here, not bugs.
    */
-  tryPlaceHero(heroTypeId: string, x: number, y: number): PlaceHeroResult {
+  tryPlaceHero(heroTypeId: string, cell: GridCell): PlaceHeroResult {
     const entry = heroCatalog[heroTypeId];
     if (!entry) {
       return { success: false, reason: 'unknown_hero_type' };
     }
+
+    if (this.combatEngine.isCellOccupied(cell.col, cell.row)) {
+      console.warn(`GameManager.tryPlaceHero: cell (${cell.col}, ${cell.row}) is already occupied - placement rejected`);
+      return { success: false, reason: 'cell_occupied' };
+    }
+
     if (this.gold < entry.cost) {
       return { success: false, reason: 'insufficient_gold' };
     }
 
     this.gold -= entry.cost;
-    const hero = createBattleHeroFromCatalog(entry, { x, y });
-    this.combatEngine.addHero(hero);
+    const hero = createBattleHeroFromCatalog(entry, gridCellCenter(cell.col, cell.row));
+    this.combatEngine.addHeroAtCell(hero, cell);
     return { success: true, hero };
   }
 
