@@ -24,3 +24,27 @@ export function getImage(src: string): HTMLImageElement | undefined {
 
   return image.complete && image.naturalWidth > 0 ? image : undefined;
 }
+
+// Single source of truth for the sprite directory convention - CanvasRenderer
+// calls these instead of building paths inline, so every entity type looks
+// in the same place a real asset drop would use. Sprites are keyed by class/
+// archetype/id rather than one-per-instance (100 unique hero portraits isn't
+// a realistic art budget) - see CanvasRenderer's drawHero/drawEnemy/drawPet
+// for what each falls back to when the file isn't there yet.
+export function getHeroSpriteSrc(heroClass: string): string {
+  return `/sprites/heroes/${heroClass}.png`;
+}
+
+export function getEnemySpriteSrc(archetypeId: string): string {
+  return `/sprites/enemies/${archetypeId}.png`;
+}
+
+export function getPetSpriteSrc(petId: string): string {
+  return `/sprites/pets/${petId}.png`;
+}
+
+// No per-castleType variants yet - a single generic tower sprite, same
+// "one file, not one per instance" reasoning as the others above.
+export function getTowerSpriteSrc(): string {
+  return `/sprites/towers/base.png`;
+}

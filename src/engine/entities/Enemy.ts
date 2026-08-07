@@ -1,9 +1,19 @@
 import { enemyBaseStats } from '../../data/enemyConfig';
-import { enemyArchetypes, type EnemyArchetypeId } from '../../data/enemyArchetypes';
+import { enemyArchetypes, type EnemyArchetype, type EnemyArchetypeId } from '../../data/enemyArchetypes';
 import { getScalingMultiplier } from '../../data/enemyScalingConfig';
 import { getAscensionEnemyDamageMultiplier, getAscensionPowerMultiplier } from '../../data/ascensionConfig';
 import { mapConfig } from '../../data/mapConfig';
+import { generateMonsterName } from '../../data/NameGenerator';
 import type { EnemyState } from '../types';
+
+// A name is only worth rolling for an archetype with a genuine special
+// mechanic - miniboss/boss both already qualify on their own (miniboss via
+// hasShield, boss via berserker), so there's no need to also list archetype
+// ids by hand here. A plain stat-multiplier mob (normal/fast/tank/elite/
+// swarm/brute/giant) stays nameless.
+function isNamedArchetype(archetype: EnemyArchetype): boolean {
+  return !!(archetype.healAbility || archetype.summonAbility || archetype.revive || archetype.hasShield || archetype.berserker);
+}
 
 export function createEnemy(
   archetypeId: EnemyArchetypeId,
@@ -43,5 +53,6 @@ export function createEnemy(
     slowMultiplier: 1,
     slowRemaining: 0,
     revivesRemaining: archetype.revive?.maxRevives ?? 0,
+    name: isNamedArchetype(archetype) ? generateMonsterName() : undefined,
   };
 }

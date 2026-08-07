@@ -1,8 +1,9 @@
 import { t } from '../locales/i18n';
 import { getVisualTierForLevel } from '../data/milestoneConfig';
 import { enemyArchetypes } from '../data/enemyArchetypes';
+import { getEffectiveHeroClass } from '../engine/systems/HeroSystem';
 import type { BiomeDefinition } from '../data/biomeConfig';
-import { getImage } from './assetLoader';
+import { getImage, getEnemySpriteSrc, getHeroSpriteSrc, getPetSpriteSrc, getTowerSpriteSrc } from './assetLoader';
 import type { BaseState, EnemyState, HeroState, PetState, Position, VisualEffect } from '../engine/types';
 
 // Exported so BattleScreen's canvas-native drag-to-swap can hit-test pointer
@@ -86,6 +87,22 @@ function drawHpBar(ctx: CanvasRenderingContext2D, x: number, y: number, ratio: n
   ctx.fillRect(barX, y, HP_BAR_WIDTH, HP_BAR_HEIGHT);
   ctx.fillStyle = ratio > 0.3 ? '#4caf50' : '#e53935';
   ctx.fillRect(barX, y, HP_BAR_WIDTH * Math.max(0, ratio), HP_BAR_HEIGHT);
+}
+
+// Drawn centered on top of the fallback circle/square whenever a sprite
+// hasn't loaded (missing file, still decoding, or failed) - see drawHero/
+// drawEnemy/drawPet. save/restore rather than resetting textBaseline by hand
+// afterward, since every other text draw in this file (damage numbers, level
+// up, etc.) relies on the canvas default 'alphabetic' baseline and would
+// silently shift position if this leaked past its own draw call.
+function drawFallbackGlyph(ctx: CanvasRenderingContext2D, x: number, y: number, glyph: string, fontSize: number): void {
+  ctx.save();
+  ctx.font = `bold ${Math.round(fontSize)}px sans-serif`;
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(glyph, x, y);
+  ctx.restore();
 }
 
 function getHeroPulseScale(visualEffects: VisualEffect[]): number {
@@ -265,10 +282,25 @@ function drawHero(ctx: CanvasRenderingContext2D, hero: HeroState, pulseScale: nu
     ctx.fill();
   }
 
-  ctx.fillStyle = heroStyle.color;
-  ctx.beginPath();
-  ctx.arc(hero.position.x, hero.position.y, heroRadius, 0, Math.PI * 2);
-  ctx.fill();
+  // Sprites are keyed by class (warrior/mage/paladin/summoner), not by the
+  // 100-entry roster id - see assetLoader.getHeroSpriteSrc's doc comment.
+  // getEffectiveHeroClass accounts for an evolved hero's branch-shifted
+  // class, so an evolved mage that branched into a different class draws the
+  // right sprite too.
+  const heroClass = getEffectiveHeroClass(hero);
+  const sprite = getImage(getHeroSpriteSrc(heroClass));
+
+  if (sprite) {
+    const size = heroRadius * 2;
+    ctx.drawImage(sprite, hero.position.x - size / 2, hero.position.y - size / 2, size, size);
+  } else {
+    ctx.fillStyle = heroStyle.color;
+    ctx.beginPath();
+    ctx.arc(hero.position.x, hero.position.y, heroRadius, 0, Math.PI * 2);
+    ctx.fill();
+    drawFallbackGlyph(ctx, hero.position.x, hero.position.y, heroClass.charAt(0).toUpperCase(), heroRadius * 0.9);
+  }
+
   drawHpBar(ctx, hero.position.x, hero.position.y - HERO_RADIUS - 12, hero.currentHp / hero.maxHp);
 }
 
@@ -282,15 +314,6 @@ const PET_VISUAL_COLOR = '#26a69a';
 // a multi-pet squad from all bobbing in lockstep.
 const PET_BOB_AMPLITUDE = 3;
 const PET_BOB_SPEED = 2.4;
-
-// Looked up by petRosterConfig id, same convention as biome.backgroundImage
-// (served from public/, missing file just falls back silently - see
-// assetLoader.getImage). Drop pet-N.png into public/sprites/pets/ to
-// replace the placeholder circle with real pixel art, no code changes
-// needed.
-function getPetSpriteSrc(petId: string): string {
-  return `/sprites/pets/${petId}.png`;
-}
 
 function drawPet(ctx: CanvasRenderingContext2D, pet: PetState, bobSeed: number, nowSeconds: number): void {
   const bobY = pet.position.y + Math.sin(nowSeconds * PET_BOB_SPEED + bobSeed) * PET_BOB_AMPLITUDE;
@@ -306,6 +329,10 @@ function drawPet(ctx: CanvasRenderingContext2D, pet: PetState, bobSeed: number, 
   ctx.beginPath();
   ctx.arc(pet.position.x, bobY, PET_RADIUS, 0, Math.PI * 2);
   ctx.fill();
+  // Pets have no display name (only heroes/named monsters do) - the roster
+  // number (petRosterConfig id is "pet-N") is the only stable per-pet glyph
+  // available, and doubles as a duplicate-tell in a multi-pet squad.
+  drawFallbackGlyph(ctx, pet.position.x, bobY, pet.id.replace('pet-', ''), PET_RADIUS * 1.1);
 }
 
 // Status rings are what make an archetype's threat readable at a glance
@@ -337,10 +364,22 @@ function drawEnemy(ctx: CanvasRenderingContext2D, enemy: EnemyState): void {
     ctx.stroke();
   }
 
-  ctx.fillStyle = enemyStyle.color;
-  ctx.beginPath();
-  ctx.arc(enemy.position.x, enemy.position.y, enemyRadius, 0, Math.PI * 2);
-  ctx.fill();
+  // Sprites are keyed by archetypeId (14 total), not visualId - visualId
+  // exists for a future cosmetic-only variant system that doesn't have any
+  // entries yet, so keying sprites off it today would just mean every
+  // variant needs its own duplicate file for no current benefit.
+  const sprite = getImage(getEnemySpriteSrc(enemy.archetypeId));
+
+  if (sprite) {
+    const size = enemyRadius * 2;
+    ctx.drawImage(sprite, enemy.position.x - size / 2, enemy.position.y - size / 2, size, size);
+  } else {
+    ctx.fillStyle = enemyStyle.color;
+    ctx.beginPath();
+    ctx.arc(enemy.position.x, enemy.position.y, enemyRadius, 0, Math.PI * 2);
+    ctx.fill();
+    drawFallbackGlyph(ctx, enemy.position.x, enemy.position.y, enemy.archetypeId.charAt(0).toUpperCase(), enemyRadius * 0.9);
+  }
 
   const isEnraged = !!archetype.berserker && enemy.currentHp / enemy.maxHp <= archetype.berserker.hpRatioThreshold;
   if (isEnraged) {
@@ -370,6 +409,16 @@ function drawEnemy(ctx: CanvasRenderingContext2D, enemy: EnemyState): void {
     ctx.arc(enemy.position.x, enemy.position.y, enemyRadius + 5, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
+  }
+
+  // Only set for archetypes with a genuine special mechanic (see
+  // Enemy.ts.isNamedArchetype) - a plain mob stays unlabeled so this reads as
+  // "this one's different", not background noise in a 10-enemy horde.
+  if (enemy.name) {
+    ctx.font = '10px sans-serif';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+    ctx.textAlign = 'center';
+    ctx.fillText(enemy.name, enemy.position.x, enemy.position.y - enemyRadius - 18);
   }
 
   drawHpBar(ctx, enemy.position.x, enemy.position.y - enemyRadius - 12, enemy.currentHp / enemy.maxHp);
@@ -532,8 +581,13 @@ export function renderScene(
 
   drawBackground(ctx, canvasWidth, canvasHeight, biome);
 
-  ctx.fillStyle = '#795548';
-  ctx.fillRect(base.position.x - BASE_SIZE / 2, base.position.y - BASE_SIZE / 2, BASE_SIZE, BASE_SIZE);
+  const towerSprite = getImage(getTowerSpriteSrc());
+  if (towerSprite) {
+    ctx.drawImage(towerSprite, base.position.x - BASE_SIZE / 2, base.position.y - BASE_SIZE / 2, BASE_SIZE, BASE_SIZE);
+  } else {
+    ctx.fillStyle = '#795548';
+    ctx.fillRect(base.position.x - BASE_SIZE / 2, base.position.y - BASE_SIZE / 2, BASE_SIZE, BASE_SIZE);
+  }
   drawHpBar(ctx, base.position.x, base.position.y - BASE_SIZE / 2 - 12, base.currentHp / base.maxHp);
 
   // One shared pulse (any active attack flash) rather than per-hero

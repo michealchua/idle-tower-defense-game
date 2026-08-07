@@ -22,6 +22,11 @@ export interface HeroState {
   // Matches a heroRosterConfig id - which template's rarity/statMultiplier
   // this hero uses. Roster entries are 1:1 with deployed heroes.
   id: string;
+  // Procedurally rolled once at createHero (see NameGenerator.generateHeroName)
+  // - flavor only, never used to look anything up. Per-playthrough, not part
+  // of heroRosterConfig, so two players' copies of the same hero id read as
+  // individuals instead of clones.
+  name: string;
   level: number;
   maxHp: number;
   currentHp: number;
@@ -121,6 +126,12 @@ export interface EnemyState {
   // instanceId, used to cap how many of its summons can be alive at once.
   // Undefined for every normally-spawned enemy.
   summonedByInstanceId?: number;
+  // Procedurally rolled (NameGenerator.generateMonsterName) only for
+  // archetypes with a genuine special mechanic - see Enemy.ts's
+  // isNamedArchetype. undefined for plain stat-multiplier mobs, which stay
+  // nameless so CanvasRenderer only ever labels the enemies actually worth
+  // calling out.
+  name?: string;
 }
 
 export interface BaseState {

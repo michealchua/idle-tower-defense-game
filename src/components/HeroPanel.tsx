@@ -386,11 +386,12 @@ function HeroDetail({
   return (
     <div className={`detail-card ${RARITY_BORDER_CLASS[definition.rarity]}`}>
       <div className={`detail-title ${RARITY_CLASS[definition.rarity]}`}>
-        {BOND_ICON[definition.bondId]} {heroLabel(definition)}{' '}
+        {BOND_ICON[definition.bondId]} {hero.name}{' '}
         <span className="text-faint">Lv.{hero.level} · ★{currentStar}/{MAX_STAR_LEVEL}</span>
       </div>
       <div className="item-detail">
         {CLASS_ICON[effectiveClass]} {t(CLASS_LABEL_KEYS[effectiveClass])}
+        <span className="text-faint"> · {heroLabel(definition)}</span>
       </div>
 
       <div className="bar-track">
@@ -584,7 +585,7 @@ function HeroPanel({ gameScreenRef }: { gameScreenRef: RefObject<HTMLDivElement>
                     <div className={`mini-card-name ${RARITY_CLASS[definition.rarity]}`}>
                       <span>
                         {BOND_ICON[definition.bondId]}
-                        {CLASS_ICON[getEffectiveHeroClass(hero)]} {heroLabel(definition)}
+                        {CLASS_ICON[getEffectiveHeroClass(hero)]} {hero.name}
                         {hero.evolutionBranchId ? ' ✨' : ''}
                       </span>
                       <span className={`status-dot${isDeployed ? ' on' : ''}`} title={isDeployed ? t('squad.deployed') : t('squad.benched')} />
@@ -621,7 +622,7 @@ function HeroPanel({ gameScreenRef }: { gameScreenRef: RefObject<HTMLDivElement>
 
       {draggingDefinition && (
         <div className="drag-ghost" style={{ left: drag.pointerX, top: drag.pointerY }}>
-          {BOND_ICON[draggingDefinition.bondId]} {heroLabel(draggingDefinition)}
+          {BOND_ICON[draggingDefinition.bondId]} {heroes.find((h) => h.id === draggingDefinition.id)?.name ?? heroLabel(draggingDefinition)}
         </div>
       )}
     </div>

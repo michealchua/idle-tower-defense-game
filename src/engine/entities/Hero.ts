@@ -1,4 +1,5 @@
 import { getExpToNextLevel, heroBaseConfig, heroUpgradeConfig, type UpgradeableStat } from '../../data/heroConfig';
+import { generateHeroName } from '../../data/NameGenerator';
 import type { HeroState, Position } from '../types';
 
 function createInitialHeroUpgrades(): Record<UpgradeableStat, number> {
@@ -11,6 +12,7 @@ function createInitialHeroUpgrades(): Record<UpgradeableStat, number> {
 export function createHero(heroId: string, position: Position): HeroState {
   return {
     id: heroId,
+    name: generateHeroName(),
     level: heroBaseConfig.level,
     maxHp: heroBaseConfig.maxHp,
     currentHp: heroBaseConfig.maxHp,
