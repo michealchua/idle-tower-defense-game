@@ -299,6 +299,14 @@ export class GameRenderer {
   private drawHero(hero: BattleHero): void {
     const topLeftX = hero.x - HERO_SIZE / 2;
     const topLeftY = hero.y - HERO_SIZE / 2;
+
+    // Drawn before the sprite (bottom layer) so it reads as a ground
+    // marker under the character's feet, not an outline overlapping the
+    // character itself.
+    if (this.inputManager?.selectedHeroInstanceId === hero.instanceId) {
+      this.drawSelectionRing(hero);
+    }
+
     // An evolved hero (hero.evolvedInto set, see BattleHero.evolveInto)
     // draws from its dedicated evolved-branch sprite instead of the plain
     // heroClass one - same fallback-to-class-sprite convention the old
@@ -308,12 +316,9 @@ export class GameRenderer {
     this.drawHpBar(topLeftX, topLeftY, HERO_SIZE, hero.stats.currentHp, hero.stats.maxHp);
     this.drawLabel(hero.evolvedInto ?? hero.heroClass, hero.x, topLeftY + HERO_SIZE + 14);
     this.drawLevelBadge(hero, topLeftX, topLeftY);
-    if (this.inputManager?.selectedHeroInstanceId === hero.instanceId) {
-      this.drawSelectionRing(hero);
-    }
   }
 
-  /** Small "Lv.N" tag in the sprite's top-left corner - always visible (not just on hover/selection), since level is core to step 17's upgrade loop. */
+  /** Small "Lv.N" tag above the sprite's head (top-left corner of its bounding box) - always visible (not just on hover/selection), since level is core to step 17's upgrade loop. */
   private drawLevelBadge(hero: BattleHero, topLeftX: number, topLeftY: number): void {
     this.ctx.save();
     this.ctx.fillStyle = LEVEL_BADGE_COLOR;
@@ -323,14 +328,25 @@ export class GameRenderer {
     this.ctx.restore();
   }
 
-  /** Dashed gold ring around whichever hero InputManager.selectedHeroInstanceId names - the visual half of step 17's "click a placed hero to select it" flow, purely reflecting state InputManager/main.ts already own. */
+  /**
+   * Flattened dashed ellipse "standing ring" at the selected hero's feet
+   * (the bottom edge of its sprite box, not a circle around the whole
+   * body) - the classic RTS-style ground marker for "this unit is
+   * selected". Purely reflects InputManager.selectedHeroInstanceId, which
+   * main.ts's onCanvasClick hit-test sets; this method never mutates
+   * anything itself.
+   */
   private drawSelectionRing(hero: BattleHero): void {
+    const feetY = hero.y + HERO_SIZE / 2;
+    const radiusX = HERO_SIZE / 2;
+    const radiusY = HERO_SIZE / 5;
+
     this.ctx.save();
     this.ctx.strokeStyle = SELECTION_RING_COLOR;
     this.ctx.lineWidth = 2;
     this.ctx.setLineDash([5, 4]);
     this.ctx.beginPath();
-    this.ctx.arc(hero.x, hero.y, HERO_SIZE / 2 + 6, 0, Math.PI * 2);
+    this.ctx.ellipse(hero.x, feetY, radiusX, radiusY, 0, 0, Math.PI * 2);
     this.ctx.stroke();
     this.ctx.restore();
   }
