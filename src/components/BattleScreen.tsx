@@ -165,12 +165,19 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
   // Auto-detects available screen space instead of staying pinned at a
   // fixed 400x300 - the canvas-stage element's CSS (width:100%, height:100%)
   // decides the actual size, this just measures whatever that resolves to
-  // on this screen.
+  // on this screen. ResizeObserver is the primary signal (it catches any
+  // layout change affecting .canvas-stage, not just the window itself -
+  // orientation changes, mobile browser chrome show/hide, etc.) - the
+  // plain window 'resize' listener alongside it is a deliberately redundant
+  // second trigger for the common case, re-measuring the same element via
+  // getBoundingClientRect so a window resize is reflected even in the
+  // unlikely event the observer callback doesn't fire for some reason.
   useEffect(() => {
     const stage = stageRef.current;
     if (!stage) {
       return;
     }
+
     const observer = new ResizeObserver((entries) => {
       const { width, height } = entries[0].contentRect;
       if (width > 0 && height > 0) {
@@ -178,7 +185,19 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
       }
     });
     observer.observe(stage);
-    return () => observer.disconnect();
+
+    const handleWindowResize = (): void => {
+      const rect = stage.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        setDisplaySize({ width: rect.width, height: rect.height });
+      }
+    };
+    window.addEventListener('resize', handleWindowResize);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', handleWindowResize);
+    };
   }, [stageRef]);
 
   useEffect(() => {

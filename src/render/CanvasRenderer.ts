@@ -774,13 +774,36 @@ export function drawBackground(ctx: CanvasRenderingContext2D, canvasWidth: numbe
   const drawHeight = image.height * scale;
   const offsetY = (canvasHeight - drawHeight) / 2;
 
-  // Seamless scroll: same image tiled left-to-right, panned by the shared
-  // scroll phase and wrapped modulo one tile's width. Starting one tile
-  // before the visible edge and walking right until past canvasWidth always
-  // covers the full canvas regardless of how drawWidth compares to it.
+  // Mirror-tiled scroll ("ping-pong"/MIRRORED_REPEAT wrapping): plain repeat
+  // (A, A, A, ...) puts the source image's right edge directly against its
+  // own left edge at every seam - for a real photo/illustration (not a
+  // hand-authored seamless texture) those two edges look nothing alike, so
+  // every tile boundary reads as a visible hard cut. Alternating normal and
+  // horizontally-flipped copies (A, flip(A), A, flip(A), ...) fixes this by
+  // construction rather than requiring seamless source art: at an A->flip(A)
+  // boundary, both sides sample the exact same pixels near A's own right
+  // edge (a flip is a reflection, so it's continuous at the reflection
+  // axis); at the next flip(A)->A boundary, both sides likewise sample A's
+  // own left edge. Every seam is therefore pixel-continuous regardless of
+  // what the source image's edges actually look like. tileIndex is the
+  // tile's position in the infinite strip (not just this loop's local
+  // counter) - deriving it from (x + backgroundScrollX) rather than
+  // resetting per-frame keeps a given piece of world "mirrored" or not
+  // consistently as it scrolls, instead of flickering between orientations.
   const wrappedOffset = ((backgroundScrollX % drawWidth) + drawWidth) % drawWidth;
   for (let x = -wrappedOffset - drawWidth; x < canvasWidth; x += drawWidth) {
-    ctx.drawImage(image, x, offsetY, drawWidth, drawHeight);
+    const tileIndex = Math.floor((x + backgroundScrollX) / drawWidth);
+    const isMirrored = (((tileIndex % 2) + 2) % 2) === 1;
+
+    if (isMirrored) {
+      ctx.save();
+      ctx.translate(x + drawWidth, offsetY);
+      ctx.scale(-1, 1);
+      ctx.drawImage(image, 0, 0, drawWidth, drawHeight);
+      ctx.restore();
+    } else {
+      ctx.drawImage(image, x, offsetY, drawWidth, drawHeight);
+    }
   }
 }
 
