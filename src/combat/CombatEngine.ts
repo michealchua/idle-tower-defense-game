@@ -32,6 +32,11 @@ export interface CombatEngineCallbacks {
  * forward together. Each CombatEngine instance is a fully isolated battle -
  * nothing here reads or writes shared/global state; rewards and other
  * side effects flow out only through the callbacks passed at construction.
+ * Targeting is fully positional: a hero's ready skill only actually fires
+ * once findTargetsInRange confirms a live enemy is within that skill's
+ * range of the hero's real x/y (see BattleHero/BattleEnemy, both grid-
+ * placed since step 9/11) - a skill with nothing in range simply stays
+ * ready and is re-checked next tick, never wasted on an empty swing.
  */
 export class CombatEngine {
   private readonly heroes = new Map<string, BattleHero>();
@@ -98,23 +103,46 @@ export class CombatEngine {
         continue;
       }
 
-      // No positional targeting yet (see class doc) - "in range" is
-      // simulated by simply filtering to whoever's still alive.
-      const aliveEnemies = this.getAliveEnemies();
-      if (aliveEnemies.length === 0) {
+      const definition = hero.getSkillDefinition(readySkillId);
+      if (!definition) {
+        continue;
+      }
+
+      const isAoE = definition.mechanicTags.includes(MechanicTag.AoE);
+      const targets = this.findTargetsInRange(hero, definition.range, isAoE);
+      if (targets.length === 0) {
+        // Nothing's walked into range yet - skip the cast entirely so the
+        // cooldown isn't spent on an empty swing; isSkillReady stays true
+        // and this same skill gets re-checked again next tick.
         continue;
       }
 
       const action = hero.executeSkill(readySkillId);
-      this.resolveSkillAction(hero, action, aliveEnemies);
+      this.resolveSkillAction(hero, action, targets);
     }
 
     this.cleanupRemovedEnemies();
   }
 
-  private resolveSkillAction(caster: BattleHero, action: SkillAction, aliveEnemies: BattleEnemy[]): void {
-    const targets = action.mechanicTags.includes(MechanicTag.AoE) ? aliveEnemies : aliveEnemies.slice(0, 1);
+  /**
+   * Live enemies within `range` pixels of `hero`'s position, nearest
+   * first. A single-target skill only ever gets the closest one; an AoE
+   * skill gets every enemy the range circle reaches.
+   */
+  private findTargetsInRange(hero: BattleHero, range: number, isAoE: boolean): BattleEnemy[] {
+    const inRange = this.getAliveEnemies()
+      .map((enemy) => ({ enemy, distance: Math.hypot(enemy.x - hero.x, enemy.y - hero.y) }))
+      .filter((entry) => entry.distance <= range)
+      .sort((a, b) => a.distance - b.distance);
 
+    if (inRange.length === 0) {
+      return [];
+    }
+    return isAoE ? inRange.map((entry) => entry.enemy) : [inRange[0].enemy];
+  }
+
+  /** `targets` is already the exact set findTargetsInRange picked (single nearest, or every in-range enemy for AoE) - no further filtering happens here. */
+  private resolveSkillAction(caster: BattleHero, action: SkillAction, targets: BattleEnemy[]): void {
     let totalDamageDealt = 0;
     for (const target of targets) {
       totalDamageDealt += this.resolveDamageAgainst(caster, action, target);

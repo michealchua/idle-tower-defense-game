@@ -7,6 +7,7 @@ import type { WaveConfig } from './WaveManager';
 import { HeroFactory } from '../data/hero/HeroFactory';
 import { swordsmanTemplate } from '../data/hero/warriorTemplates';
 import { bladeSlashSkill, bloodFurySkill, bloodrageSlashSkill } from '../data/skills/warriorSkills';
+import { gridCellCenter } from './gridConfig';
 
 const waveConfigs: WaveConfig[] = [
   {
@@ -21,11 +22,21 @@ const waveConfigs: WaveConfig[] = [
   },
 ];
 
-const heroInstance = HeroFactory.createHero(swordsmanTemplate);
-// Unlock the growth skill so the hero has more than one skill to alternate between.
-heroInstance.skills.growthSkills[0].unlocked = true;
+// A single melee hero's DPS (~4.3/s from blade slash's 4s cooldown) can't
+// out-damage a goblin (50hp) within the ~3.5s window one range circle
+// spends overlapping the path - that's a real dwell-time/DPS limit, not a
+// targeting bug. Four heroes clustered on adjacent cells below the path's
+// first leg overlap their range circles enough to hit a passing goblin
+// simultaneously, comfortably clearing 50hp inside that same window - a
+// believable choke-point cluster, and what actually proves out "walks into
+// range -> autofires -> dies" end to end.
+function createChokePointHero(col: number, row: number) {
+  const heroInstance = HeroFactory.createHero(swordsmanTemplate);
+  heroInstance.skills.growthSkills[0].unlocked = true;
+  return new BattleHero(heroInstance, [bladeSlashSkill, bloodFurySkill, bloodrageSlashSkill], gridCellCenter(col, row));
+}
 
-const hero = new BattleHero(heroInstance, [bladeSlashSkill, bloodFurySkill, bloodrageSlashSkill]);
+const heroes = [1, 2, 3, 4].map((col) => createChokePointHero(col, 3));
 
 const gameManager = new GameManager(waveConfigs, {
   onWaveStart: (config, index) => {
@@ -46,7 +57,9 @@ const gameManager = new GameManager(waveConfigs, {
   },
 });
 
-gameManager.addHero(hero);
+for (const hero of heroes) {
+  gameManager.addHero(hero);
+}
 gameManager.start();
 
 const TICK_SECONDS = 0.1;

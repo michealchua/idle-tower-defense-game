@@ -82,6 +82,20 @@ export class BattleHero {
     return this.skillCooldowns.get(skillId) ?? 0;
   }
 
+  /** Read-only peek at an owned skill's definition (range, cooldown, damageMultiplier, ...) without touching cooldown state - what CombatEngine checks range/AoE against *before* deciding whether to actually executeSkill. */
+  getSkillDefinition(skillId: string): SkillDefinition | undefined {
+    return this.skillDefinitions.get(skillId);
+  }
+
+  /** Largest range among every skill this hero owns - a hero can carry several skills with different individual ranges, so this is the outer envelope GameRenderer's hover debug circle draws. */
+  getMaxSkillRange(): number {
+    let maxRange = 0;
+    for (const definition of this.skillDefinitions.values()) {
+      maxRange = Math.max(maxRange, definition.range);
+    }
+    return maxRange;
+  }
+
   isSkillReady(skillId: string): boolean {
     return this.getSkillCooldown(skillId) <= 0;
   }

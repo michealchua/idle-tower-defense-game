@@ -37,6 +37,8 @@ const PATH_TINT_COLOR = 'rgba(139, 111, 78, 0.4)';
 const PATH_LINE_COLOR = 'rgba(255, 235, 180, 0.85)';
 const PATH_ARROW_SIZE = 12;
 
+const RANGE_CIRCLE_COLOR = 'rgba(255, 255, 255, 0.6)';
+
 // Matches CanvasRenderer's SPRITE_SHEET_CONFIG convention: hero/enemy sheets
 // dropped into public/sprites/ are laid out as 32x32 cells (row 0 = walk).
 // This renderer doesn't animate - it just samples the first walk frame -
@@ -88,6 +90,7 @@ export class GameRenderer {
       this.drawEnemy(enemy);
     }
 
+    this.drawHoveredHeroRange();
     this.drawBuildModePlaceholder();
   }
 
@@ -185,6 +188,41 @@ export class GameRenderer {
     this.drawSprite(getHeroSpriteSrc(hero.heroClass), topLeftX, topLeftY, HERO_SIZE, '#3b82f6');
     this.drawHpBar(topLeftX, topLeftY, HERO_SIZE, hero.stats.currentHp, hero.stats.maxHp);
     this.drawLabel(hero.heroClass, hero.x, topLeftY + HERO_SIZE + 14);
+  }
+
+  /**
+   * Debug aid: hovering the pointer directly over a placed hero (regardless
+   * of build mode) draws a thin dashed circle at that hero's largest owned
+   * skill range, centered on its real x/y - lets you eyeball whether a
+   * given enemy position will actually draw fire. Read-only: only calls
+   * InputManager.pointerWorldPosition and BattleHero.getMaxSkillRange.
+   */
+  private drawHoveredHeroRange(): void {
+    const pointer = this.inputManager?.pointerWorldPosition;
+    if (!pointer) {
+      return;
+    }
+
+    const hoveredHero = this.gameManager.combatEngine
+      .getHeroes()
+      .find((hero) => Math.hypot(hero.x - pointer.x, hero.y - pointer.y) <= HERO_SIZE / 2);
+    if (!hoveredHero) {
+      return;
+    }
+
+    const range = hoveredHero.getMaxSkillRange();
+    if (range <= 0) {
+      return;
+    }
+
+    this.ctx.save();
+    this.ctx.strokeStyle = RANGE_CIRCLE_COLOR;
+    this.ctx.lineWidth = 1;
+    this.ctx.setLineDash([4, 4]);
+    this.ctx.beginPath();
+    this.ctx.arc(hoveredHero.x, hoveredHero.y, range, 0, Math.PI * 2);
+    this.ctx.stroke();
+    this.ctx.restore();
   }
 
   /**

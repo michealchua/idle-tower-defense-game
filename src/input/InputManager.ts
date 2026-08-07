@@ -27,6 +27,8 @@ export interface InputManagerCallbacks {
 export class InputManager {
   private buildModeHeroTypeId: string | null = null;
   private hoverSnap: SnappedPlacement | null = null;
+  /** Raw (unsnapped) world position, tracked regardless of build mode - what GameRenderer's optional hero-range hover debug circle hit-tests against. */
+  private pointerPosition: { x: number; y: number } | null = null;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -48,6 +50,11 @@ export class InputManager {
   /** The grid cell (+ its snapped world center) the pointer currently hovers, or null while not in build mode, the pointer's outside the canvas, or it's over the centering margin outside the grid. */
   get hoverSnappedPlacement(): SnappedPlacement | null {
     return this.buildModeHeroTypeId ? this.hoverSnap : null;
+  }
+
+  /** Raw world-space pointer position, tracked independent of build mode - null once the pointer leaves the canvas. */
+  get pointerWorldPosition(): { x: number; y: number } | null {
+    return this.pointerPosition;
   }
 
   /** Arms build mode for the given hero type - the next canvas click attempts to place it at whatever cell it lands on. */
@@ -95,13 +102,16 @@ export class InputManager {
   }
 
   private readonly handlePointerMove = (event: PointerEvent): void => {
+    this.pointerPosition = this.toWorldPosition(event.clientX, event.clientY);
     if (!this.buildModeHeroTypeId) {
       return;
     }
-    this.hoverSnap = this.toSnappedPlacement(event.clientX, event.clientY);
+    const cell = worldToGridCell(this.pointerPosition.x, this.pointerPosition.y);
+    this.hoverSnap = cell ? { cell, worldPosition: gridCellCenter(cell.col, cell.row) } : null;
   };
 
   private readonly handlePointerLeave = (): void => {
+    this.pointerPosition = null;
     this.hoverSnap = null;
   };
 
