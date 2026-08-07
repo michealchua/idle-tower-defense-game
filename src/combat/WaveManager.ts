@@ -88,6 +88,23 @@ export class WaveManager {
   }
 
   /**
+   * Hardcore-mechanic seam: skips the rest of the current wave's WAITING
+   * countdown and begins SPAWNING immediately - the hook a future "start
+   * early for bonus gold" feature calls into. A no-op outside WAITING
+   * (already spawning, level cleared, or start() never called) - there's
+   * no countdown to skip in any of those states.
+   */
+  forceStartNextWave(): void {
+    if (this.waveState !== WaveState.Waiting) {
+      return;
+    }
+    const config = this.currentWaveConfig;
+    if (config) {
+      this.beginSpawning(config);
+    }
+  }
+
+  /**
    * Advances deltaTime seconds through whichever state the current wave is
    * in. A no-op once isLevelCleared() or before start() has been called.
    */

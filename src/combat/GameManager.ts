@@ -133,6 +133,14 @@ export class GameManager {
     this.waveManager.start();
   }
 
+  /** Skips the current wave's WAITING countdown (see WaveManager.forceStartNextWave) - gated on the run still being Playing so a stray click after GameOver/Victory can't flip WaveManager into SPAWNING when nothing will ever tick it forward again. */
+  forceStartNextWave(): void {
+    if (this.isRunOver) {
+      return;
+    }
+    this.waveManager.forceStartNextWave();
+  }
+
   private handleEnemyDefeated(enemy: BattleEnemy): void {
     this.gold += enemy.goldReward;
     this.experience += enemy.expReward;

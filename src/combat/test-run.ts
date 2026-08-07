@@ -3,12 +3,70 @@
 // Run with: npx tsx src/combat/test-run.ts
 
 import { GameManager, GameState } from './GameManager';
+import { WaveState } from './WaveManager';
 import { BattleHero } from './BattleHero';
 import { sampleLevelConfig } from './sampleLevelConfig';
 import { HeroFactory } from '../data/hero/HeroFactory';
 import { swordsmanTemplate } from '../data/hero/warriorTemplates';
 import { bladeSlashSkill, bloodFurySkill, bloodrageSlashSkill } from '../data/skills/warriorSkills';
 import { gridCellCenter } from './gridConfig';
+
+// --- forceStartNextWave edge cases -----------------------------------
+//
+// Isolated from the main simulation below so a failure here points
+// straight at the hardcore-mechanic seam itself, not at the choke-point
+// hero cluster's damage math.
+console.log('=== forceStartNextWave 边界验证 ===');
+{
+  const gm = new GameManager(sampleLevelConfig, {}, { maxBaseHp: 100 });
+  gm.start();
+  // Read WaveManager.state into a fresh local after every mutating call
+  // (start()/forceStartNextWave()) rather than repeatedly comparing the
+  // live gm.waveManager.state expression - TypeScript's control-flow
+  // narrowing doesn't know those calls can change what that getter
+  // returns, and "remembers" an earlier comparison's result straight
+  // through them, flagging the next comparison as an impossible literal
+  // overlap.
+  const stateAfterStart = gm.waveManager.state;
+  console.log('  start() 后波次状态:', stateAfterStart, '(期望 waiting)');
+  if (stateAfterStart !== WaveState.Waiting) {
+    throw new Error('Expected WaveManager to start in WaveState.Waiting.');
+  }
+
+  gm.forceStartNextWave();
+  const stateAfterForce = gm.waveManager.state;
+  console.log('  调用 forceStartNextWave() 后:', stateAfterForce, '(期望立即跳过倒计时进入 spawning)');
+  if (stateAfterForce !== WaveState.Spawning) {
+    throw new Error('forceStartNextWave() should transition WAITING -> SPAWNING immediately.');
+  }
+
+  gm.forceStartNextWave();
+  const stateAfterSecondForce = gm.waveManager.state;
+  console.log('  SPAWNING 期间再次调用，状态仍为:', stateAfterSecondForce, '(期望无操作，仍是 spawning)');
+  if (stateAfterSecondForce !== WaveState.Spawning) {
+    throw new Error('forceStartNextWave() should be a no-op while already SPAWNING.');
+  }
+}
+{
+  // No heroes at all - baseHp drains to 0 quickly, forcing GAME_OVER, so we
+  // can confirm forceStartNextWave() is inert once the run has ended.
+  const gm = new GameManager(sampleLevelConfig, {}, { maxBaseHp: 1 });
+  gm.start();
+  let ticks = 0;
+  while (gm.gameState === GameState.Playing && ticks < 3000) {
+    gm.update(0.1);
+    ticks += 1;
+  }
+  console.log('  达成', gm.gameState, '后调用 forceStartNextWave()...');
+  const waveStateBefore = gm.waveManager.state;
+  gm.forceStartNextWave();
+  const waveStateAfter = gm.waveManager.state;
+  console.log('  波次状态未变:', waveStateAfter === waveStateBefore, `(${waveStateBefore} -> ${waveStateAfter})`);
+  if (waveStateAfter !== waveStateBefore) {
+    throw new Error('forceStartNextWave() should be a no-op once gameState has left Playing.');
+  }
+}
+console.log('[PASS] forceStartNextWave 边界验证通过。\n');
 
 // A single melee hero's DPS (~4.3/s from blade slash's 4s cooldown) can't
 // out-damage a goblin (50hp) within the ~3.5s window one range circle
@@ -77,9 +135,24 @@ gameManager.start();
 const TICK_SECONDS = 0.1;
 const TOTAL_TICKS = 1500;
 
+// Demonstrates forceStartNextWave() in context: the moment wave 2 enters
+// its WAITING countdown, skip straight to SPAWNING instead of waiting out
+// the full delayBeforeStart.
+let forcedWave2Start = false;
+
 let tick = 0;
 for (; tick < TOTAL_TICKS && gameManager.gameState === GameState.Playing; tick += 1) {
+  if (!forcedWave2Start && gameManager.waveManager.currentIndex === 1 && gameManager.waveManager.state === WaveState.Waiting) {
+    console.log('\n>>> forceStartNextWave(): 跳过第 2 波的等待倒计时 <<<');
+    gameManager.forceStartNextWave();
+    forcedWave2Start = true;
+  }
   gameManager.update(TICK_SECONDS);
+}
+
+console.log(`\nforceStartNextWave() 是否被触发: ${forcedWave2Start}`);
+if (!forcedWave2Start) {
+  throw new Error('Expected forceStartNextWave() to have been exercised during the main simulation.');
 }
 
 console.log(`\n=== 模拟结束 (共 ${(tick * TICK_SECONDS).toFixed(1)} 秒, gameState=${gameManager.gameState}) ===`);

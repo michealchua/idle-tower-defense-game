@@ -3,6 +3,7 @@
 // which doesn't wire this system in yet.
 
 import { GameManager, GameState } from './GameManager';
+import { WaveState } from './WaveManager';
 import { heroCatalog } from './heroCatalog';
 import { sampleLevelConfig } from './sampleLevelConfig';
 import { GameRenderer } from '../render/GameRenderer';
@@ -110,6 +111,18 @@ cancelButton.addEventListener('click', () => {
 });
 buildPanel.appendChild(cancelButton);
 
+// Test button for the hardcore-mechanic seam (WaveManager.forceStartNextWave)
+// - only meaningful while WAITING for the next wave's delayBeforeStart to
+// elapse, so it's disabled the rest of the time rather than being a no-op
+// click.
+const forceStartButton = document.createElement('button');
+forceStartButton.textContent = '⚡ 提前开始下一波';
+forceStartButton.addEventListener('click', () => {
+  gameManager.forceStartNextWave();
+  refreshBuildPanel();
+});
+buildPanel.appendChild(forceStartButton);
+
 function refreshBuildPanel(): void {
   const runOver = gameManager.gameState !== GameState.Playing;
   for (const [heroTypeId, button] of buildButtons) {
@@ -118,6 +131,7 @@ function refreshBuildPanel(): void {
     button.disabled = runOver || gameManager.gold < entry.cost;
   }
   cancelButton.disabled = runOver;
+  forceStartButton.disabled = runOver || gameManager.waveManager.state !== WaveState.Waiting;
 }
 
 function updateHud(): void {
