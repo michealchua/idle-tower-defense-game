@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Combat Renderer Test</title>
+    <style>
+      body {
+        margin: 0;
+        background: #0b0b0b;
+        color: #eee;
+        font-family: sans-serif;
+        display: flex;
+        justify-content: center;
+        padding: 32px 0;
+      }
+      #game-container {
+        position: relative;
+        width: 960px;
+      }
+      #game-canvas {
+        display: block;
+        width: 960px;
+        height: 540px;
+        background: #000;
+        border: 2px solid #333;
+      }
+      #hud {
+        position: absolute;
+        top: 12px;
+        left: 12px;
+        padding: 8px 14px;
+        background: rgba(0, 0, 0, 0.6);
+        border-radius: 6px;
+        font-size: 14px;
+        line-height: 1.7;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="game-container">
+      <canvas id="game-canvas" width="960" height="540"></canvas>
+      <div id="hud">
+        <div>金币: <span id="hud-gold">0</span></div>
+        <div>经验: <span id="hud-exp">0</span></div>
+        <div>波次: <span id="hud-wave">-</span></div>
+      </div>
+    </div>
+    <script type="module" src="/src/combat/main.ts"></script>
+  </body>
+</html>
