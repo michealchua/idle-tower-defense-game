@@ -57,6 +57,7 @@ function DebugPanel() {
   const wave = useGameStore((state) => state.wave);
   const isPaused = useGameStore((state) => state.isPaused);
   const speedMultiplier = useGameStore((state) => state.speedMultiplier);
+  const pendingStoryId = useGameStore((state) => state.pendingStoryId);
 
   if (!isOpen) {
     return (
@@ -76,6 +77,7 @@ function DebugPanel() {
       </div>
       <div>Heroes: {heroes.map((hero) => `${hero.id}:Lv${hero.level}`).join(' ')}</div>
       <div>Gold: {gold}</div>
+      <div>Story: {pendingStoryId ?? 'none'}</div>
       <div>Ascension: {ascensionLevel}</div>
       <div>Difficulty: {difficultyScore.toFixed(2)}</div>
       <div>

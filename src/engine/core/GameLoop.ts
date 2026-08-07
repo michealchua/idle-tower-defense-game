@@ -5,7 +5,7 @@ import { tickEnemyAbilities } from '../systems/EnemyAbilitySystem';
 import { tickSkills } from '../systems/SkillSystem';
 import { tickLevelUp } from '../systems/LevelSystem';
 import { tickEffects, tickScreenShake } from '../systems/EffectsSystem';
-import { tickWaveProgress } from '../systems/WaveSystem';
+import { tickWaveProgress, tickTutorialStoryTrigger } from '../systems/WaveSystem';
 import { tickCastleIncome } from '../systems/CastleSystem';
 import { tickGachaWelcomeBonus, tickDailyLoginReward } from '../systems/GachaSystem';
 import type { GameState } from '../types';
@@ -51,14 +51,20 @@ export class GameLoop {
     this.lastTimestampMs = timestampMs;
 
     while (!this.state.isGameOver && this.accumulatorSeconds >= FIXED_TIMESTEP_SECONDS) {
+      tickTutorialStoryTrigger(this.state);
+
       // Hit-stop freezes gameplay (movement/combat/spawning/etc.) for a few
       // fixed steps on a punchy hit - see DamageSystem.applyDamage/handleDeath
       // and effectConfig.hitStopConfig for what triggers it and for how long.
       // tickEffects/tickScreenShake still run every step regardless, so
       // floating damage numbers and the shake itself keep animating smoothly
-      // through the freeze instead of visibly hitching too.
+      // through the freeze instead of visibly hitching too. A pending
+      // StoryDialog (see WaveSystem.tickTutorialStoryTrigger) pauses
+      // gameplay the same way, so combat can't progress behind the dialog.
       if (this.state.hitStopRemaining > 0) {
         this.state.hitStopRemaining = Math.max(0, this.state.hitStopRemaining - FIXED_TIMESTEP_SECONDS);
+      } else if (this.state.pendingStoryId !== null) {
+        // Paused for StoryDialog - only the cosmetic ticks below still run.
       } else {
         tickSpawn(this.state, FIXED_TIMESTEP_SECONDS);
         tickMovement(this.state, FIXED_TIMESTEP_SECONDS);

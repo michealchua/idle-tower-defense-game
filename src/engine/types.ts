@@ -307,10 +307,19 @@ export interface GameState {
   reforgeDust: number;
   // ISO date (YYYY-MM-DD, local) of the last calendar day the daily login
   // reward was granted - null means never. See GachaSystem.
-  // tickDailyLoginReward. Note: this project has no save/load persistence
-  // yet (see engine/core/GameState.ts), so in practice this only ever
-  // differs from "today" once per page load/reload, not once per real
-  // calendar day - the field/check is still correct for whenever
-  // persistence lands.
+  // tickDailyLoginReward. Persisted via SaveSystem.ts, so this now genuinely
+  // differs only once per real calendar day across saved sessions.
   lastLoginDate: string | null;
+  // One-shot latch guarding WaveSystem.tickTutorialStoryTrigger - true the
+  // moment a save has ever reached Wave 1, so the new-player StoryDialog
+  // script never refires (including after loading a save already past wave
+  // 1). Persisted, unlike pendingStoryId below.
+  hasSeenTutorialStory: boolean;
+  // Which storyConfig.ts script StoryDialog should currently display, or
+  // null when no dialog is active. Transient UI-trigger state (not
+  // meaningful to persist mid-dialog), reset to null on load - see
+  // SaveSystem.ts/useGameStore.loadGame. While set, GameLoop pauses
+  // gameplay ticks the same way hitStopRemaining does, so combat can't
+  // progress behind the dialog.
+  pendingStoryId: string | null;
 }

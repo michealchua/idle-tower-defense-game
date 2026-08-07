@@ -961,3 +961,220 @@ select {
   max-height: calc(100vh - 56px);
   overflow-y: auto;
 }
+
+/* Title screen - the default route (App.tsx), rendered instead of the game
+   shell until a save slot is loaded/started. Flat radial-less background
+   (no gradients, matching the rest of the art direction) with the logo
+   centered and the save-slot panel anchored to the bottom edge. */
+.title-screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  background: var(--bg);
+  cursor: pointer;
+  user-select: none;
+  overflow: hidden;
+}
+
+.title-logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.title-name {
+  font-size: clamp(36px, 8vw, 64px);
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: var(--text);
+  text-shadow: 0 0 24px rgba(91, 140, 255, 0.45);
+}
+
+.title-subtitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 4px;
+}
+
+.title-press-start {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent-strong);
+  letter-spacing: 1px;
+  animation: title-blink 1.4s ease-in-out infinite;
+}
+
+@keyframes title-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.title-save-toggle {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  background: var(--surface-hover);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 14px;
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.title-save-toggle:hover {
+  border-color: var(--accent-strong);
+}
+
+.title-save-panel {
+  position: absolute;
+  bottom: 68px;
+  right: 20px;
+  width: min(420px, 88vw);
+  max-height: 60vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  cursor: default;
+  animation: modal-slide-up 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.save-slot-row {
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.save-slot-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.save-slot-title {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.save-slot-detail {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.save-slot-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.save-slot-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--danger);
+}
+
+/* Story dialog - visual-novel-style, fixed to the bottom of the screen (see
+   StoryDialog.tsx/storyConfig.ts). Sits above the modal layer (z-index 30)
+   since a story beat should read as more urgent than any open panel. */
+.story-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0 16px 16px;
+  cursor: pointer;
+  background: transparent;
+}
+
+.story-dialog {
+  width: min(760px, 100%);
+  display: flex;
+  gap: 14px;
+  background: var(--surface-hover);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  animation: modal-slide-up 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.story-dialog-speaker {
+  flex: 0 0 84px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  border-right: 1px solid var(--border);
+  padding-right: 14px;
+}
+
+.story-dialog-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--bg-alt);
+  border: 1px solid var(--accent-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+}
+
+.story-dialog-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent-strong);
+  text-align: center;
+}
+
+.story-dialog-body {
+  position: relative;
+  flex: 1;
+  min-height: 64px;
+  padding-bottom: 18px;
+}
+
+.story-dialog-text {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+
+.story-dialog-continue {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-faint);
+  animation: title-blink 1.2s ease-in-out infinite;
+}

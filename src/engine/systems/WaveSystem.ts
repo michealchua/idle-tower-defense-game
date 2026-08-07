@@ -111,3 +111,18 @@ export function tickWaveProgress(state: GameState, deltaSeconds: number): void {
     advanceToNextWave(state);
   }
 }
+
+// Fires the new-player tutorial StoryDialog exactly once - the moment a
+// save reaches Wave 1 for the first time. hasSeenTutorialStory guards
+// against refiring (including on every later tick of wave 1 itself, and
+// after loading a save that already saw it). See GameLoop.step for where
+// this is called and how pendingStoryId pauses gameplay while set.
+export function tickTutorialStoryTrigger(state: GameState): void {
+  if (state.hasSeenTutorialStory || state.pendingStoryId !== null) {
+    return;
+  }
+  if (getGlobalWaveNumber(state.wave) === 1) {
+    state.pendingStoryId = 'tutorial';
+    state.hasSeenTutorialStory = true;
+  }
+}

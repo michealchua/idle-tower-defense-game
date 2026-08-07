@@ -32,6 +32,12 @@ import { ascend as ascendInEngine, canAscend } from '../engine/systems/Ascension
 import { ascensionConfig } from '../data/ascensionConfig';
 import { recomputeHeroStats, getDeployedHeroes } from '../engine/systems/HeroStatsSystem';
 import { advanceToNextWave, getGlobalWaveNumber, retryCurrentWave, tickWaveProgress } from '../engine/systems/WaveSystem';
+import {
+  saveGame as saveGameToStorage,
+  loadGame as loadGameFromStorage,
+  deleteSave as deleteSaveFromStorage,
+  type SaveSlot,
+} from '../engine/core/SaveSystem';
 import { waveConfig } from '../data/waveConfig';
 import {
   pullHero as pullHeroInEngine,
@@ -113,6 +119,7 @@ function snapshotGameState(state: GameState) {
     inventory: state.inventory.map((item) => ({ ...item })),
     reforgeDust: state.reforgeDust,
     lastLoginDate: state.lastLoginDate,
+    pendingStoryId: state.pendingStoryId,
   };
 }
 
@@ -158,6 +165,16 @@ interface GameStore {
   inventory: EquipmentItem[];
   reforgeDust: number;
   lastLoginDate: string | null;
+  pendingStoryId: string | null;
+  dismissStory: () => void;
+  // Which save slot the current session is tied to - null until the player
+  // loads or starts a new game from TitleScreen. Drives autosave (see
+  // ensureAutosaveStarted below) and the in-HUD manual save button.
+  activeSlot: SaveSlot | null;
+  saveGame: (slot: SaveSlot) => void;
+  loadGame: (slot: SaveSlot) => boolean;
+  deleteSave: (slot: SaveSlot) => void;
+  startNewGame: (slot: SaveSlot) => void;
   equipItemToHero: (heroId: string, instanceId: number) => void;
   unequipHeroSlot: (heroId: string, slot: EquipmentSlot) => void;
   sellItem: (instanceId: number) => void;
@@ -374,6 +391,46 @@ export const useGameStore = create<GameStore>((set) => ({
   speedMultiplier: 1,
   dragPreviewKind: null,
   setDragPreviewKind: (kind) => set({ dragPreviewKind: kind }),
+  dismissStory: () => {
+    gameState.pendingStoryId = null;
+    set({ pendingStoryId: null });
+  },
+  activeSlot: null,
+  saveGame: (slot) => {
+    saveGameToStorage(slot, gameState);
+    set({ activeSlot: slot });
+  },
+  loadGame: (slot) => {
+    const loaded = loadGameFromStorage(slot);
+    if (!loaded) {
+      return false;
+    }
+    Object.assign(gameState, loaded);
+    // A save is never resumed mid-combat - heal the battlefield and
+    // re-derive the current wave's shape (same as retrying a failed wave),
+    // then clear the purely cosmetic/transient fields retryCurrentWave
+    // doesn't touch. hasSeenTutorialStory/pendingStoryId round-trip through
+    // Object.assign above, so a save already past wave 1 correctly never
+    // re-triggers the tutorial dialog.
+    retryCurrentWave(gameState);
+    gameState.visualEffects = [];
+    gameState.nextVisualEffectId = 1;
+    gameState.screenShakeIntensity = 0;
+    gameState.hitStopRemaining = 0;
+    gameState.isGameOver = false;
+    gameState.pendingStoryId = null;
+    recomputeHeroStats(gameState);
+    set({ ...snapshotGameState(gameState), activeSlot: slot });
+    return true;
+  },
+  deleteSave: (slot) => {
+    deleteSaveFromStorage(slot);
+  },
+  startNewGame: (slot) => {
+    Object.assign(gameState, createInitialGameState());
+    set({ ...snapshotGameState(gameState), activeSlot: slot });
+    saveGameToStorage(slot, gameState);
+  },
 }));
 
 export { upgradeableStats };
@@ -392,6 +449,31 @@ export function ensureGameLoopStarted(): void {
   });
 
   gameLoop.start();
+}
+
+const AUTOSAVE_INTERVAL_MS = 20_000;
+let autosaveStarted = false;
+
+// Periodically (and on tab close) persists to whichever slot the current
+// session is tied to - a no-op until the player has loaded/started a game
+// from TitleScreen (activeSlot is still null). Idempotent like
+// ensureGameLoopStarted, so BattleScreen can call it unconditionally on
+// mount.
+export function ensureAutosaveStarted(): void {
+  if (autosaveStarted) {
+    return;
+  }
+  autosaveStarted = true;
+
+  const persistIfActive = () => {
+    const { activeSlot } = useGameStore.getState();
+    if (activeSlot !== null) {
+      saveGameToStorage(activeSlot, gameState);
+    }
+  };
+
+  setInterval(persistIfActive, AUTOSAVE_INTERVAL_MS);
+  window.addEventListener('beforeunload', persistIfActive);
 }
 
 // --- Debug-only actions below. Not part of core gameplay - for fast

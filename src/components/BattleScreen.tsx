@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
-import { ensureGameLoopStarted, useGameStore } from '../store/useGameStore';
+import { ensureGameLoopStarted, ensureAutosaveStarted, useGameStore } from '../store/useGameStore';
 import { renderScene, drawDeploySlots, drawSwapHighlight, drawSwapGhost, HERO_RADIUS } from '../render/CanvasRenderer';
 import { t } from '../locales/i18n';
 import { getNormalWaveEnemyCount } from '../data/waveConfig';
@@ -149,6 +149,7 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
 
   useEffect(() => {
     ensureGameLoopStarted();
+    ensureAutosaveStarted();
   }, []);
 
   // Boss waves swap in a dedicated theme instead of the biome's ambient

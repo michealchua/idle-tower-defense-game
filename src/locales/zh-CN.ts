@@ -1,4 +1,35 @@
 const zhCN = {
+  common: {
+    confirm: '确认',
+    cancel: '取消',
+  },
+  title: {
+    gameName: 'tataKAI',
+    gameSubtitle: '放置防御战',
+    pressStart: '点击任意处或按空格键进入游戏',
+    slotManagement: '存档管理',
+    slotLabel: '存档位',
+    slotEmpty: '空存档位',
+    newGame: '新建',
+    loadGame: '读取',
+    overwrite: '覆盖',
+    deleteGame: '删除',
+    overwriteConfirm: '确认覆盖此存档?原有进度将永久丢失',
+    deleteConfirm: '确认删除此存档?此操作不可恢复',
+    savedAt: '保存于',
+  },
+  save: {
+    saveButton: '存档',
+    saved: '已保存',
+  },
+  story: {
+    continueHint: '点击继续 ▶',
+    steward: '城堡管家',
+    tutorial1: '欢迎回来,大人!魔物已兵临城下,城堡的防务就交给你了。',
+    tutorial2: '把英雄拖拽到下方战场中上阵,他们就会自动战斗——你只需要运筹帷幄。',
+    tutorial3: '击败敌人可获得金币与经验,记得常去城堡、装备、天赋等面板强化你的军队。',
+    tutorial4: '别忘了定期存档——点击右上角的存档图标,你的努力不会白费。祝你旗开得胜!',
+  },
   battle: {
     gold: '金币',
     diamonds: '钻石',

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import BattleScreen from './components/BattleScreen';
+import TitleScreen from './components/TitleScreen';
+import StoryDialog from './components/StoryDialog';
 import DebugPanel from './components/DebugPanel';
 import HeroPanel from './components/HeroPanel';
 import EquipmentPanel from './components/EquipmentPanel';
@@ -45,14 +47,21 @@ const CORE_TABS: TabDef[] = [
 const ALL_TABS = [...GROWTH_TABS, ...CORE_TABS];
 
 function App() {
+  // TitleScreen is the default route (see SaveSystem/useGameStore for the
+  // save-slot flow that transitions this to 'game') - the whole existing
+  // app shell below only mounts once a slot has been loaded/started.
+  const [screen, setScreen] = useState<'title' | 'game'>('title');
   const [activePanel, setActivePanel] = useState<PanelId | null>(null);
   const [isMuted, setIsMuted] = useState(() => audioManager.isMuted());
+  const [justSaved, setJustSaved] = useState(false);
   // Owned here (not by BattleScreen) because HeroPanel now renders inside
   // this component's modal - a sibling of BattleScreen, not a child - but
   // still needs the battle canvas's bounding rect for drag-to-deploy
   // hit-testing (see useDeploySlotDrag).
   const stageRef = useRef<HTMLDivElement>(null);
 
+  const activeSlot = useGameStore((state) => state.activeSlot);
+  const saveGame = useGameStore((state) => state.saveGame);
   const gold = useGameStore((state) => state.gold);
   const diamonds = useGameStore((state) => state.diamonds);
   const buildMaterials = useGameStore((state) => state.buildMaterials);
@@ -75,6 +84,19 @@ function App() {
     window.addEventListener('pointerdown', unlock, { once: true });
     return () => window.removeEventListener('pointerdown', unlock);
   }, []);
+
+  function handleSaveClick(): void {
+    if (activeSlot === null) {
+      return;
+    }
+    saveGame(activeSlot);
+    setJustSaved(true);
+    window.setTimeout(() => setJustSaved(false), 1500);
+  }
+
+  if (screen === 'title') {
+    return <TitleScreen onEnterGame={() => setScreen('game')} />;
+  }
 
   function renderPanel(id: PanelId) {
     switch (id) {
@@ -128,6 +150,11 @@ function App() {
             <div className="hud-widget-row">
               <span className="hud-gold">💰 {formatBigNumber(gold)}</span>
               <span className="hud-diamond">💎 {formatBigNumber(diamonds)}</span>
+              {activeSlot !== null && (
+                <button className="btn btn-sm mute-toggle-btn" onClick={handleSaveClick} title={t('save.saveButton')}>
+                  {justSaved ? '✅' : '💾'}
+                </button>
+              )}
               <button
                 className="btn btn-sm mute-toggle-btn"
                 onClick={() => setIsMuted(audioManager.toggleMute())}
@@ -180,6 +207,8 @@ function App() {
           </div>
         </div>
       )}
+
+      <StoryDialog />
 
       <DebugPanel />
     </div>

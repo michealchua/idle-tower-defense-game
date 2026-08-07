@@ -74,6 +74,8 @@ export function createInitialGameState(): GameState {
     nextEquipmentInstanceId: 1,
     reforgeDust: 0,
     lastLoginDate: null,
+    hasSeenTutorialStory: false,
+    pendingStoryId: null,
   };
 
   recomputeHeroStats(state);
