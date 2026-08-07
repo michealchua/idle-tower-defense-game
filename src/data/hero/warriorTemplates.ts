@@ -1,40 +1,52 @@
+import { bladeSlashSkill, bloodFurySkill, bloodrageSlashSkill } from '../skills/warriorSkills';
 import { HeroClass, type HeroTemplate, type SkillSlot } from './heroTypes';
 
 function emptySlot(): SkillSlot {
   return { skillId: null, unlocked: false };
 }
 
-// Three Warrior prototypes, for step-1 data-structure validation only - no
-// skill/evolution content is filled in yet (skillId/skillUnlock stay null),
-// that's a later design step. Each hero gets its own object literal (never
-// shared) so HeroFactory.createHero's deep clone has real per-instance data
-// to prove out.
+// Three Warrior prototypes, used to validate the data structures in
+// heroTypes.ts. Each hero gets its own object literal (never shared) so
+// HeroFactory.createHero's deep clone has real per-instance data to prove
+// out.
 
-/** 剑士 (Swordsman) - balanced baseline archetype. */
+/**
+ * 剑士 (Swordsman) - balanced baseline archetype, and the step-2 test case
+ * for the full skill + evolution chain: 基础剑士 -> 狂战士 -> 血怒狂战.
+ * Evolution node 1 unlocks 嗜血之怒 (skill-blood-fury) as a growth skill;
+ * node 2 replaces the basic attack itself with 血怒裂斩
+ * (skill-bloodrage-slash) - a mechanic change, not just bigger numbers.
+ */
 export const swordsmanTemplate: HeroTemplate = {
   id: 'warrior-swordsman',
   nameKey: 'hero.warriorSwordsman',
   heroClass: HeroClass.Warrior,
   baseStats: { hp: 120, attack: 14, defense: 10, attackSpeed: 1.0, crit: 0.05 },
   skills: {
-    baseSkill: emptySlot(),
-    growthSkills: [emptySlot(), emptySlot()],
+    baseSkill: { skillId: bladeSlashSkill.id, unlocked: true },
+    growthSkills: [{ skillId: bloodFurySkill.id, unlocked: false }, emptySlot()],
   },
   evolution: {
-    paths: [
+    nodes: [
       {
-        id: 'warrior-swordsman-path-blade',
-        nameKey: 'evolutionPath.swordsmanBlade',
-        resultClass: HeroClass.Warrior,
-        statMultiplier: { hp: 1.0, attack: 1.5, defense: 1.0, attackSpeed: 1.1, crit: 1.2 },
-        skillUnlock: null,
+        id: 'warrior-swordsman-evo-berserker',
+        name: '狂战士',
+        description: '压抑的战意爆发，舍弃部分防御换取狂暴的攻速与生命汲取，解锁成长技能「嗜血之怒」。',
+        requiredLevel: 20,
+        statMultipliers: { hp: 0.9, attack: 1.6, defense: 0.85, attackSpeed: 1.15, crit: 1.3 },
+        unlockSkillId: bloodFurySkill.id,
+        visualTier: 1,
+        spritePath: 'sprites/hero/warrior-swordsman/evo1-berserker.png',
       },
       {
-        id: 'warrior-swordsman-path-vanguard',
-        nameKey: 'evolutionPath.swordsmanVanguard',
-        resultClass: HeroClass.Warrior,
-        statMultiplier: { hp: 1.4, attack: 1.1, defense: 1.3, attackSpeed: 1.0, crit: 1.0 },
-        skillUnlock: null,
+        id: 'warrior-swordsman-evo-bloodrage-berserker',
+        name: '血怒狂战',
+        description: '彻底沦为嗜血的战争兵器，普通攻击被「血怒裂斩」取代，专精处决残血敌人并击退周围目标。',
+        requiredLevel: 40,
+        statMultipliers: { hp: 1.1, attack: 2.1, defense: 0.95, attackSpeed: 1.3, crit: 1.6 },
+        replaceBaseSkillId: bloodrageSlashSkill.id,
+        visualTier: 2,
+        spritePath: 'sprites/hero/warrior-swordsman/evo2-bloodrage-berserker.png',
       },
     ],
   },
@@ -51,20 +63,20 @@ export const berserkerTemplate: HeroTemplate = {
     growthSkills: [emptySlot(), emptySlot(), emptySlot()],
   },
   evolution: {
-    paths: [
+    nodes: [
       {
-        id: 'warrior-berserker-path-bloodlust',
-        nameKey: 'evolutionPath.berserkerBloodlust',
-        resultClass: HeroClass.Warrior,
-        statMultiplier: { hp: 0.85, attack: 1.8, defense: 0.9, attackSpeed: 1.25, crit: 1.4 },
-        skillUnlock: null,
+        id: 'warrior-berserker-evo-bloodlust',
+        name: '嗜血狂战',
+        description: '（进化内容待补完）',
+        requiredLevel: 20,
+        statMultipliers: { hp: 0.85, attack: 1.8, defense: 0.9, attackSpeed: 1.25, crit: 1.4 },
       },
       {
-        id: 'warrior-berserker-path-warlord',
-        nameKey: 'evolutionPath.berserkerWarlord',
-        resultClass: HeroClass.Warrior,
-        statMultiplier: { hp: 1.1, attack: 1.6, defense: 1.1, attackSpeed: 1.1, crit: 1.2 },
-        skillUnlock: null,
+        id: 'warrior-berserker-evo-warlord',
+        name: '战争领主',
+        description: '（进化内容待补完）',
+        requiredLevel: 40,
+        statMultipliers: { hp: 1.1, attack: 1.6, defense: 1.1, attackSpeed: 1.1, crit: 1.2 },
       },
     ],
   },
@@ -81,20 +93,20 @@ export const counterWarriorTemplate: HeroTemplate = {
     growthSkills: [emptySlot(), emptySlot()],
   },
   evolution: {
-    paths: [
+    nodes: [
       {
-        id: 'warrior-counter-path-retribution',
-        nameKey: 'evolutionPath.counterRetribution',
-        resultClass: HeroClass.Warrior,
-        statMultiplier: { hp: 1.2, attack: 1.3, defense: 1.2, attackSpeed: 1.0, crit: 1.5 },
-        skillUnlock: null,
+        id: 'warrior-counter-evo-retribution',
+        name: '惩戒战士',
+        description: '（进化内容待补完）',
+        requiredLevel: 20,
+        statMultipliers: { hp: 1.2, attack: 1.3, defense: 1.2, attackSpeed: 1.0, crit: 1.5 },
       },
       {
-        id: 'warrior-counter-path-bulwark',
-        nameKey: 'evolutionPath.counterBulwark',
-        resultClass: HeroClass.Warrior,
-        statMultiplier: { hp: 1.7, attack: 1.0, defense: 1.6, attackSpeed: 0.95, crit: 1.1 },
-        skillUnlock: null,
+        id: 'warrior-counter-evo-bulwark',
+        name: '壁垒守卫',
+        description: '（进化内容待补完）',
+        requiredLevel: 40,
+        statMultipliers: { hp: 1.7, attack: 1.0, defense: 1.6, attackSpeed: 0.95, crit: 1.1 },
       },
     ],
   },

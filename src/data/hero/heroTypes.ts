@@ -52,18 +52,30 @@ export interface HeroSkillLoadout {
   growthSkills: SkillSlot[];
 }
 
-/** One branch in a hero's evolution tree. Placeholder shape - filled in when evolution is designed. */
-export interface EvolutionPathDefinition {
+/**
+ * One node in a hero's evolution tree/chain (design doc step 2 - evolution
+ * changes playstyle/mechanics, not just numbers). A node can either add a
+ * new growth skill (unlockSkillId) or outright change the hero's basic
+ * attack (replaceBaseSkillId) - both point at a skills/ SkillDefinition.id,
+ * at most one should be set per node.
+ */
+export interface EvolutionNode {
   id: string;
-  nameKey: string;
-  resultClass: HeroClass;
-  statMultiplier: HeroBaseStats;
-  skillUnlock: SkillSlot | null;
+  name: string;
+  description: string;
+  requiredLevel: number;
+  statMultipliers: HeroBaseStats;
+  unlockSkillId?: string;
+  replaceBaseSkillId?: string;
+  /** Static art path for this evolution stage, once art exists. */
+  spritePath?: string;
+  /** Coarse visual-upgrade tier (0 = base form, 1 = first evolution, ...) for renderers that don't need the actual sprite yet. */
+  visualTier?: number;
 }
 
-/** 2-3 evolution paths reserved per hero. */
+/** 2-3 evolution nodes reserved per hero, ordered by requiredLevel. */
 export interface EvolutionTree {
-  paths: EvolutionPathDefinition[];
+  nodes: EvolutionNode[];
 }
 
 /**
