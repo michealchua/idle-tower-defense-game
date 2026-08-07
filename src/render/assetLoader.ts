@@ -35,18 +35,31 @@ export function getHeroSpriteSrc(heroClass: string): string {
   return `/sprites/heroes/${heroClass}.png`;
 }
 
-export function getEnemySpriteSrc(archetypeId: string): string {
-  return `/sprites/enemies/${archetypeId}.png`;
+// Takes a sprite "type" (e.g. 'goblin', 'slime', 'demon_boss'), not an
+// archetypeId directly - CanvasRenderer's ENEMY_SPRITE_TYPE maps the 14
+// gameplay archetypes onto this small set of shared visual identities, since
+// hand-authoring 14 unique enemy sheets isn't the intended art budget.
+export function getEnemySpriteSrc(type: string): string {
+  return `/sprites/enemies/${type}.png`;
 }
 
 export function getPetSpriteSrc(petId: string): string {
   return `/sprites/pets/${petId}.png`;
 }
 
-// No per-castleType variants yet - a single generic tower sprite, same
-// "one file, not one per instance" reasoning as the others above.
+// A hero that's committed to an evolutionBranchId (HeroSystem.evolveHero)
+// draws from here instead of getHeroSpriteSrc - see CanvasRenderer.drawHero.
+// Branch ids (heroRosterConfig.ts, e.g. "warrior-berserker") use hyphens;
+// filenames use underscores to match this project's existing sprite-file
+// convention, hence the replace.
+export function getHeroEvolvedSpriteSrc(evolutionBranchId: string): string {
+  return `/sprites/heroes/evolved/${evolutionBranchId.replace(/-/g, '_')}.png`;
+}
+
+// Single tower sprite - no per-castleType variants yet, same "one file, not
+// one per instance" reasoning as the others above.
 export function getTowerSpriteSrc(): string {
-  return `/sprites/towers/base.png`;
+  return `/sprites/towers/castle.png`;
 }
 
 // Fire-and-forget, same as getImage itself - just kicks off a load for every

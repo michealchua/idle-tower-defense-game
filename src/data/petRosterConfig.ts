@@ -4,6 +4,13 @@ import type { UnlockCondition } from './unlockConditionConfig';
 
 export interface PetDefinition {
   id: string;
+  // Cosmetic sprite key, independent of id - id is save-critical (keys
+  // unlockedPetIds/petShards/petStars) so it can't be casually renamed to
+  // something human-readable; this can. Falls back to id itself in
+  // assetLoader.getPetSpriteSrc's caller when unset, so an unnamed pet still
+  // resolves to a (likely missing, harmlessly-fallback-shape) path instead of
+  // needing a guard everywhere this is read.
+  spriteId?: string;
   // Drives gacha pull odds, shard-per-duplicate rate, and star-up cost
   // schedule - see gachaConfig.ts.
   rarity: GachaRarity;
@@ -27,6 +34,7 @@ export interface PetDefinition {
 export const petRosterConfig: PetDefinition[] = [
   {
     id: 'pet-1',
+    spriteId: 'baby_dragon',
     rarity: 'white',
     passiveBonus: { attackDamage: 2 },
     attackDamage: 4,

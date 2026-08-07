@@ -1,15 +1,17 @@
 import { t } from '../locales/i18n';
 import { getVisualTierForLevel } from '../data/milestoneConfig';
-import { enemyArchetypes } from '../data/enemyArchetypes';
+import { enemyArchetypes, type EnemyArchetypeId } from '../data/enemyArchetypes';
 import { heroClasses } from '../data/heroConfig';
-import { petRosterConfig } from '../data/petRosterConfig';
+import { heroRosterConfig } from '../data/heroRosterConfig';
+import { petRosterConfig, getPetDefinition } from '../data/petRosterConfig';
 import { enemyHeroAttackIntervalSeconds } from '../data/enemyConfig';
+import { biomeDefinitions, type BiomeDefinition } from '../data/biomeConfig';
 import { getEffectiveHeroClass } from '../engine/systems/HeroSystem';
-import type { BiomeDefinition } from '../data/biomeConfig';
 import {
   getImage,
   getEnemySpriteSrc,
   getHeroSpriteSrc,
+  getHeroEvolvedSpriteSrc,
   getPetSpriteSrc,
   getTowerSpriteSrc,
   preloadSprites,
@@ -91,6 +93,31 @@ function getEnemyVisualStyle(visualId: string): EnemyVisualStyle {
   return ENEMY_VISUAL_STYLES[visualId] ?? DEFAULT_ENEMY_VISUAL_STYLE;
 }
 
+// Maps the 14 gameplay archetypes onto a small set of shared sprite
+// identities - hand-authoring 14 unique enemy sheets isn't a realistic art
+// budget (same "class, not per-instance" reasoning as hero sprites keying
+// off heroClass instead of the 100-entry roster id). Grouped by silhouette/
+// theme, not by stat profile: swarm's the only squishy-and-numerous archetype
+// so it gets its own 'slime' identity, every other non-special humanoid mob
+// shares 'goblin', the two caster-flavored archetypes (healAbility/
+// summonAbility) share 'witch', and both boss tiers share 'demon_boss'.
+const ENEMY_SPRITE_TYPE: Record<EnemyArchetypeId, string> = {
+  normal: 'goblin',
+  fast: 'goblin',
+  tank: 'goblin',
+  elite: 'goblin',
+  swarm: 'slime',
+  brute: 'goblin',
+  giant: 'goblin',
+  berserker: 'goblin',
+  healer: 'witch',
+  shield: 'goblin',
+  zombie: 'zombie',
+  witch: 'witch',
+  miniboss: 'demon_boss',
+  boss: 'demon_boss',
+};
+
 function drawHpBar(ctx: CanvasRenderingContext2D, x: number, y: number, ratio: number): void {
   const barX = x - HP_BAR_WIDTH / 2;
   ctx.fillStyle = '#333333';
@@ -142,6 +169,29 @@ const SPRITE_SHEET_CONFIG: { frameWidth: number; frameHeight: number; animations
   },
 };
 
+// Facing convention: every sheet in this project (hero/pet/enemy alike) is
+// authored facing right - a single shared assumption rather than one per
+// category, since there's no reason hero and enemy source art would use
+// different conventions. If a real asset set turns out authored the other
+// way, flip this one constant rather than hunting down every call site.
+const SPRITE_SOURCE_FACING: 'left' | 'right' = 'right';
+
+// What should actually appear on screen, independent of the source
+// convention above: heroes/pets are stationed facing the oncoming enemies
+// (rightward, toward the spawn side), enemies face their direction of travel
+// (leftward, toward the base) - see mapConfig.ts's spawnPosition/
+// basePosition. Compared against SPRITE_SOURCE_FACING in needsFlip to decide
+// whether that category needs a horizontal mirror.
+const DESIRED_FACING: Record<'hero' | 'pet' | 'enemy', 'left' | 'right'> = {
+  hero: 'right',
+  pet: 'right',
+  enemy: 'left',
+};
+
+function needsFlip(kind: 'hero' | 'pet' | 'enemy'): boolean {
+  return DESIRED_FACING[kind] !== SPRITE_SOURCE_FACING;
+}
+
 // Slices one frame out of a sheet and draws it scaled to (size x size)
 // centered on (x, y) - the source sample stays a crisp frameWidth x
 // frameHeight rect regardless of how big size scales it up, so pixel art
@@ -152,7 +202,8 @@ const SPRITE_SHEET_CONFIG: { frameWidth: number; frameHeight: number; animations
 // sampling a different row at whatever phase the clock is already at.
 // columnsAvailable clamps against the sheet's actual width in case a real
 // file has fewer frames than SPRITE_SHEET_CONFIG assumes, rather than
-// reading past the image.
+// reading past the image. flip mirrors horizontally around (x, y) - see
+// needsFlip.
 function drawSpriteFrame(
   ctx: CanvasRenderingContext2D,
   image: HTMLImageElement,
@@ -161,24 +212,26 @@ function drawSpriteFrame(
   x: number,
   y: number,
   size: number,
+  flip: boolean,
 ): void {
   const anim = SPRITE_SHEET_CONFIG.animations[state];
   const { frameWidth, frameHeight } = SPRITE_SHEET_CONFIG;
   const columnsAvailable = Math.max(1, Math.floor(image.width / frameWidth));
   const frameCount = Math.min(anim.frameCount, columnsAvailable);
   const frameIndex = Math.floor(nowSeconds * anim.fps) % frameCount;
+  const sx = frameIndex * frameWidth;
+  const sy = anim.row * frameHeight;
 
-  ctx.drawImage(
-    image,
-    frameIndex * frameWidth,
-    anim.row * frameHeight,
-    frameWidth,
-    frameHeight,
-    x - size / 2,
-    y - size / 2,
-    size,
-    size,
-  );
+  if (flip) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(-1, 1);
+    ctx.drawImage(image, sx, sy, frameWidth, frameHeight, -size / 2, -size / 2, size, size);
+    ctx.restore();
+    return;
+  }
+
+  ctx.drawImage(image, sx, sy, frameWidth, frameHeight, x - size / 2, y - size / 2, size, size);
 }
 
 // A hit reads as "just landed" for this long after CombatSystem resets the
@@ -209,17 +262,37 @@ function getEnemyAnimationState(enemy: EnemyState): SpriteAnimationState {
   return justAttacked ? 'attack' : 'walk';
 }
 
-// Kicks off a load for every sprite this battle screen could possibly need -
-// call once from BattleScreen's mount effect. Sprites are keyed by class/
-// archetype/roster-id (see assetLoader's getXSpriteSrc doc comments), so the
-// full list is small (4 hero classes + every enemy archetype + every pet +
-// the tower) regardless of how many hero/enemy instances end up on field.
+// Every heroRosterConfig entry of the same class carries an identical
+// evolutionBranches array (see heroRosterConfig.ts's heroClassEvolutionBranches)
+// - deduping through a Set means this ends up as just the 8 actual branch
+// ids (2 per class x 4 classes) instead of 100 duplicate lookups.
+function getAllEvolutionBranchIds(): string[] {
+  const ids = new Set<string>();
+  for (const hero of heroRosterConfig) {
+    for (const branch of hero.evolutionBranches) {
+      ids.add(branch.id);
+    }
+  }
+  return Array.from(ids);
+}
+
+// Kicks off a load for every sprite/background this battle screen could
+// possibly need - call once from BattleScreen's mount effect. Everything
+// here is keyed by class/archetype-type/roster-id/biome (see assetLoader's
+// getXSpriteSrc doc comments), so the full list stays small and fixed
+// (4 hero classes + 8 evolution branches + 4 enemy sprite types + every pet +
+// the tower + every biome background) regardless of how many hero/enemy
+// instances end up on field.
 export function preloadBattleSprites(): void {
+  const enemySpriteTypes = new Set(Object.values(ENEMY_SPRITE_TYPE));
+
   preloadSprites([
     ...heroClasses.map((heroClass) => getHeroSpriteSrc(heroClass)),
-    ...(Object.keys(enemyArchetypes) as (keyof typeof enemyArchetypes)[]).map((archetypeId) => getEnemySpriteSrc(archetypeId)),
-    ...petRosterConfig.map((pet) => getPetSpriteSrc(pet.id)),
+    ...getAllEvolutionBranchIds().map((branchId) => getHeroEvolvedSpriteSrc(branchId)),
+    ...Array.from(enemySpriteTypes).map((type) => getEnemySpriteSrc(type)),
+    ...petRosterConfig.map((pet) => getPetSpriteSrc(pet.spriteId ?? pet.id)),
     getTowerSpriteSrc(),
+    ...Object.values(biomeDefinitions).map((biome) => biome.backgroundImage),
   ]);
 }
 
@@ -403,14 +476,22 @@ function drawHero(ctx: CanvasRenderingContext2D, hero: HeroState, pulseScale: nu
   // Sprites are keyed by class (warrior/mage/paladin/summoner), not by the
   // 100-entry roster id - see assetLoader.getHeroSpriteSrc's doc comment.
   // getEffectiveHeroClass accounts for an evolved hero's branch-shifted
-  // class, so an evolved mage that branched into a different class draws the
-  // right sprite too.
+  // class, so an evolved mage that branched into a different class still
+  // gets the right *base* sprite as a fallback below.
   const heroClass = getEffectiveHeroClass(hero);
-  const sprite = getImage(getHeroSpriteSrc(heroClass));
+
+  // Evolution-aware: a hero that's committed to a branch (HeroSystem.
+  // evolveHero, permanent, see HeroState.evolutionBranchId) prefers its own
+  // evolved sheet over the plain class one - falls back to the base class
+  // sprite if the evolved file isn't there yet, so evolving doesn't
+  // regress a hero from "real sprite" back to "geometric shape" just because
+  // its specific evolved art hasn't been dropped in.
+  const evolvedSprite = hero.evolutionBranchId ? getImage(getHeroEvolvedSpriteSrc(hero.evolutionBranchId)) : undefined;
+  const sprite = evolvedSprite ?? getImage(getHeroSpriteSrc(heroClass));
 
   if (sprite) {
     const size = heroRadius * 2;
-    drawSpriteFrame(ctx, sprite, getHeroAnimationState(hero), nowSeconds, hero.position.x, hero.position.y, size);
+    drawSpriteFrame(ctx, sprite, getHeroAnimationState(hero), nowSeconds, hero.position.x, hero.position.y, size, needsFlip('hero'));
   } else {
     ctx.fillStyle = heroStyle.color;
     ctx.beginPath();
@@ -435,14 +516,18 @@ const PET_BOB_SPEED = 2.4;
 
 function drawPet(ctx: CanvasRenderingContext2D, pet: PetState, bobSeed: number, nowSeconds: number): void {
   const bobY = pet.position.y + Math.sin(nowSeconds * PET_BOB_SPEED + bobSeed) * PET_BOB_AMPLITUDE;
-  const sprite = getImage(getPetSpriteSrc(pet.id));
+  // spriteId is a cosmetic alias over the save-critical roster id (e.g.
+  // pet-1 -> "baby_dragon") - see PetDefinition.spriteId's doc comment.
+  // Falls back to the raw id for any pet that hasn't been given one yet.
+  const spriteKey = getPetDefinition(pet.id).spriteId ?? pet.id;
+  const sprite = getImage(getPetSpriteSrc(spriteKey));
 
   if (sprite) {
     const size = PET_RADIUS * 2;
     // Pets never attack (PetSystem.ts - no combat AI), so this is always
     // 'walk' - the bob above is the only motion a pet ever needs on top of
     // its own walk-cycle frames.
-    drawSpriteFrame(ctx, sprite, 'walk', nowSeconds, pet.position.x, bobY, size);
+    drawSpriteFrame(ctx, sprite, 'walk', nowSeconds, pet.position.x, bobY, size, needsFlip('pet'));
     return;
   }
 
@@ -485,15 +570,15 @@ function drawEnemy(ctx: CanvasRenderingContext2D, enemy: EnemyState, nowSeconds:
     ctx.stroke();
   }
 
-  // Sprites are keyed by archetypeId (14 total), not visualId - visualId
-  // exists for a future cosmetic-only variant system that doesn't have any
-  // entries yet, so keying sprites off it today would just mean every
-  // variant needs its own duplicate file for no current benefit.
-  const sprite = getImage(getEnemySpriteSrc(enemy.archetypeId));
+  // Sprites are keyed by shared sprite type (goblin/slime/zombie/witch/
+  // demon_boss - see ENEMY_SPRITE_TYPE), not archetypeId or visualId
+  // directly - hand-authoring one sheet per archetype isn't the intended art
+  // budget, so several archetypes intentionally share a visual identity.
+  const sprite = getImage(getEnemySpriteSrc(ENEMY_SPRITE_TYPE[enemy.archetypeId]));
 
   if (sprite) {
     const size = enemyRadius * 2;
-    drawSpriteFrame(ctx, sprite, getEnemyAnimationState(enemy), nowSeconds, enemy.position.x, enemy.position.y, size);
+    drawSpriteFrame(ctx, sprite, getEnemyAnimationState(enemy), nowSeconds, enemy.position.x, enemy.position.y, size, needsFlip('enemy'));
   } else {
     ctx.fillStyle = enemyStyle.color;
     ctx.beginPath();
