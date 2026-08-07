@@ -2,6 +2,7 @@ import { CombatEngine, type DamageDealtEvent } from './CombatEngine';
 import { WaveManager, type WaveConfig } from './WaveManager';
 import type { BattleHero } from './BattleHero';
 import type { BattleEnemy } from './BattleEnemy';
+import { heroCatalog, createBattleHeroFromCatalog } from './heroCatalog';
 
 /** Seconds of downtime between one wave finishing and the next one starting. */
 const WAVE_DELAY_SECONDS = 2;
@@ -12,6 +13,15 @@ export interface GameManagerCallbacks {
   onWaveComplete?: (waveId: string, nextDelaySeconds: number) => void;
   onWaveStart?: (config: WaveConfig, waveIndex: number) => void;
 }
+
+export interface GameManagerOptions {
+  /** Gold the run starts with - without some seed amount the player could never afford heroCatalog's cheapest entry, since gold only otherwise accrues from kills a hero has to already be on the field to make happen. */
+  startingGold?: number;
+}
+
+export type PlaceHeroResult =
+  | { success: true; hero: BattleHero }
+  | { success: false; reason: 'unknown_hero_type' | 'insufficient_gold' };
 
 /**
  * Top-level orchestrator that owns the run's CombatEngine + WaveManager and
@@ -34,9 +44,10 @@ export class GameManager {
 
   private readonly callbacks: GameManagerCallbacks;
 
-  constructor(waveConfigs: WaveConfig[], callbacks: GameManagerCallbacks = {}) {
+  constructor(waveConfigs: WaveConfig[], callbacks: GameManagerCallbacks = {}, options: GameManagerOptions = {}) {
     this.waveConfigs = waveConfigs;
     this.callbacks = callbacks;
+    this.gold = options.startingGold ?? 0;
 
     this.combatEngine = new CombatEngine({
       onDamageDealt: (event) => this.callbacks.onDamageDealt?.(event),
@@ -47,6 +58,29 @@ export class GameManager {
 
   addHero(hero: BattleHero): void {
     this.combatEngine.addHero(hero);
+  }
+
+  /**
+   * Validates the requested heroCatalog entry against current gold, and -
+   * only if it's affordable - deducts the cost, builds the hero via
+   * createBattleHeroFromCatalog, positions it at (x, y), and adds it to the
+   * CombatEngine. Read-only callers (InputManager, UI) get a typed result
+   * back instead of a thrown error, since "not enough gold" is an expected
+   * everyday outcome here, not a bug.
+   */
+  tryPlaceHero(heroTypeId: string, x: number, y: number): PlaceHeroResult {
+    const entry = heroCatalog[heroTypeId];
+    if (!entry) {
+      return { success: false, reason: 'unknown_hero_type' };
+    }
+    if (this.gold < entry.cost) {
+      return { success: false, reason: 'insufficient_gold' };
+    }
+
+    this.gold -= entry.cost;
+    const hero = createBattleHeroFromCatalog(entry, { x, y });
+    this.combatEngine.addHero(hero);
+    return { success: true, hero };
   }
 
   /** Starts the first configured wave. No-op if there are no waves or a wave is already running. */

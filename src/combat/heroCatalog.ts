@@ -1,0 +1,46 @@
+import { HeroFactory } from '../data/hero/HeroFactory';
+import type { HeroTemplate } from '../data/hero/heroTypes';
+import type { SkillDefinition } from '../data/skills/skillTypes';
+import { swordsmanTemplate, berserkerTemplate } from '../data/hero/warriorTemplates';
+import { bladeSlashSkill } from '../data/skills/warriorSkills';
+import { BattleHero } from './BattleHero';
+
+export interface HeroCatalogEntry {
+  heroTypeId: string;
+  displayName: string;
+  cost: number;
+  template: HeroTemplate;
+  /** Equipped as the placed hero's base skill - berserkerTemplate ships with an empty base skill slot, so this is set explicitly rather than trusted from the template. */
+  baseSkill: SkillDefinition;
+}
+
+/** Purchasable hero types for GameManager.tryPlaceHero / the build-mode UI. Keyed by heroTypeId. */
+export const heroCatalog: Record<string, HeroCatalogEntry> = {
+  swordsman: {
+    heroTypeId: 'swordsman',
+    displayName: '剑士',
+    cost: 10,
+    template: swordsmanTemplate,
+    baseSkill: bladeSlashSkill,
+  },
+  berserker: {
+    heroTypeId: 'berserker',
+    displayName: '狂战士',
+    cost: 15,
+    template: berserkerTemplate,
+    baseSkill: bladeSlashSkill,
+  },
+};
+
+/**
+ * Builds a fresh, independently-owned BattleHero from a catalog entry.
+ * Goes through HeroFactory (never mutates the shared HeroTemplate) and
+ * patches only the per-instance HeroInstance clone's base skill slot, the
+ * same pattern HeroManager.applyEvolution already uses for
+ * replaceBaseSkillId.
+ */
+export function createBattleHeroFromCatalog(entry: HeroCatalogEntry, position: { x: number; y: number }): BattleHero {
+  const heroInstance = HeroFactory.createHero(entry.template);
+  heroInstance.skills.baseSkill = { skillId: entry.baseSkill.id, unlocked: true };
+  return new BattleHero(heroInstance, [entry.baseSkill], position);
+}

@@ -26,15 +26,20 @@ export class BattleHero {
   readonly instanceId: string;
   readonly heroClass: HeroClass;
   readonly stats: BattleHeroStats;
+  /** World-space placement, set by whoever deploys this hero (e.g. GameManager.tryPlaceHero) - purely presentational, CombatEngine doesn't target off of it yet. */
+  x: number;
+  y: number;
 
   private readonly skillDefinitions = new Map<string, SkillDefinition>();
   private readonly skillCooldowns = new Map<string, number>();
   /** Unlocked, owned skill ids in cast-priority order: growth skills (slot order) first, base skill last. */
   private readonly skillPriorityOrder: string[];
 
-  constructor(heroInstance: HeroInstance, skills: SkillDefinition[]) {
+  constructor(heroInstance: HeroInstance, skills: SkillDefinition[], position: { x: number; y: number } = { x: 0, y: 0 }) {
     this.instanceId = heroInstance.instanceId;
     this.heroClass = heroInstance.heroClass;
+    this.x = position.x;
+    this.y = position.y;
 
     const { hp, attack, defense, attackSpeed, crit } = heroInstance.currentStats;
     this.stats = {

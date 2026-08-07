@@ -1,12 +1,14 @@
 import type { GameManager } from '../combat/GameManager';
 import type { BattleHero } from '../combat/BattleHero';
 import type { BattleEnemy } from '../combat/BattleEnemy';
+import { heroCatalog } from '../combat/heroCatalog';
+import type { InputManager } from '../input/InputManager';
 import { getImage, getEnemySpriteSrc, getHeroSpriteSrc } from './assetLoader';
 
 const BACKGROUND_SRC = '/backgrounds/ancient-ruins.jpg';
 
-const HERO_POSITION = { x: 170, y: 300 };
 const HERO_SIZE = 140;
+const BUILD_PLACEHOLDER_ALPHA = 0.45;
 
 const ENEMY_ROW_Y = 300;
 const ENEMY_START_X = 560;
@@ -45,6 +47,7 @@ export class GameRenderer {
   constructor(
     private readonly canvas: HTMLCanvasElement,
     private readonly gameManager: GameManager,
+    private readonly inputManager?: InputManager,
   ) {
     const ctx = canvas.getContext('2d');
     if (!ctx) {
@@ -63,6 +66,8 @@ export class GameRenderer {
 
     const enemies = this.gameManager.combatEngine.getAliveEnemies();
     enemies.forEach((enemy, index) => this.drawEnemy(enemy, index));
+
+    this.drawBuildModePlaceholder();
   }
 
   private drawBackground(): void {
@@ -75,11 +80,39 @@ export class GameRenderer {
     }
   }
 
+  // BattleHero.x/y are the hero's center point (where the player clicked to
+  // place it) - drawSprite/drawHpBar/drawLabel all want a top-left corner,
+  // so every call here offsets by half the sprite size.
   private drawHero(hero: BattleHero): void {
-    const { x, y } = HERO_POSITION;
-    this.drawSprite(getHeroSpriteSrc(hero.heroClass), x, y, HERO_SIZE, '#3b82f6');
-    this.drawHpBar(x, y, hero.stats.currentHp, hero.stats.maxHp);
-    this.drawLabel(hero.heroClass, x + HERO_SIZE / 2, y + HERO_SIZE + 14);
+    const topLeftX = hero.x - HERO_SIZE / 2;
+    const topLeftY = hero.y - HERO_SIZE / 2;
+    this.drawSprite(getHeroSpriteSrc(hero.heroClass), topLeftX, topLeftY, HERO_SIZE, '#3b82f6');
+    this.drawHpBar(topLeftX, topLeftY, hero.stats.currentHp, hero.stats.maxHp);
+    this.drawLabel(hero.heroClass, hero.x, topLeftY + HERO_SIZE + 14);
+  }
+
+  /** Translucent preview of the currently-armed heroCatalog entry, following InputManager's hover position while build mode is active. Read-only: only calls the InputManager getters, never mutates anything. */
+  private drawBuildModePlaceholder(): void {
+    const heroTypeId = this.inputManager?.activeHeroTypeId;
+    const hover = this.inputManager?.hoverWorldPosition;
+    if (!heroTypeId || !hover) {
+      return;
+    }
+
+    const entry = heroCatalog[heroTypeId];
+    if (!entry) {
+      return;
+    }
+
+    const topLeftX = hover.x - HERO_SIZE / 2;
+    const topLeftY = hover.y - HERO_SIZE / 2;
+
+    this.ctx.save();
+    this.ctx.globalAlpha = BUILD_PLACEHOLDER_ALPHA;
+    this.drawSprite(getHeroSpriteSrc(entry.template.heroClass), topLeftX, topLeftY, HERO_SIZE, '#3b82f6');
+    this.ctx.restore();
+
+    this.drawLabel(`${entry.displayName} (${entry.cost}金币)`, hover.x, topLeftY + HERO_SIZE + 14);
   }
 
   private drawEnemy(enemy: BattleEnemy, index: number): void {
