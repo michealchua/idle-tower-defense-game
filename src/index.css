@@ -26,12 +26,6 @@
   --rarity-rainbow-3: #69f0ae;
   --rarity-rainbow-4: #40c4ff;
   --rarity-rainbow-5: #b388ff;
-  /* How wide the app shell (HUD + canvas) is allowed to grow on large
-     screens - the canvas itself then fills whatever width that resolves to
-     (see .canvas-stage), capped by viewport height too so it never grows
-     absurdly tall on an ultrawide monitor. .modal-container sizes itself
-     independently (min(900px, 90vw)) rather than tracking this. */
-  --shell-max-width: 1600px;
 }
 
 * {
@@ -43,6 +37,7 @@ body,
 #root {
   margin: 0;
   padding: 0;
+  width: 100%;
   height: 100%;
   overflow: hidden;
 }
@@ -66,11 +61,20 @@ select {
    App.tsx. .stage-column stays the name for BattleScreen's own root (it
    used to be a flex child of a two-column layout; now it's just "the
    battle stage", full width/height inside .battle-layer). */
+/* No max-width/centering here on purpose - `inset: 0` alone means this (and
+   everything inside it: .battle-layer's canvas, .hud-layer's widgets) always
+   fills the true viewport edge-to-edge on any screen size. An earlier
+   version capped this at 1600px and centered it, which read fine on a
+   typical monitor but left real page background visible on both sides of
+   the app on anything wider (a 1920px+ display, an ultrawide) - exactly the
+   "gap" bug this class exists to prevent. HUD corner widgets (.hud-corner)
+   are absolutely positioned off this box's own edges, so removing the cap
+   just means they sit at the true screen corners instead of a centered
+   column's corners - no layout breakage, just wider spacing on very wide
+   screens. */
 .app-container {
   position: fixed;
   inset: 0;
-  max-width: var(--shell-max-width);
-  margin: 0 auto;
   overflow: hidden;
 }
 
