@@ -1,13 +1,10 @@
-import { MechanicTag } from '../data/skills/skillTypes';
+import { StatusEffectType, type StatusEffectConfig } from '../data/skills/skillTypes';
 import { ENEMY_PATH, CELL_SIZE, gridCellCenter } from './gridConfig';
 
-/** A timed status effect currently active on an enemy. */
-export interface EnemyDebuff {
-  tag: MechanicTag;
-  /** Seconds remaining before this debuff expires and is removed. */
+/** A StatusEffectConfig plus its own live countdown - what applyStatus actually pushes onto activeStatuses. */
+export interface ActiveStatusEffect extends StatusEffectConfig {
+  /** Seconds remaining before this status expires and is removed. */
   remaining: number;
-  /** Effect-specific strength (e.g. slow %, bleed damage/sec) - unused by the mechanics implemented so far. */
-  magnitude?: number;
 }
 
 export interface BattleEnemyConfig {
@@ -26,10 +23,14 @@ export interface BattleEnemyConfig {
 /** Once the distance to the current target waypoint drops below this, the enemy is considered to have arrived and advances to the next one - small enough that "close enough" never reads as a visible stutter. */
 const WAYPOINT_ARRIVAL_THRESHOLD_PX = 2;
 
+/** Upper bound on how much stacked Slow effects can reduce speed by - keeps an enemy hit by several slows at once crawling rather than freezing solid (0 speed would never reach a waypoint, so hasReachedEnd/isWaveComplete could never fire for it). */
+const MAX_SLOW_FRACTION = 0.9;
+
 /**
- * Battlefield-scoped enemy model, sibling to BattleHero - owns only what a
- * live encounter needs (position along ENEMY_PATH, HP, defense, active
- * debuffs). Archetype/scaling data is resolved by the caller into a
+ * Battlefield-scoped enemy model, sibling to BattleHero - owns everything a
+ * live encounter needs: position along ENEMY_PATH, HP, defense, and
+ * activeStatuses (Slow/DOT effects applied by hero skills/projectiles).
+ * Archetype/scaling data is resolved by the caller into a
  * BattleEnemyConfig before construction so this class stays independent of
  * any specific enemy-data source.
  */
@@ -43,7 +44,8 @@ export class BattleEnemy {
   readonly goldReward: number;
   readonly expReward: number;
   readonly baseDamage: number;
-  readonly debuffs: EnemyDebuff[] = [];
+  /** Live Slow/DOT effects currently applied - see applyStatus. Ticked down and resolved (DOT damage, expiry) every update() call. */
+  readonly activeStatuses: ActiveStatusEffect[] = [];
 
   /** World-space position, advanced each update() tick toward ENEMY_PATH[currentWaypointIndex]. */
   x: number;
@@ -72,29 +74,56 @@ export class BattleEnemy {
     return this.currentHp > 0;
   }
 
-  /** True once this enemy has walked past ENEMY_PATH's final waypoint - CombatEngine drops it from the encounter without treating it as a kill (no gold/exp reward; a future base-HP system hooks in here instead). */
+  /** True once this enemy has walked past ENEMY_PATH's final waypoint - CombatEngine drops it from the encounter without treating it as a kill (no gold/exp reward; GameManager's baseHp system reacts here instead). */
   get hasReachedEnd(): boolean {
     return this.reachedEnd;
   }
 
-  applyDebuff(debuff: EnemyDebuff): void {
-    this.debuffs.push(debuff);
+  /** Pushes a fresh, independently-timed status effect onto activeStatuses - stacks with any existing ones of the same type rather than replacing/refreshing them (two Slow hits add their magnitudes, up to MAX_SLOW_FRACTION; two DOTs both tick simultaneously). */
+  applyStatus(config: StatusEffectConfig): void {
+    this.activeStatuses.push({ ...config, remaining: config.duration });
   }
 
-  hasDebuff(tag: MechanicTag): boolean {
-    return this.debuffs.some((debuff) => debuff.tag === tag);
+  /** Combined Slow magnitude across every active Slow effect, clamped to MAX_SLOW_FRACTION so movement never fully stops. */
+  private get totalSlowFraction(): number {
+    const sum = this.activeStatuses
+      .filter((status) => status.type === StatusEffectType.Slow)
+      .reduce((total, status) => total + status.magnitude, 0);
+    return Math.min(sum, MAX_SLOW_FRACTION);
   }
 
-  /** Ticks debuff durations down by deltaTime (seconds), drops any expired ones, and advances this enemy one step along ENEMY_PATH. */
+  /** Combined damage/second across every active DOT effect. */
+  private get totalDotDamagePerSecond(): number {
+    return this.activeStatuses
+      .filter((status) => status.type === StatusEffectType.Dot)
+      .reduce((total, status) => total + status.magnitude, 0);
+  }
+
+  /**
+   * Resolves DOT damage and Slow's movement penalty, decays every active
+   * status's remaining duration, drops whatever just expired, and advances
+   * this enemy one step along ENEMY_PATH at its Slow-adjusted speed. DOT
+   * damage lands here regardless of whether any hero is still in range or
+   * even alive - the effect is already "in" the enemy, not something a
+   * caster keeps sustaining.
+   */
   update(deltaTime: number): void {
-    for (let i = this.debuffs.length - 1; i >= 0; i -= 1) {
-      this.debuffs[i].remaining -= deltaTime;
-      if (this.debuffs[i].remaining <= 0) {
-        this.debuffs.splice(i, 1);
-      }
+    this.tickStatuses(deltaTime);
+    this.moveAlongPath(deltaTime);
+  }
+
+  private tickStatuses(deltaTime: number): void {
+    const dotDamage = this.totalDotDamagePerSecond * deltaTime;
+    if (dotDamage > 0) {
+      this.currentHp = Math.max(0, this.currentHp - dotDamage);
     }
 
-    this.moveAlongPath(deltaTime);
+    for (let i = this.activeStatuses.length - 1; i >= 0; i -= 1) {
+      this.activeStatuses[i].remaining -= deltaTime;
+      if (this.activeStatuses[i].remaining <= 0) {
+        this.activeStatuses.splice(i, 1);
+      }
+    }
   }
 
   /**
@@ -124,7 +153,7 @@ export class BattleEnemy {
       return;
     }
 
-    const pixelsPerSecond = this.speed * CELL_SIZE;
+    const pixelsPerSecond = this.speed * (1 - this.totalSlowFraction) * CELL_SIZE;
     const step = Math.min(pixelsPerSecond * deltaTime, distance);
     this.x += (dx / distance) * step;
     this.y += (dy / distance) * step;

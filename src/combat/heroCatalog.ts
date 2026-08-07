@@ -2,7 +2,9 @@ import { HeroFactory } from '../data/hero/HeroFactory';
 import type { HeroTemplate } from '../data/hero/heroTypes';
 import type { SkillDefinition } from '../data/skills/skillTypes';
 import { swordsmanTemplate, berserkerTemplate } from '../data/hero/warriorTemplates';
+import { cryomancerTemplate, pyromancerTemplate } from '../data/hero/mageTemplates';
 import { bladeSlashSkill } from '../data/skills/warriorSkills';
+import { frostBoltSkill, fireballSkill } from '../data/skills/mageSkills';
 import { BattleHero } from './BattleHero';
 
 export interface HeroCatalogEntry {
@@ -29,6 +31,20 @@ export const heroCatalog: Record<string, HeroCatalogEntry> = {
     cost: 75,
     template: berserkerTemplate,
     baseSkill: bladeSlashSkill,
+  },
+  cryomancer: {
+    heroTypeId: 'cryomancer',
+    displayName: '冰霜法师',
+    cost: 60,
+    template: cryomancerTemplate,
+    baseSkill: frostBoltSkill,
+  },
+  pyromancer: {
+    heroTypeId: 'pyromancer',
+    displayName: '烈焰法师',
+    cost: 65,
+    template: pyromancerTemplate,
+    baseSkill: fireballSkill,
   },
 };
 

@@ -1,6 +1,7 @@
 export * from './SkillAction';
 export * from './BattleHero';
 export * from './BattleEnemy';
+export * from './Projectile';
 export * from './CombatEngine';
 export * from './EnemyFactory';
 export * from './WaveConfig';

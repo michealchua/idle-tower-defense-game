@@ -1,7 +1,8 @@
-import { MechanicTag } from '../data/skills/skillTypes';
+import { MechanicTag, type StatusEffectConfig } from '../data/skills/skillTypes';
 import { BattleHero } from './BattleHero';
 import { BattleEnemy } from './BattleEnemy';
 import type { SkillAction } from './SkillAction';
+import { Projectile } from './Projectile';
 import { cellKey, isPathCell, type GridCell } from './gridConfig';
 
 /** Armor-formula constant: actualDamage = rawDamage * (ARMOR_CONSTANT / (ARMOR_CONSTANT + defense)). */
@@ -41,6 +42,8 @@ export interface CombatEngineCallbacks {
 export class CombatEngine {
   private readonly heroes = new Map<string, BattleHero>();
   private readonly enemies = new Map<string, BattleEnemy>();
+  private readonly projectiles = new Map<string, Projectile>();
+  private nextProjectileId = 0;
   private readonly callbacks: CombatEngineCallbacks;
   /** Grid occupancy: cellKey(col, row) -> the hero instanceId placed there. Only cells populated via addHeroAtCell are tracked - addHero alone (e.g. test-run.ts's headless setup) never touches this. */
   private readonly occupiedCells = new Map<string, string>();
@@ -86,11 +89,17 @@ export class CombatEngine {
     return [...this.enemies.values()].filter((enemy) => enemy.isAlive);
   }
 
+  getProjectiles(): Projectile[] {
+    return [...this.projectiles.values()];
+  }
+
   /**
-   * Advances the whole encounter by deltaTime seconds: ticks enemy debuffs,
-   * lets each hero's cooldowns tick down and fire whatever skill comes up
-   * ready, resolves the resulting damage, then sweeps up anything that died
-   * this tick.
+   * Advances the whole encounter by deltaTime seconds: ticks enemy status
+   * effects/movement, lets each hero's cooldowns tick down and fire
+   * whatever skill comes up ready (instantly for a melee skill, via a
+   * homing Projectile for a ranged one), advances in-flight projectiles
+   * and resolves any that just landed, then sweeps up anything that died
+   * or escaped this tick.
    */
   update(deltaTime: number): void {
     for (const enemy of this.enemies.values()) {
@@ -118,10 +127,72 @@ export class CombatEngine {
       }
 
       const action = hero.executeSkill(readySkillId);
-      this.resolveSkillAction(hero, action, targets);
+
+      if (definition.projectileSpeed !== undefined) {
+        // Ranged skills are always single-target in this engine (one
+        // projectile, one homing target) regardless of the AoE tag -
+        // targets[0] is the nearest in-range enemy either way, since
+        // findTargetsInRange only returns more than one entry for AoE.
+        this.spawnProjectile(hero, targets[0], definition.projectileSpeed, action, definition.statusEffectOnHit);
+      } else {
+        this.resolveSkillAction(hero, action, targets);
+      }
     }
 
+    this.updateProjectiles(deltaTime);
     this.cleanupRemovedEnemies();
+  }
+
+  private spawnProjectile(
+    caster: BattleHero,
+    target: BattleEnemy,
+    speed: number,
+    skillAction: SkillAction,
+    statusEffect: StatusEffectConfig | undefined,
+  ): void {
+    this.nextProjectileId += 1;
+    const projectile = new Projectile({
+      instanceId: `projectile-${this.nextProjectileId}`,
+      caster,
+      target,
+      speed,
+      skillAction,
+      statusEffect,
+      startPosition: { x: caster.x, y: caster.y },
+    });
+    this.projectiles.set(projectile.instanceId, projectile);
+  }
+
+  /**
+   * Advances every in-flight projectile, resolving (and removing) any that
+   * reached their target this tick. A projectile whose target has died or
+   * escaped since launch is dropped without resolving anything - it homes
+   * on a live reference, so the object stays readable even after
+   * cleanupRemovedEnemies drops it from `enemies`, but there's nothing
+   * meaningful left to hit.
+   */
+  private updateProjectiles(deltaTime: number): void {
+    for (const [id, projectile] of this.projectiles) {
+      if (!this.enemies.has(projectile.target.instanceId) || !projectile.target.isAlive) {
+        this.projectiles.delete(id);
+        continue;
+      }
+
+      projectile.update(deltaTime);
+
+      if (projectile.hasReachedTarget) {
+        this.resolveProjectileHit(projectile);
+        this.projectiles.delete(id);
+      }
+    }
+  }
+
+  /** Reuses resolveDamageAgainst (same armor/execute math and onDamageDealt event a melee hit gets) for the projectile's damage, then applies its statusEffect (if any) on top. */
+  private resolveProjectileHit(projectile: Projectile): void {
+    this.resolveDamageAgainst(projectile.caster, projectile.skillAction, projectile.target);
+    if (projectile.statusEffect) {
+      projectile.target.applyStatus(projectile.statusEffect);
+    }
   }
 
   /**

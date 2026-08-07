@@ -1,6 +1,8 @@
 import { GameState, type GameManager } from '../combat/GameManager';
 import type { BattleHero } from '../combat/BattleHero';
 import type { BattleEnemy } from '../combat/BattleEnemy';
+import type { Projectile } from '../combat/Projectile';
+import { StatusEffectType } from '../data/skills/skillTypes';
 import { heroCatalog } from '../combat/heroCatalog';
 import {
   CELL_SIZE,
@@ -53,6 +55,12 @@ const GAME_OVER_TEXT_COLOR = '#ef4444';
 const VICTORY_TEXT_COLOR = '#22c55e';
 const END_SUBTEXT_COLOR = '#f5f5f5';
 
+const PROJECTILE_RADIUS = 5;
+const SLOW_STATUS_COLOR = '#60a5fa';
+const DOT_STATUS_COLOR = '#f97316';
+const DEFAULT_PROJECTILE_COLOR = '#e5e7eb';
+const STATUS_RING_RADIUS_OFFSET = 6;
+
 // Matches CanvasRenderer's SPRITE_SHEET_CONFIG convention: hero/enemy sheets
 // dropped into public/sprites/ are laid out as 32x32 cells (row 0 = walk).
 // This renderer doesn't animate - it just samples the first walk frame -
@@ -103,6 +111,10 @@ export class GameRenderer {
 
     for (const enemy of this.gameManager.combatEngine.getAliveEnemies()) {
       this.drawEnemy(enemy);
+    }
+
+    for (const projectile of this.gameManager.combatEngine.getProjectiles()) {
+      this.drawProjectile(projectile);
     }
 
     this.drawHoveredHeroRange();
@@ -372,6 +384,44 @@ export class GameRenderer {
     this.drawSprite(getEnemySpriteSrc(enemy.archetypeId), topLeftX, topLeftY, ENEMY_SIZE, '#dc2626');
     this.drawHpBar(topLeftX, topLeftY, ENEMY_SIZE, enemy.currentHp, enemy.maxHp);
     this.drawLabel(enemy.archetypeId, enemy.x, topLeftY + ENEMY_SIZE + 14);
+    this.drawStatusRings(enemy);
+  }
+
+  /** One thin ring per distinct active status type (blue for Slow, orange for DOT) - a quick "this enemy is currently affected" glance, without needing to read activeStatuses' raw numbers. */
+  private drawStatusRings(enemy: BattleEnemy): void {
+    const activeTypes = new Set(enemy.activeStatuses.map((status) => status.type));
+    if (activeTypes.size === 0) {
+      return;
+    }
+
+    this.ctx.save();
+    this.ctx.lineWidth = 2;
+    let ringIndex = 0;
+    for (const type of activeTypes) {
+      this.ctx.strokeStyle = type === StatusEffectType.Slow ? SLOW_STATUS_COLOR : DOT_STATUS_COLOR;
+      this.ctx.beginPath();
+      this.ctx.arc(enemy.x, enemy.y, ENEMY_SIZE / 2 + STATUS_RING_RADIUS_OFFSET + ringIndex * 4, 0, Math.PI * 2);
+      this.ctx.stroke();
+      ringIndex += 1;
+    }
+    this.ctx.restore();
+  }
+
+  /** In-flight projectile as a small filled dot, color-coded by its statusEffect payload (blue Slow / orange DOT / neutral for a plain damage bolt) so its purpose reads at a glance mid-flight. */
+  private drawProjectile(projectile: Projectile): void {
+    const color =
+      projectile.statusEffect?.type === StatusEffectType.Slow
+        ? SLOW_STATUS_COLOR
+        : projectile.statusEffect?.type === StatusEffectType.Dot
+          ? DOT_STATUS_COLOR
+          : DEFAULT_PROJECTILE_COLOR;
+
+    this.ctx.save();
+    this.ctx.fillStyle = color;
+    this.ctx.beginPath();
+    this.ctx.arc(projectile.x, projectile.y, PROJECTILE_RADIUS, 0, Math.PI * 2);
+    this.ctx.fill();
+    this.ctx.restore();
   }
 
   /**
