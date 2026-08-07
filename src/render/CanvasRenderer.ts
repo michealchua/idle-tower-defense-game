@@ -1,9 +1,19 @@
 import { t } from '../locales/i18n';
 import { getVisualTierForLevel } from '../data/milestoneConfig';
 import { enemyArchetypes } from '../data/enemyArchetypes';
+import { heroClasses } from '../data/heroConfig';
+import { petRosterConfig } from '../data/petRosterConfig';
+import { enemyHeroAttackIntervalSeconds } from '../data/enemyConfig';
 import { getEffectiveHeroClass } from '../engine/systems/HeroSystem';
 import type { BiomeDefinition } from '../data/biomeConfig';
-import { getImage, getEnemySpriteSrc, getHeroSpriteSrc, getPetSpriteSrc, getTowerSpriteSrc } from './assetLoader';
+import {
+  getImage,
+  getEnemySpriteSrc,
+  getHeroSpriteSrc,
+  getPetSpriteSrc,
+  getTowerSpriteSrc,
+  preloadSprites,
+} from './assetLoader';
 import type { BaseState, EnemyState, HeroState, PetState, Position, VisualEffect } from '../engine/types';
 
 // Exported so BattleScreen's canvas-native drag-to-swap can hit-test pointer
@@ -103,6 +113,114 @@ function drawFallbackGlyph(ctx: CanvasRenderingContext2D, x: number, y: number, 
   ctx.textBaseline = 'middle';
   ctx.fillText(glyph, x, y);
   ctx.restore();
+}
+
+// --- Sprite sheet frame animation --------------------------------------
+//
+// Shared layout convention for every hero/enemy sheet dropped into
+// public/sprites/{heroes,enemies}/ - one 32x32 frame per cell (matches the
+// 32x32 pixel-art asset prompts already generated for this project), row 0
+// is the walk/idle loop, row 1 is the attack loop. Pets only ever use 'walk'
+// (see PetSystem.ts - no combat AI, so there's no attack state to animate).
+// A single shared config rather than one per entity keeps this simple; if a
+// real sheet ever needs a different layout, split this into a lookup keyed
+// by sprite src instead of changing the shape wholesale.
+type SpriteAnimationState = 'walk' | 'attack';
+
+interface SpriteAnimationConfig {
+  row: number;
+  frameCount: number;
+  fps: number;
+}
+
+const SPRITE_SHEET_CONFIG: { frameWidth: number; frameHeight: number; animations: Record<SpriteAnimationState, SpriteAnimationConfig> } = {
+  frameWidth: 32,
+  frameHeight: 32,
+  animations: {
+    walk: { row: 0, frameCount: 4, fps: 8 },
+    attack: { row: 1, frameCount: 4, fps: 10 },
+  },
+};
+
+// Slices one frame out of a sheet and draws it scaled to (size x size)
+// centered on (x, y) - the source sample stays a crisp frameWidth x
+// frameHeight rect regardless of how big size scales it up, so pixel art
+// stays sharp (see renderScene's imageSmoothingEnabled = false). Frame index
+// is derived straight from wall-clock time (nowSeconds * fps, wrapped by
+// frameCount), not a stored animation-state field - there's nothing to reset
+// on state change, a sprite switching from walk to attack just starts
+// sampling a different row at whatever phase the clock is already at.
+// columnsAvailable clamps against the sheet's actual width in case a real
+// file has fewer frames than SPRITE_SHEET_CONFIG assumes, rather than
+// reading past the image.
+function drawSpriteFrame(
+  ctx: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+  state: SpriteAnimationState,
+  nowSeconds: number,
+  x: number,
+  y: number,
+  size: number,
+): void {
+  const anim = SPRITE_SHEET_CONFIG.animations[state];
+  const { frameWidth, frameHeight } = SPRITE_SHEET_CONFIG;
+  const columnsAvailable = Math.max(1, Math.floor(image.width / frameWidth));
+  const frameCount = Math.min(anim.frameCount, columnsAvailable);
+  const frameIndex = Math.floor(nowSeconds * anim.fps) % frameCount;
+
+  ctx.drawImage(
+    image,
+    frameIndex * frameWidth,
+    anim.row * frameHeight,
+    frameWidth,
+    frameHeight,
+    x - size / 2,
+    y - size / 2,
+    size,
+    size,
+  );
+}
+
+// A hit reads as "just landed" for this long after CombatSystem resets the
+// attacker's cooldown - long enough for a few attack frames to actually
+// play, short enough to fall back to the walk/idle loop well before the next
+// swing on any reasonable attack speed.
+const ATTACK_ANIM_WINDOW_SECONDS = 0.2;
+
+// Heroes never move (mapConfig.heroPosition is fixed) - 'walk' functions as
+// their idle-bob loop, 'attack' takes over for the brief window right after
+// CombatSystem.tickAttackerCombat resets attackCooldownRemaining to
+// 1/attackSpeed. Derived entirely from existing HeroState fields, no new
+// per-hero "am I attacking" state needed.
+function getHeroAnimationState(hero: HeroState): SpriteAnimationState {
+  const cooldownDuration = hero.attackSpeed > 0 ? 1 / hero.attackSpeed : 0;
+  const justAttacked = cooldownDuration > 0 && hero.attackCooldownRemaining > cooldownDuration - ATTACK_ANIM_WINDOW_SECONDS;
+  return justAttacked ? 'attack' : 'walk';
+}
+
+// Mirror of getHeroAnimationState, enemy-side - CombatSystem.
+// tickEnemyAttacksOnHeroes only resets heroAttackCooldownRemaining to
+// enemyHeroAttackIntervalSeconds when the enemy actually lands a hit (not on
+// every tick), so the same "still within the fresh window" check works here
+// too. An enemy that's just marching (never in range yet) keeps its default
+// 'walk' state.
+function getEnemyAnimationState(enemy: EnemyState): SpriteAnimationState {
+  const justAttacked = enemy.heroAttackCooldownRemaining > enemyHeroAttackIntervalSeconds - ATTACK_ANIM_WINDOW_SECONDS;
+  return justAttacked ? 'attack' : 'walk';
+}
+
+// Kicks off a load for every sprite this battle screen could possibly need -
+// call once from BattleScreen's mount effect. Sprites are keyed by class/
+// archetype/roster-id (see assetLoader's getXSpriteSrc doc comments), so the
+// full list is small (4 hero classes + every enemy archetype + every pet +
+// the tower) regardless of how many hero/enemy instances end up on field.
+export function preloadBattleSprites(): void {
+  preloadSprites([
+    ...heroClasses.map((heroClass) => getHeroSpriteSrc(heroClass)),
+    ...(Object.keys(enemyArchetypes) as (keyof typeof enemyArchetypes)[]).map((archetypeId) => getEnemySpriteSrc(archetypeId)),
+    ...petRosterConfig.map((pet) => getPetSpriteSrc(pet.id)),
+    getTowerSpriteSrc(),
+  ]);
 }
 
 function getHeroPulseScale(visualEffects: VisualEffect[]): number {
@@ -271,7 +389,7 @@ function drawVisualEffect(ctx: CanvasRenderingContext2D, effect: VisualEffect): 
   }
 }
 
-function drawHero(ctx: CanvasRenderingContext2D, hero: HeroState, pulseScale: number): void {
+function drawHero(ctx: CanvasRenderingContext2D, hero: HeroState, pulseScale: number, nowSeconds: number): void {
   const heroStyle = getHeroVisualStyle(getVisualTierForLevel(hero.level));
   const heroRadius = HERO_RADIUS * heroStyle.radiusMultiplier * pulseScale;
 
@@ -292,7 +410,7 @@ function drawHero(ctx: CanvasRenderingContext2D, hero: HeroState, pulseScale: nu
 
   if (sprite) {
     const size = heroRadius * 2;
-    ctx.drawImage(sprite, hero.position.x - size / 2, hero.position.y - size / 2, size, size);
+    drawSpriteFrame(ctx, sprite, getHeroAnimationState(hero), nowSeconds, hero.position.x, hero.position.y, size);
   } else {
     ctx.fillStyle = heroStyle.color;
     ctx.beginPath();
@@ -321,7 +439,10 @@ function drawPet(ctx: CanvasRenderingContext2D, pet: PetState, bobSeed: number, 
 
   if (sprite) {
     const size = PET_RADIUS * 2;
-    ctx.drawImage(sprite, pet.position.x - size / 2, bobY - size / 2, size, size);
+    // Pets never attack (PetSystem.ts - no combat AI), so this is always
+    // 'walk' - the bob above is the only motion a pet ever needs on top of
+    // its own walk-cycle frames.
+    drawSpriteFrame(ctx, sprite, 'walk', nowSeconds, pet.position.x, bobY, size);
     return;
   }
 
@@ -339,7 +460,7 @@ function drawPet(ctx: CanvasRenderingContext2D, pet: PetState, bobSeed: number, 
 // instead of just "another colored circle" - each one ties directly to the
 // condition driving the actual behavior (MovementSystem/DamageSystem read
 // the exact same archetype fields).
-function drawEnemy(ctx: CanvasRenderingContext2D, enemy: EnemyState): void {
+function drawEnemy(ctx: CanvasRenderingContext2D, enemy: EnemyState, nowSeconds: number): void {
   const archetype = enemyArchetypes[enemy.archetypeId];
   const enemyStyle = getEnemyVisualStyle(enemy.visualId);
   const enemyRadius = ENEMY_RADIUS * enemyStyle.radiusMultiplier;
@@ -372,7 +493,7 @@ function drawEnemy(ctx: CanvasRenderingContext2D, enemy: EnemyState): void {
 
   if (sprite) {
     const size = enemyRadius * 2;
-    ctx.drawImage(sprite, enemy.position.x - size / 2, enemy.position.y - size / 2, size, size);
+    drawSpriteFrame(ctx, sprite, getEnemyAnimationState(enemy), nowSeconds, enemy.position.x, enemy.position.y, size);
   } else {
     ctx.fillStyle = enemyStyle.color;
     ctx.beginPath();
@@ -560,12 +681,19 @@ export function renderScene(
   screenShakeIntensity: number,
 ): void {
   const nowMs = performance.now();
+  const nowSeconds = nowMs / 1000;
   advanceBackgroundScroll(enemies.length > 0, nowMs);
 
   // clearRect runs at the un-shaken transform so the full canvas is always
   // wiped regardless of this frame's jitter offset - only the actual scene
   // contents below get displaced.
   ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+
+  // Resizing the canvas element (BattleScreen's ResizeObserver) resets all
+  // context state, including this - set on every frame rather than once, so
+  // pixel art sprites always scale in crisp nearest-neighbor steps instead
+  // of the browser's default blur, however the canvas got resized.
+  ctx.imageSmoothingEnabled = false;
 
   const isShaking = screenShakeIntensity > SCREEN_SHAKE_MIN_INTENSITY;
   if (isShaking) {
@@ -596,16 +724,15 @@ export function renderScene(
   // system just for this.
   const pulseScale = getHeroPulseScale(visualEffects);
   for (const hero of heroes) {
-    drawHero(ctx, hero, pulseScale);
+    drawHero(ctx, hero, pulseScale, nowSeconds);
   }
 
-  const nowSeconds = nowMs / 1000;
   pets.forEach((pet, index) => {
     drawPet(ctx, pet, index * 1.7, nowSeconds);
   });
 
   for (const enemy of enemies) {
-    drawEnemy(ctx, enemy);
+    drawEnemy(ctx, enemy, nowSeconds);
   }
 
   for (const effect of visualEffects) {

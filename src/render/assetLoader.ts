@@ -48,3 +48,17 @@ export function getPetSpriteSrc(petId: string): string {
 export function getTowerSpriteSrc(): string {
   return `/sprites/towers/base.png`;
 }
+
+// Fire-and-forget, same as getImage itself - just kicks off a load for every
+// src up front (once, from BattleScreen's mount effect via
+// CanvasRenderer.preloadBattleSprites) so the handful of sheets a fresh
+// session needs are already decoding, or done, by the time battle rendering
+// actually asks for them - rather than every sprite popping in from its
+// fallback shape on the first few frames. Callers don't await this; getImage
+// already tolerates "still loading" by returning undefined until decode
+// finishes, same as it always has.
+export function preloadSprites(srcs: string[]): void {
+  for (const src of srcs) {
+    getImage(src);
+  }
+}
