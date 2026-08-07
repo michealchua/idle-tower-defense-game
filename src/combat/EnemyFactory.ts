@@ -12,8 +12,8 @@ export interface EnemyTypeDefinition {
 
 /** Base stat templates for spawnable enemy types - WaveConfig.enemiesToSpawn references these ids. */
 export const enemyTypeDefinitions: Record<string, EnemyTypeDefinition> = {
-  goblin: { maxHp: 50, defense: 5, speed: 1.2, goldReward: 2, expReward: 1, baseDamage: 1 },
-  orc: { maxHp: 120, defense: 15, speed: 0.9, goldReward: 5, expReward: 3, baseDamage: 2 },
+  goblin: { maxHp: 50, defense: 5, speed: 1.2, goldReward: 10, expReward: 1, baseDamage: 1 },
+  orc: { maxHp: 120, defense: 15, speed: 0.9, goldReward: 25, expReward: 3, baseDamage: 2 },
   boss_demon: { maxHp: 2000, defense: 60, speed: 0.6, goldReward: 200, expReward: 100, baseDamage: 5 },
 };
 

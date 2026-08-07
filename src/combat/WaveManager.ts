@@ -89,19 +89,23 @@ export class WaveManager {
 
   /**
    * Hardcore-mechanic seam: skips the rest of the current wave's WAITING
-   * countdown and begins SPAWNING immediately - the hook a future "start
-   * early for bonus gold" feature calls into. A no-op outside WAITING
-   * (already spawning, level cleared, or start() never called) - there's
-   * no countdown to skip in any of those states.
+   * countdown and begins SPAWNING immediately. Returns whether it actually
+   * did that - false outside WAITING (already spawning, level cleared, or
+   * start() never called), since there's no countdown to skip in any of
+   * those states. GameManager.forceStartNextWave reads this return value
+   * to decide whether the "quick-start bonus gold" reward is actually
+   * earned, rather than needing a separate callback just for that.
    */
-  forceStartNextWave(): void {
+  forceStartNextWave(): boolean {
     if (this.waveState !== WaveState.Waiting) {
-      return;
+      return false;
     }
     const config = this.currentWaveConfig;
-    if (config) {
-      this.beginSpawning(config);
+    if (!config) {
+      return false;
     }
+    this.beginSpawning(config);
+    return true;
   }
 
   /**

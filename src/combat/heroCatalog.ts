@@ -19,14 +19,14 @@ export const heroCatalog: Record<string, HeroCatalogEntry> = {
   swordsman: {
     heroTypeId: 'swordsman',
     displayName: '剑士',
-    cost: 10,
+    cost: 50,
     template: swordsmanTemplate,
     baseSkill: bladeSlashSkill,
   },
   berserker: {
     heroTypeId: 'berserker',
     displayName: '狂战士',
-    cost: 15,
+    cost: 75,
     template: berserkerTemplate,
     baseSkill: bladeSlashSkill,
   },

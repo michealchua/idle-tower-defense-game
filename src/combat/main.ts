@@ -11,8 +11,8 @@ import { InputManager } from '../input/InputManager';
 
 /** Clamps deltaTime so a backgrounded/throttled tab doesn't feed a huge dt into GameManager.update on refocus. */
 const MAX_DELTA_SECONDS = 0.1;
-/** Enough to afford heroCatalog's cheapest entry (swordsman, 10) the moment the page loads - otherwise gold could never accrue, since it only comes from kills a hero has to already be placed to make happen. */
-const STARTING_GOLD = 20;
+/** Enough to afford heroCatalog's cheapest entry (swordsman, 50) the moment the page loads - otherwise gold could never accrue, since it only comes from kills a hero has to already be placed to make happen. */
+const STARTING_GOLD = 100;
 const BASE_MAX_HP = 10;
 const BUILD_MESSAGE_DURATION_MS = 2000;
 
@@ -37,6 +37,9 @@ const gameManager = new GameManager(
     onVictory: () => {
       showMessage('胜利！所有波次已清空');
       inputManager.cancelBuildMode();
+    },
+    onForceStartBonus: (amount) => {
+      showMessage(`快速开局奖励 +${amount} 金币！`);
     },
   },
   { startingGold: STARTING_GOLD, maxBaseHp: BASE_MAX_HP },

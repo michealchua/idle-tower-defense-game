@@ -25,6 +25,8 @@ export interface GameManagerCallbacks {
   onGameOver?: () => void;
   /** Fires exactly once, the instant the level's last wave clears with baseHp still above 0. */
   onVictory?: () => void;
+  /** Fired whenever forceStartNextWave() actually skipped a WAITING countdown (not on a no-op call) - `amount` is however much bonus gold that just earned. */
+  onForceStartBonus?: (amount: number) => void;
 }
 
 export interface GameManagerOptions {
@@ -32,6 +34,8 @@ export interface GameManagerOptions {
   startingGold?: number;
   /** Base HP the run starts (and tops out) at. */
   maxBaseHp?: number;
+  /** Gold awarded each time forceStartNextWave() actually skips a WAITING countdown - the reward for taking the risk of fighting the next wave without the full delay to prepare. */
+  forceStartBonusGold?: number;
 }
 
 export type PlaceHeroResult =
@@ -57,6 +61,7 @@ export class GameManager {
   baseHp: number;
   gameState: GameState = GameState.Playing;
 
+  private readonly forceStartBonusGold: number;
   private readonly callbacks: GameManagerCallbacks;
 
   constructor(levelConfig: LevelConfig, callbacks: GameManagerCallbacks = {}, options: GameManagerOptions = {}) {
@@ -64,6 +69,7 @@ export class GameManager {
     this.gold = options.startingGold ?? 0;
     this.maxBaseHp = options.maxBaseHp ?? 10;
     this.baseHp = this.maxBaseHp;
+    this.forceStartBonusGold = options.forceStartBonusGold ?? 20;
 
     this.combatEngine = new CombatEngine({
       onDamageDealt: (event) => this.callbacks.onDamageDealt?.(event),
@@ -133,12 +139,23 @@ export class GameManager {
     this.waveManager.start();
   }
 
-  /** Skips the current wave's WAITING countdown (see WaveManager.forceStartNextWave) - gated on the run still being Playing so a stray click after GameOver/Victory can't flip WaveManager into SPAWNING when nothing will ever tick it forward again. */
+  /**
+   * Skips the current wave's WAITING countdown (see
+   * WaveManager.forceStartNextWave) - gated on the run still being Playing
+   * so a stray click after GameOver/Victory can't flip WaveManager into
+   * SPAWNING when nothing will ever tick it forward again. Awards
+   * forceStartBonusGold only when WaveManager confirms it actually skipped
+   * something (not on a no-op call, e.g. one that lands mid-SPAWNING).
+   */
   forceStartNextWave(): void {
     if (this.isRunOver) {
       return;
     }
-    this.waveManager.forceStartNextWave();
+    const skipped = this.waveManager.forceStartNextWave();
+    if (skipped) {
+      this.gold += this.forceStartBonusGold;
+      this.callbacks.onForceStartBonus?.(this.forceStartBonusGold);
+    }
   }
 
   private handleEnemyDefeated(enemy: BattleEnemy): void {
