@@ -10,7 +10,19 @@ import { sampleLevelConfig } from './sampleLevelConfig';
 import { CELL_SIZE } from './gridConfig';
 import { GameRenderer } from '../render/GameRenderer';
 import { InputManager } from '../input/InputManager';
-import { EquipmentSlot, type EquipmentItem, type StatModifierValue, type StatModifiers } from './Equipment';
+import {
+  EquipmentRarity,
+  EquipmentSlot,
+  RARITY_MAX_LEVEL,
+  applyEnhancementExp,
+  equipmentLevelMultiplier,
+  expThresholdForLevel,
+  type EquipmentItem,
+  type StatModifierValue,
+  type StatModifiers,
+} from './Equipment';
+import { equipmentSpriteSrc } from './equipmentCatalog';
+import type { BattleHero } from './BattleHero';
 
 const SLOT_LABELS: Record<EquipmentSlot, string> = {
   [EquipmentSlot.Weapon]: '武器',
@@ -42,6 +54,28 @@ function formatModifiers(modifiers: StatModifiers): string {
     }
     if (modifier.percent) {
       parts.push(`${label}+${(modifier.percent * 100).toFixed(0)}%`);
+    }
+  });
+  return parts.join(', ');
+}
+
+/** Same style as formatModifiers, but every flat/percent number is first scaled by equipmentLevelMultiplier(level) - what the enhancement modal's "强化后属性" preview uses to show what an item's bonuses will actually be at a hypothetical post-enhancement level, not just its unscaled base numbers. */
+function formatModifiersScaled(modifiers: StatModifiers, level: number): string {
+  const multiplier = equipmentLevelMultiplier(level);
+  const parts: string[] = [];
+  (Object.keys(modifiers) as (keyof StatModifiers)[]).forEach((key) => {
+    const modifier: StatModifierValue | undefined = modifiers[key];
+    if (!modifier) {
+      return;
+    }
+    const label = STAT_LABELS[key];
+    if (modifier.flat) {
+      const scaled = modifier.flat * multiplier;
+      const displayValue = key === 'crit' || key === 'attackSpeed' ? scaled.toFixed(2) : scaled.toFixed(0);
+      parts.push(`${label}+${displayValue}`);
+    }
+    if (modifier.percent) {
+      parts.push(`${label}+${(modifier.percent * multiplier * 100).toFixed(0)}%`);
     }
   });
   return parts.join(', ');
@@ -98,6 +132,8 @@ const hudMessage = document.getElementById('hud-message') as HTMLDivElement;
 const buildPanel = document.getElementById('build-panel') as HTMLDivElement;
 const heroPanel = document.getElementById('hero-panel') as HTMLDivElement;
 const inventoryItemsContainer = document.getElementById('inventory-items') as HTMLDivElement;
+const enhanceModalOverlay = document.getElementById('enhance-modal-overlay') as HTMLDivElement;
+const enhanceModal = document.getElementById('enhance-modal') as HTMLDivElement;
 
 let messageTimeoutId: number | undefined;
 function showMessage(text: string): void {
@@ -108,11 +144,41 @@ function showMessage(text: string): void {
   }, BUILD_MESSAGE_DURATION_MS);
 }
 
+/**
+ * Step 21 render-validation seam: every freshly-placed hero is
+ * auto-equipped with a hand-authored Legendary weapon already at
+ * enhancement level 12 - well past HIGH_ENHANCEMENT_LEVEL (10) - purely
+ * so opening combat-test.html immediately shows all three of this step's
+ * visual features at once (weapon sprite overlay, the gold Legendary aura,
+ * and the enhancement shadow-glow) without needing to grind out a real
+ * boss-drop-then-enhance loop first. Bypasses InventoryManager/loot
+ * entirely - the item is created and equipped directly, same "demo data,
+ * not real drop economy" spirit as STARTING_GOLD above.
+ */
+function equipDemoLegendaryWeapon(hero: BattleHero): void {
+  const demoWeapon: EquipmentItem = {
+    instanceId: `demo-legendary-weapon-${hero.instanceId}`,
+    itemId: 'weapon-legendary-dawnbringer',
+    name: '曙光之刃（演示）',
+    slot: EquipmentSlot.Weapon,
+    rarity: EquipmentRarity.Legendary,
+    modifiers: { attack: { flat: 50 }, crit: { flat: 0.1 } },
+    level: 12,
+    currentExp: 0,
+    baseExpValue: 200,
+    spriteUrl: equipmentSpriteSrc('weapon-legendary-dawnbringer'),
+    glowColor: '#FFD700',
+  };
+  gameManager.inventory.addItem(demoWeapon);
+  gameManager.tryEquipItem(hero.instanceId, demoWeapon.instanceId);
+}
+
 const inputManager = new InputManager(canvas, {
   onPlaceHero: (heroTypeId, cell) => {
     const result = gameManager.tryPlaceHero(heroTypeId, cell);
     if (result.success) {
       showMessage(`已放置：${heroCatalog[heroTypeId].displayName}`);
+      equipDemoLegendaryWeapon(result.hero);
     } else if (result.reason === 'insufficient_gold') {
       showMessage('金币不足！');
     } else if (result.reason === 'cell_occupied') {
@@ -258,6 +324,12 @@ function refreshHeroPanel(): void {
         refreshInventoryPanel();
       });
       slotDiv.appendChild(unequipButton);
+
+      const enhanceButton = document.createElement('button');
+      enhanceButton.textContent = '强化';
+      enhanceButton.disabled = runOver || item.level >= RARITY_MAX_LEVEL[item.rarity];
+      enhanceButton.addEventListener('click', () => openEnhanceModal(item));
+      slotDiv.appendChild(enhanceButton);
     }
 
     equipmentSlotsContainer.appendChild(slotDiv);
@@ -330,8 +402,9 @@ function refreshInventoryPanel(): void {
 function buildInventoryItemCard(item: EquipmentItem, selectedHeroId: string | null, runOver: boolean): HTMLDivElement {
   const card = document.createElement('div');
   card.className = 'inventory-item';
+  const maxLevel = RARITY_MAX_LEVEL[item.rarity];
   card.innerHTML = `
-    <div class="item-name rarity-${item.rarity}">${item.name}</div>
+    <div class="item-name rarity-${item.rarity}">${item.name} · Lv.${item.level}/${maxLevel}</div>
     <div class="item-meta">${SLOT_LABELS[item.slot]} · ${item.rarity}</div>
     <div class="item-meta">${formatModifiers(item.modifiers)}</div>
   `;
@@ -350,8 +423,140 @@ function buildInventoryItemCard(item: EquipmentItem, selectedHeroId: string | nu
   });
   card.appendChild(equipButton);
 
+  const enhanceButton = document.createElement('button');
+  enhanceButton.textContent = '强化';
+  enhanceButton.disabled = runOver || item.level >= maxLevel;
+  enhanceButton.addEventListener('click', () => openEnhanceModal(item));
+  card.appendChild(enhanceButton);
+
   return card;
 }
+
+/**
+ * Simple, single-purpose "强化模式" modal (step 20): opened against one
+ * `target` item (either sitting in the bag or currently equipped - either
+ * works, since GameManager.tryEnhanceEquipment resolves the target from
+ * wherever it actually is), lets the player multi-select any number of
+ * *other* unequipped bag items as fodder, live-previews the exp/level-up
+ * that selection would produce, and on confirm actually spends it via
+ * gameManager.tryEnhanceEquipment.
+ *
+ * The preview is computed by cloning `target` (structuredClone, so the
+ * real item is never touched) and running it through the exact same
+ * applyEnhancementExp the real confirm click uses - what you see in the
+ * preview is guaranteed to be what you'd actually get, not a
+ * hand-rolled approximation of the formula that could drift from it.
+ */
+function openEnhanceModal(target: EquipmentItem): void {
+  const selectedFoodIds = new Set<string>();
+
+  function render(): void {
+    const maxLevel = RARITY_MAX_LEVEL[target.rarity];
+    // Bag items only (fodder can't itself be equipped elsewhere), and
+    // never the target itself even if it happens to also be sitting in
+    // the bag (defensive - GameManager already rejects that combination).
+    const candidateFood = gameManager.inventory.getItems().filter((item) => item.instanceId !== target.instanceId);
+
+    const totalExp = [...selectedFoodIds].reduce((sum, id) => {
+      const food = candidateFood.find((item) => item.instanceId === id);
+      return sum + (food?.baseExpValue ?? 0);
+    }, 0);
+
+    const preview = structuredClone(target);
+    const levelsGained = totalExp > 0 ? applyEnhancementExp(preview, totalExp) : 0;
+
+    enhanceModal.innerHTML = `
+      <div class="enhance-title">强化装备</div>
+      <div class="enhance-target">
+        <div class="rarity-${target.rarity}">${target.name} · Lv.${target.level}/${maxLevel}</div>
+        <div>当前经验: ${target.currentExp} / ${target.level < maxLevel ? expThresholdForLevel(target.level) : '已满级'}</div>
+        <div>${formatModifiersScaled(target.modifiers, target.level)}</div>
+      </div>
+      <div>选择要消耗的狗粮（其他未装备道具）：</div>
+    `;
+
+    const foodList = document.createElement('div');
+    foodList.className = 'enhance-food-list';
+    if (candidateFood.length === 0) {
+      const empty = document.createElement('div');
+      empty.textContent = '（背包中没有其他可用的道具）';
+      empty.style.opacity = '0.6';
+      foodList.appendChild(empty);
+    }
+    for (const food of candidateFood) {
+      const row = document.createElement('label');
+      row.className = 'enhance-food-row';
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = selectedFoodIds.has(food.instanceId);
+      checkbox.addEventListener('change', () => {
+        if (checkbox.checked) {
+          selectedFoodIds.add(food.instanceId);
+        } else {
+          selectedFoodIds.delete(food.instanceId);
+        }
+        render();
+      });
+
+      const label = document.createElement('span');
+      label.className = `rarity-${food.rarity}`;
+      label.textContent = `${food.name} (Lv.${food.level}, 经验值 ${food.baseExpValue})`;
+
+      row.appendChild(checkbox);
+      row.appendChild(label);
+      foodList.appendChild(row);
+    }
+    enhanceModal.appendChild(foodList);
+
+    const previewDiv = document.createElement('div');
+    previewDiv.className = 'enhance-preview';
+    previewDiv.innerHTML =
+      target.level >= maxLevel
+        ? '该装备已达到最高等级，无法继续强化。'
+        : `预计可获得经验: ${totalExp}<br>` +
+          `预计等级: Lv.${target.level} → Lv.${preview.level}${levelsGained > 0 ? `（+${levelsGained}）` : ''}<br>` +
+          `预计强化后属性: ${formatModifiersScaled(preview.modifiers, preview.level)}`;
+    enhanceModal.appendChild(previewDiv);
+
+    const actions = document.createElement('div');
+    actions.className = 'enhance-actions';
+
+    const cancelButton = document.createElement('button');
+    cancelButton.textContent = '取消';
+    cancelButton.addEventListener('click', closeEnhanceModal);
+
+    const confirmButton = document.createElement('button');
+    confirmButton.className = 'confirm';
+    confirmButton.textContent = '确认强化';
+    confirmButton.disabled = target.level >= maxLevel || selectedFoodIds.size === 0 || gameManager.gameState !== GameState.Playing;
+    confirmButton.addEventListener('click', () => {
+      const result = gameManager.tryEnhanceEquipment(target.instanceId, [...selectedFoodIds]);
+      showMessage(result.success ? `强化成功：${target.name} 提升至 Lv.${target.level}` : '强化失败');
+      closeEnhanceModal();
+      refreshHeroPanel();
+      refreshInventoryPanel();
+    });
+
+    actions.appendChild(cancelButton);
+    actions.appendChild(confirmButton);
+    enhanceModal.appendChild(actions);
+  }
+
+  render();
+  enhanceModalOverlay.classList.add('open');
+}
+
+function closeEnhanceModal(): void {
+  enhanceModalOverlay.classList.remove('open');
+  enhanceModal.innerHTML = '';
+}
+
+enhanceModalOverlay.addEventListener('click', (event) => {
+  if (event.target === enhanceModalOverlay) {
+    closeEnhanceModal();
+  }
+});
 
 function updateHud(): void {
   hudGold.textContent = String(gameManager.gold);

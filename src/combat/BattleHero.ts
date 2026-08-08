@@ -2,7 +2,7 @@ import type { SkillDefinition } from '../data/skills/skillTypes';
 import type { HeroClass, HeroInstance } from '../data/hero/heroTypes';
 import type { SkillAction } from './SkillAction';
 import type { EvolutionOption } from './heroEvolution';
-import { EquipmentSlot, type EquipmentItem, type StatModifiers } from './Equipment';
+import { EquipmentSlot, equipmentLevelMultiplier, type EquipmentItem, type StatModifiers } from './Equipment';
 
 /**
  * Live, battle-scoped stats. Seeded from HeroInstance.currentStats but
@@ -122,12 +122,16 @@ export class BattleHero {
   }
 
   /**
-   * final = levelStats[stat] * (1 + sum of every equipped item's percent
-   * bonus for `stat`) + (sum of every equipped item's flat bonus for
-   * `stat`) - i.e. "基础属性 x 升级系数 + 装备固定加成 + 装备百分比加成"
-   * (percent is applied against the pre-equipment levelStats value, not
-   * against the flat-adjusted total, so two items each carrying +10%
-   * combine additively to +20% of the base rather than compounding).
+   * final = levelStats[stat] * (1 + sum of every equipped item's
+   * level-scaled percent bonus for `stat`) + (sum of every equipped
+   * item's level-scaled flat bonus for `stat`) - i.e. "基础属性 x 升级
+   * 系数 + 装备固定加成 + 装备百分比加成" (percent is applied against the
+   * pre-equipment levelStats value, not against the flat-adjusted total,
+   * so two items each carrying +10% combine additively to +20% of the
+   * base rather than compounding). Each item's own flat/percent numbers
+   * are first scaled by equipmentLevelMultiplier(item.level) (step 20) -
+   * a +5 flat modifier on a level-3 item contributes +6 (5 * 1.2), not a
+   * flat +5 regardless of how enhanced the item is.
    */
   private computeFinalStat(statKey: keyof StatModifiers): number {
     const base = this.levelStats[statKey];
@@ -136,11 +140,12 @@ export class BattleHero {
 
     for (const item of Object.values(this.equipment)) {
       const modifier = item?.modifiers[statKey];
-      if (!modifier) {
+      if (!item || !modifier) {
         continue;
       }
-      flatBonus += modifier.flat ?? 0;
-      percentBonus += modifier.percent ?? 0;
+      const levelMultiplier = equipmentLevelMultiplier(item.level);
+      flatBonus += (modifier.flat ?? 0) * levelMultiplier;
+      percentBonus += (modifier.percent ?? 0) * levelMultiplier;
     }
 
     return base * (1 + percentBonus) + flatBonus;

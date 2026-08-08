@@ -396,12 +396,18 @@ console.log('=== 边界测试 5：装备加成的叠加计算与卸下后的属�
     slot: EquipmentSlot.Weapon,
     rarity: EquipmentRarity.Legendary,
     modifiers: { attack: { flat: 50 }, crit: { flat: 0.1 } },
+    level: 1,
+    currentExp: 0,
+    baseExpValue: 200,
   };
   const rareArmor: EquipmentItem = {
     instanceId: 'test-rare-armor',
     itemId: 'test-rare-armor-template',
     name: '测试稀有护甲',
     slot: EquipmentSlot.Armor,
+    level: 1,
+    currentExp: 0,
+    baseExpValue: 30,
     rarity: EquipmentRarity.Rare,
     modifiers: { maxHp: { flat: 100 } },
   };
@@ -451,6 +457,95 @@ console.log('=== 边界测试 5：装备加成的叠加计算与卸下后的属�
   }
 }
 console.log('[PASS] 装备加成边界测试通过：固定加成正确叠加到最终属性，卸下后单个槽位的加成独立回落。\n');
+
+// --- Boundary test 6: enhancement (feeding fodder to level up gear) -----
+//
+// A rare weapon (still level 1) gets equipped onto a hero, then leveled up
+// by feeding it 3 Common items as fodder through the real
+// GameManager.tryEnhanceEquipment path (equipped-item branch, not
+// InventoryManager.enhanceEquipment directly - proving out the whole
+// "target is currently worn" flow, not just the underlying math). Verifies:
+// the weapon actually leveled up, the 3 fodder items are gone from the bag
+// entirely (destroyed, not just unequipped-and-kept), and the hero's own
+// live attack stat reflects the newly-enhanced weapon's bigger numbers
+// with no separate "recalculate" call needed.
+console.log('=== 边界测试 6：装备强化（消耗狗粮升级已穿戴装备）===');
+{
+  const gm = new GameManager(sampleLevelConfig, {}, { startingGold: 100000 });
+  const placeResult = gm.tryPlaceHero('swordsman', { col: 1, row: 3 });
+  if (!placeResult.success) {
+    throw new Error('Expected placing the swordsman hero to succeed with ample gold.');
+  }
+  const hero = placeResult.hero;
+
+  const rareWeapon: EquipmentItem = {
+    instanceId: 'enhance-test-rare-weapon',
+    itemId: 'enhance-test-rare-weapon-template',
+    name: '测试待强化稀有武器',
+    slot: EquipmentSlot.Weapon,
+    rarity: EquipmentRarity.Rare,
+    modifiers: { attack: { flat: 20 } },
+    level: 1,
+    currentExp: 0,
+    baseExpValue: 30,
+  };
+  gm.inventory.addItem(rareWeapon);
+
+  // 3 x 20 exp = 60, comfortably clearing expThresholdForLevel(1) (50) with
+  // 10 left over as banked progress toward level 3 - enough to prove a
+  // real level-up happened without landing suspiciously exactly on 0.
+  const commonFoodItems: EquipmentItem[] = [1, 2, 3].map((n) => ({
+    instanceId: `enhance-test-common-food-${n}`,
+    itemId: 'enhance-test-common-food-template',
+    name: `杂兵装备${n}`,
+    slot: EquipmentSlot.Boots,
+    rarity: EquipmentRarity.Common,
+    modifiers: { attackSpeed: { flat: 0.01 } },
+    level: 1,
+    currentExp: 0,
+    baseExpValue: 20,
+  }));
+  for (const food of commonFoodItems) {
+    gm.inventory.addItem(food);
+  }
+
+  const equipResult = gm.tryEquipItem(hero.instanceId, rareWeapon.instanceId);
+  if (!equipResult.success) {
+    throw new Error('Expected equipping the rare weapon onto the freshly-placed hero to succeed.');
+  }
+
+  const attackBeforeEnhance = hero.stats.currentAttack;
+  console.log(`  强化前: 武器等级=${rareWeapon.level}, 英雄攻击力=${attackBeforeEnhance.toFixed(2)}`);
+
+  const foodIds = commonFoodItems.map((item) => item.instanceId);
+  const enhanceResult = gm.tryEnhanceEquipment(rareWeapon.instanceId, foodIds);
+  if (!enhanceResult.success) {
+    throw new Error(`Expected tryEnhanceEquipment to succeed (reason: ${'reason' in enhanceResult ? enhanceResult.reason : 'n/a'}).`);
+  }
+  console.log(`  强化结算: 获得经验=${enhanceResult.expGained}, 提升等级数=${enhanceResult.levelsGained}, 武器新等级=${rareWeapon.level}, 剩余经验=${rareWeapon.currentExp}`);
+  if (rareWeapon.level !== 2 || enhanceResult.levelsGained !== 1) {
+    throw new Error(`Expected the weapon to level up exactly once to level 2: got level ${rareWeapon.level}, levelsGained ${enhanceResult.levelsGained}.`);
+  }
+
+  const remainingInventoryIds = gm.inventory.getItems().map((item) => item.instanceId);
+  console.log(`  背包中剩余道具数=${remainingInventoryIds.length} (期望 0，3 件狗粮均被销毁)`);
+  for (const foodId of foodIds) {
+    if (remainingInventoryIds.includes(foodId)) {
+      throw new Error(`Expected fodder item "${foodId}" to have been destroyed (removed from the bag), but it's still there.`);
+    }
+  }
+
+  // attack = levelStats.attack + modifiers.attack.flat * equipmentLevelMultiplier(level)
+  // level 1: 20 * 1.0 = 20 | level 2: 20 * 1.1 = 22 -> +2 over the pre-enhance value.
+  const expectedAttackAfterEnhance = attackBeforeEnhance + 2;
+  console.log(`  强化后英雄攻击力=${hero.stats.currentAttack.toFixed(2)} (期望 ${expectedAttackAfterEnhance.toFixed(2)})`);
+  if (Math.abs(hero.stats.currentAttack - expectedAttackAfterEnhance) > 0.001) {
+    throw new Error(
+      `Expected the hero's live attack stat to reflect the weapon's new level-2 bonus with no extra recalculation step: got ${hero.stats.currentAttack}, expected ${expectedAttackAfterEnhance}.`,
+    );
+  }
+}
+console.log('[PASS] 装备强化边界测试通过：已穿戴装备成功升级，狗粮被彻底销毁，英雄攻击力实时反映了强化后的装备加成。\n');
 
 // A single melee hero's DPS (~4.3/s from blade slash's 4s cooldown) can't
 // out-damage a goblin (50hp) within the ~3.5s window one range circle

@@ -1,4 +1,9 @@
-import { EquipmentRarity, EquipmentSlot, type EquipmentItem, type StatModifiers } from './Equipment';
+import { EquipmentRarity, EquipmentSlot, RARITY_BASE_EXP_VALUE, RARITY_GLOW_COLOR, type EquipmentItem, type StatModifiers } from './Equipment';
+
+/** `/sprites/equipment/<itemId>.png` - one sprite file per template (16 total), not per-instance, same "keyed by identity, not by every drop" convention assetLoader.ts's getHeroSpriteSrc/getEnemySpriteSrc already follow. GameRenderer falls back to a solid-color placeholder (same as hero/enemy sprites) for as long as the file isn't actually present under public/. */
+export function equipmentSpriteSrc(itemId: string): string {
+  return `/sprites/equipment/${itemId}.png`;
+}
 
 /** Author-time template a random drop is rolled from - generateRandomEquipment clones one of these into a fresh, independently-instanced EquipmentItem. Never handed out directly. */
 export interface EquipmentTemplate {
@@ -83,5 +88,10 @@ export function generateRandomEquipment(): EquipmentItem {
     slot: template.slot,
     rarity: template.rarity,
     modifiers: template.modifiers,
+    level: 1,
+    currentExp: 0,
+    baseExpValue: RARITY_BASE_EXP_VALUE[template.rarity],
+    spriteUrl: equipmentSpriteSrc(template.itemId),
+    glowColor: RARITY_GLOW_COLOR[template.rarity],
   };
 }

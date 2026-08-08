@@ -7,7 +7,7 @@ import { heroCatalog, createBattleHeroFromCatalog } from './heroCatalog';
 import { heroEvolutions } from './heroEvolution';
 import { gridCellCenter, type GridCell } from './gridConfig';
 import { InventoryManager } from './InventoryManager';
-import type { EquipmentItem, EquipmentSlot } from './Equipment';
+import { RARITY_MAX_LEVEL, applyEnhancementExp, type EquipmentItem, type EquipmentSlot } from './Equipment';
 
 /** Coarse run state - GameManager.update becomes a no-op the instant this leaves Playing, and tryPlaceHero starts rejecting every request. */
 export enum GameState {
@@ -70,6 +70,13 @@ export type EquipItemResult =
 export type UnequipItemResult =
   | { success: true; hero: BattleHero; unequippedItem: EquipmentItem | null }
   | { success: false; reason: 'game_over' | 'unknown_hero' };
+
+export type EnhanceEquipmentResult =
+  | { success: true; item: EquipmentItem; expGained: number; levelsGained: number }
+  | {
+      success: false;
+      reason: 'game_over' | 'unknown_target' | 'target_is_food' | 'unknown_food_item' | 'no_food_items' | 'already_max_level';
+    };
 
 /**
  * Top-level orchestrator that owns the run's CombatEngine + WaveManager and
@@ -314,6 +321,74 @@ export class GameManager {
     }
 
     return { success: true, hero, unequippedItem: removed };
+  }
+
+  /**
+   * Consumes `foodItemIds` as fodder to level up `targetItemInstanceId` -
+   * the item can be either sitting unequipped in `inventory` or currently
+   * worn by any hero on the field; food items must always come from the
+   * bag (an equipped item can't be fed to another item's enhancement
+   * without unequipping it first - tryUnequipItem exists for that).
+   *
+   * Two paths, same underlying math (Equipment.ts's applyEnhancementExp):
+   * - Target equipped: found via findEquippedItem, validated/consumed
+   *   here directly since InventoryManager only ever holds unequipped
+   *   items and can't reach it. No separate "recalculate BattleHero.stats"
+   *   step is needed after this mutates the item - stats' getters
+   *   (BattleHero.computeFinalStat) read the equipped item's level/
+   *   modifiers fresh on every access, so this exact object being more
+   *   enhanced is already a real-time stat change the instant it happens.
+   * - Target unequipped: delegated straight to InventoryManager.
+   *   enhanceEquipment, which owns that (simpler) bag-only case.
+   */
+  tryEnhanceEquipment(targetItemInstanceId: string, foodItemIds: string[]): EnhanceEquipmentResult {
+    if (this.isRunOver) {
+      return { success: false, reason: 'game_over' };
+    }
+
+    const equippedTarget = this.findEquippedItem(targetItemInstanceId);
+    if (!equippedTarget) {
+      return this.inventory.enhanceEquipment(targetItemInstanceId, foodItemIds);
+    }
+
+    if (foodItemIds.length === 0) {
+      return { success: false, reason: 'no_food_items' };
+    }
+    if (foodItemIds.includes(targetItemInstanceId)) {
+      return { success: false, reason: 'target_is_food' };
+    }
+    if (equippedTarget.level >= RARITY_MAX_LEVEL[equippedTarget.rarity]) {
+      return { success: false, reason: 'already_max_level' };
+    }
+
+    const foodItems: EquipmentItem[] = [];
+    for (const foodItemId of foodItemIds) {
+      const foodItem = this.inventory.getItem(foodItemId);
+      if (!foodItem) {
+        return { success: false, reason: 'unknown_food_item' };
+      }
+      foodItems.push(foodItem);
+    }
+
+    const totalExp = foodItems.reduce((sum, item) => sum + item.baseExpValue, 0);
+    const levelsGained = applyEnhancementExp(equippedTarget, totalExp);
+    for (const foodItemId of foodItemIds) {
+      this.inventory.removeItem(foodItemId);
+    }
+
+    return { success: true, item: equippedTarget, expGained: totalExp, levelsGained };
+  }
+
+  /** The live EquipmentItem instance named by `itemInstanceId`, if any hero currently has it equipped in any slot - null if it's unequipped (or doesn't exist at all). */
+  private findEquippedItem(itemInstanceId: string): EquipmentItem | null {
+    for (const hero of this.combatEngine.getHeroes()) {
+      for (const item of Object.values(hero.getAllEquipment())) {
+        if (item && item.instanceId === itemInstanceId) {
+          return item;
+        }
+      }
+    }
+    return null;
   }
 
   /** Starts the level's first wave. No-op if already started or the level has no waves (see WaveManager.start). */
