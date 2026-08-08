@@ -20,12 +20,23 @@ export interface DamageDealtEvent {
   wasExecuted: boolean;
 }
 
+/** Mirrors DamageDealtEvent for the reverse direction (enemy -> hero): a single-target attack or one hero's share of a boss's AoE pulse. */
+export interface HeroDamagedEvent {
+  source: BattleEnemy;
+  target: BattleHero;
+  amount: number;
+  /** True if this hit is what just dropped the target's HP to 0 (i.e. target.isDead is now true) - same "wasExecuted"-style derived flag DamageDealtEvent carries for the hero->enemy direction. */
+  wasLethal: boolean;
+}
+
 export interface CombatEngineCallbacks {
   onDamageDealt?: (event: DamageDealtEvent) => void;
   /** Fired once per enemy the instant its HP hits 0, before it's dropped from the engine. */
   onEnemyDefeated?: (enemy: BattleEnemy) => void;
   /** Fired once per enemy that walks past ENEMY_PATH's final waypoint - not a kill (no reward), just "it got through". A future base-HP system reacts here instead of anything in this engine. */
   onEnemyReachedEnd?: (enemy: BattleEnemy) => void;
+  /** Fired for every enemy attack or AoE-pulse hit that actually lands on a hero. Heroes are never removed from the engine on death (see BattleHero.isDead) - this is the only per-hit signal GameManager gets, same role onDamageDealt plays for hero->enemy hits. */
+  onHeroDamaged?: (event: HeroDamagedEvent) => void;
 }
 
 /**
@@ -108,7 +119,15 @@ export class CombatEngine {
    */
   update(deltaTime: number): void {
     for (const enemy of this.enemies.values()) {
-      enemy.update(deltaTime);
+      const engagedHero = this.findNearestHeroInRange(enemy);
+      enemy.update(deltaTime, engagedHero);
+
+      if (engagedHero && enemy.isAlive && enemy.isAttackReady) {
+        this.resolveEnemyAttack(enemy, engagedHero);
+      }
+      if (enemy.isAlive && enemy.isAoePulseReady) {
+        this.resolveEnemyAoePulse(enemy);
+      }
     }
 
     for (const hero of this.heroes.values()) {
@@ -197,6 +216,84 @@ export class CombatEngine {
     this.resolveDamageAgainst(projectile.caster, projectile.skillAction, projectile.target);
     if (projectile.statusEffect) {
       projectile.target.applyStatus(projectile.statusEffect);
+    }
+  }
+
+  /**
+   * The nearest alive hero within `enemy`'s own attackRange, or null if
+   * none qualifies - the enemy-side mirror of findTargetsInRange, just
+   * single-target-only and reading `enemies`' side of the field instead.
+   * A dead hero (see BattleHero.isDead) is never a valid target: it can't
+   * fight back, but it also isn't the aggro priority once a live hero is
+   * available - this simply excludes it entirely, same as an escaped/dead
+   * enemy is excluded from getAliveEnemies().
+   */
+  private findNearestHeroInRange(enemy: BattleEnemy): BattleHero | null {
+    let nearest: BattleHero | null = null;
+    let nearestDistance = Infinity;
+
+    for (const hero of this.heroes.values()) {
+      if (!hero.isAlive) {
+        continue;
+      }
+      const distance = Math.hypot(hero.x - enemy.x, hero.y - enemy.y);
+      if (distance <= enemy.attackRange && distance < nearestDistance) {
+        nearest = hero;
+        nearestDistance = distance;
+      }
+    }
+
+    return nearest;
+  }
+
+  /** Resolves one enemy's single-target hit against its engaged hero: same armor-mitigation formula resolveDamageAgainst uses (just enemy.defense/target.defense's roles swapped), applied via BattleHero.takeDamage, then resets the attack cooldown and fires onHeroDamaged. Uses enemy.effectiveAttackDamage rather than the raw attackDamage stat so an enraged boss's higher output is reflected here automatically. */
+  private resolveEnemyAttack(enemy: BattleEnemy, target: BattleHero): void {
+    enemy.commitAttack();
+
+    const rawDamage = enemy.effectiveAttackDamage;
+    const actualDamage = rawDamage * (ARMOR_CONSTANT / (ARMOR_CONSTANT + target.stats.currentDefense));
+    target.takeDamage(actualDamage);
+
+    this.callbacks.onHeroDamaged?.({
+      source: enemy,
+      target,
+      amount: actualDamage,
+      wasLethal: target.isDead,
+    });
+  }
+
+  /**
+   * Resolves a boss's periodic AoE pulse: every alive hero within
+   * enemy.aoePulse.radius of the enemy's current position takes
+   * aoePulse.damage (flat, no armor mitigation - the whole point of an
+   * AoE pulse is that it's unavoidable battlefield damage, not a
+   * dodgeable/mitigable single-target hit), one onHeroDamaged event per
+   * hero actually hit. No-op (and never called - see isAoePulseReady) for
+   * an enemy with no aoePulse config.
+   */
+  private resolveEnemyAoePulse(enemy: BattleEnemy): void {
+    const pulse = enemy.aoePulse;
+    if (!pulse) {
+      return;
+    }
+    enemy.commitAoePulse();
+
+    for (const hero of this.heroes.values()) {
+      if (!hero.isAlive) {
+        continue;
+      }
+      const distance = Math.hypot(hero.x - enemy.x, hero.y - enemy.y);
+      if (distance > pulse.radius) {
+        continue;
+      }
+
+      hero.takeDamage(pulse.damage);
+      this.callbacks.onHeroDamaged?.({
+        source: enemy,
+        target: hero,
+        amount: pulse.damage,
+        wasLethal: hero.isDead,
+      });
     }
   }
 

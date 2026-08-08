@@ -17,6 +17,7 @@ import { fireballSkill } from '../data/skills/mageSkills';
 import { StatusEffectType } from '../data/skills/skillTypes';
 import { heroEvolutions } from './heroEvolution';
 import { gridCellCenter } from './gridConfig';
+import { EquipmentRarity, EquipmentSlot, type EquipmentItem } from './Equipment';
 
 // --- forceStartNextWave edge cases -----------------------------------
 //
@@ -150,6 +151,12 @@ console.log('=== 边界测试 2：DOT 是否能在英雄停止攻击后依然按
     goldReward: 0,
     expReward: 0,
     baseDamage: 0,
+    // attackRange: 0 means this enemy can never engage the hero itself -
+    // this test is purely about the fireball's Dot status, not step 18's
+    // enemy-attack mechanic.
+    attackDamage: 0,
+    attackRange: 0,
+    attackSpeed: 1,
   });
   enemy.x = 50; // well within fireballSkill's 180px range of the hero at (0,0)
   enemy.y = 0;
@@ -260,6 +267,190 @@ console.log('=== 边界测试 3：升级与分支进化流程 ===');
   }
 }
 console.log('[PASS] 升级/进化边界测试通过：属性按比例放大，技能被整体替换为携带 Projectile + 状态效果的新技能，且拒绝二次进化。\n');
+
+// --- Boundary test 4: enemy attacks lock onto and kill a hero -----------
+//
+// A stationary, high-attackDamage enemy placed directly within its own
+// attackRange of a single hero - isolates the attack-engagement/death path
+// itself (step 18) from pathing, wave management, or any other hero on the
+// field. Verifies: the enemy locks onto and repeatedly hits the hero
+// (heroDamageEventsBeforeDeath), the hero actually dies (isDead=true,
+// currentHp=0), and - the core "hero survival" requirement - a dead hero
+// stops being a valid attack target AND stops firing its own skills
+// (DPS output) entirely from that tick on.
+console.log('=== 边界测试 4：敌人反击锁定英雄，英雄死亡后停止 DPS 输出 ===');
+{
+  const heroInstance = HeroFactory.createHero(swordsmanTemplate);
+  const hero = new BattleHero(heroInstance, [bladeSlashSkill], { x: 0, y: 0 });
+  // currentHp is still a plain mutable field (see BattleHero.stats' doc
+  // comment - only maxHp/currentAttack/etc became getters in step 19), so
+  // this override still works: starts the hero well below its real
+  // (unmodified) maxHp so a couple of 20-damage hits are enough to kill it
+  // without needing to fight through swordsmanTemplate's full 120 HP.
+  hero.stats.currentHp = 50;
+
+  // speed: 0 and placed well within attackRange of the hero at (0,0) - no
+  // need to walk ENEMY_PATH into range first, this test only cares about
+  // what happens once an enemy is already engaged.
+  const attacker = new BattleEnemy({
+    instanceId: 'attacker-test-enemy',
+    archetypeId: 'goblin',
+    maxHp: 500,
+    defense: 0,
+    speed: 0,
+    goldReward: 0,
+    expReward: 0,
+    baseDamage: 0,
+    attackDamage: 20,
+    attackRange: 100,
+    attackSpeed: 1,
+  });
+  attacker.x = 30;
+  attacker.y = 0;
+
+  // Phase-based, not an instantaneous `hero.isDead` check inside the
+  // callback: the killing blow's own onHeroDamaged event fires *after*
+  // BattleHero.takeDamage has already flipped isDead to true, so reading
+  // isDead at callback time would misattribute that one lethal hit to
+  // "after death" instead of "the hit that caused it". `phase` only
+  // flips once the death-loop below has actually exited.
+  let phase: 'before' | 'after' = 'before';
+  let heroDamageEventsBeforeDeath = 0;
+  let heroDamageEventsAfterDeath = 0;
+  let damageDealtEventsAfterDeath = 0;
+
+  const engine = new CombatEngine({
+    onHeroDamaged: () => {
+      if (phase === 'before') {
+        heroDamageEventsBeforeDeath += 1;
+      } else {
+        heroDamageEventsAfterDeath += 1;
+      }
+    },
+    onDamageDealt: () => {
+      if (phase === 'after') {
+        damageDealtEventsAfterDeath += 1;
+      }
+    },
+  });
+  engine.addHero(hero);
+  engine.addEnemy(attacker);
+
+  const dt = 0.1;
+  let tick = 0;
+  const maxTicksToDeath = 500;
+  while (!hero.isDead && tick < maxTicksToDeath) {
+    engine.update(dt);
+    tick += 1;
+  }
+  phase = 'after';
+  console.log(`  英雄于第 ${tick} tick 死亡: isDead=${hero.isDead}, HP=${hero.stats.currentHp}, 死亡前共受到 ${heroDamageEventsBeforeDeath} 次攻击`);
+  if (!hero.isDead || hero.stats.currentHp !== 0) {
+    throw new Error('Expected the enemy to have locked onto and killed the hero (isDead=true, currentHp=0).');
+  }
+  if (heroDamageEventsBeforeDeath < 2) {
+    throw new Error('Expected the enemy to land more than one attack (sustained engagement) before the hero died.');
+  }
+
+  // Keep simulating after death - a dead hero must stop all further
+  // skill/attack output (BattleHero.update returns null while isDead) and
+  // must no longer be a valid attack target either
+  // (CombatEngine.findNearestHeroInRange excludes dead heroes), so no new
+  // events of either kind should fire from this point on.
+  for (let i = 0; i < 50; i += 1) {
+    engine.update(dt);
+  }
+  console.log(`  死亡后又模拟 50 tick: 英雄仍被攻击次数=${heroDamageEventsAfterDeath}, 英雄仍造成伤害次数=${damageDealtEventsAfterDeath}`);
+  if (heroDamageEventsAfterDeath > 0) {
+    throw new Error('Expected a dead hero to no longer be a valid enemy attack target.');
+  }
+  if (damageDealtEventsAfterDeath > 0) {
+    throw new Error('Expected a dead hero to stop firing skills (DPS output) entirely once isDead.');
+  }
+}
+console.log('[PASS] 敌人反击边界测试通过：成功锁定并击杀英雄，死亡后正确停止了 DPS 输出与被攻击资格。\n');
+
+// --- Boundary test 5: equipment stat bonuses stack, and fall back on -----
+//     unequip
+//
+// Manually-authored items (not rolled through equipmentCatalog's RNG - the
+// point here is the formula, not the loot table) covering both flat and
+// percent modifiers, across two different stats each: the legendary
+// weapon's crit bonus and the rare armor's maxHp bonus must both still
+// apply after the weapon's own attack bonus is removed, proving slots are
+// independent rather than the whole equipment set getting reset together.
+console.log('=== 边界测试 5：装备加成的叠加计算与卸下后的属性回落 ===');
+{
+  const heroInstance = HeroFactory.createHero(swordsmanTemplate);
+  const hero = new BattleHero(heroInstance, [bladeSlashSkill], { x: 0, y: 0 });
+
+  const baseAttack = hero.stats.currentAttack;
+  const baseMaxHp = hero.stats.maxHp;
+  const baseCrit = hero.stats.currentCrit;
+  console.log(`  装备前 (Lv.${hero.level}): 攻击力=${baseAttack.toFixed(2)}, maxHp=${baseMaxHp.toFixed(2)}, 暴击=${baseCrit.toFixed(3)}`);
+
+  const legendaryWeapon: EquipmentItem = {
+    instanceId: 'test-legendary-weapon',
+    itemId: 'test-legendary-weapon-template',
+    name: '测试传奇武器',
+    slot: EquipmentSlot.Weapon,
+    rarity: EquipmentRarity.Legendary,
+    modifiers: { attack: { flat: 50 }, crit: { flat: 0.1 } },
+  };
+  const rareArmor: EquipmentItem = {
+    instanceId: 'test-rare-armor',
+    itemId: 'test-rare-armor-template',
+    name: '测试稀有护甲',
+    slot: EquipmentSlot.Armor,
+    rarity: EquipmentRarity.Rare,
+    modifiers: { maxHp: { flat: 100 } },
+  };
+
+  const previousWeaponSlot = hero.equipItem(legendaryWeapon);
+  const previousArmorSlot = hero.equipItem(rareArmor);
+  if (previousWeaponSlot !== null || previousArmorSlot !== null) {
+    throw new Error('Expected both slots to have been empty before equipping, so equipItem should have returned null for each.');
+  }
+
+  const expectedAttack = baseAttack + 50;
+  const expectedCrit = baseCrit + 0.1;
+  const expectedMaxHp = baseMaxHp + 100;
+  console.log(
+    `  装备后: 攻击力=${hero.stats.currentAttack.toFixed(2)} (期望 ${expectedAttack.toFixed(2)}), ` +
+      `暴击=${hero.stats.currentCrit.toFixed(3)} (期望 ${expectedCrit.toFixed(3)}), ` +
+      `maxHp=${hero.stats.maxHp.toFixed(2)} (期望 ${expectedMaxHp.toFixed(2)})`,
+  );
+  if (Math.abs(hero.stats.currentAttack - expectedAttack) > 0.001) {
+    throw new Error(`Expected equipped attack to equal base + flat weapon bonus: got ${hero.stats.currentAttack}, expected ${expectedAttack}.`);
+  }
+  if (Math.abs(hero.stats.currentCrit - expectedCrit) > 0.001) {
+    throw new Error(`Expected equipped crit to equal base + flat weapon crit bonus: got ${hero.stats.currentCrit}, expected ${expectedCrit}.`);
+  }
+  if (Math.abs(hero.stats.maxHp - expectedMaxHp) > 0.001) {
+    throw new Error(`Expected equipped maxHp to equal base + flat armor bonus: got ${hero.stats.maxHp}, expected ${expectedMaxHp}.`);
+  }
+
+  const removedWeapon = hero.unequipItem(EquipmentSlot.Weapon);
+  console.log(
+    `  卸下武器 (${removedWeapon?.name}): 攻击力回落至=${hero.stats.currentAttack.toFixed(2)} (期望 ${baseAttack.toFixed(2)}), ` +
+      `暴击回落至=${hero.stats.currentCrit.toFixed(3)} (期望 ${baseCrit.toFixed(3)}), maxHp 应保持不变=${hero.stats.maxHp.toFixed(2)}`,
+  );
+  if (removedWeapon?.instanceId !== legendaryWeapon.instanceId) {
+    throw new Error('Expected unequipItem to return the exact weapon instance that was equipped.');
+  }
+  if (Math.abs(hero.stats.currentAttack - baseAttack) > 0.001) {
+    throw new Error(`Expected attack to fall back to its pre-equipment value after unequipping the weapon: got ${hero.stats.currentAttack}, expected ${baseAttack}.`);
+  }
+  if (Math.abs(hero.stats.currentCrit - baseCrit) > 0.001) {
+    throw new Error(`Expected crit to fall back to its pre-equipment value after unequipping the weapon: got ${hero.stats.currentCrit}, expected ${baseCrit}.`);
+  }
+  // The still-equipped armor's maxHp bonus must survive the weapon's
+  // removal untouched - slots are independent, not an all-or-nothing set.
+  if (Math.abs(hero.stats.maxHp - expectedMaxHp) > 0.001) {
+    throw new Error('Expected unequipping the weapon to leave the still-equipped armor\'s maxHp bonus untouched.');
+  }
+}
+console.log('[PASS] 装备加成边界测试通过：固定加成正确叠加到最终属性，卸下后单个槽位的加成独立回落。\n');
 
 // A single melee hero's DPS (~4.3/s from blade slash's 4s cooldown) can't
 // out-damage a goblin (50hp) within the ~3.5s window one range circle

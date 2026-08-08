@@ -10,6 +10,42 @@ import { sampleLevelConfig } from './sampleLevelConfig';
 import { CELL_SIZE } from './gridConfig';
 import { GameRenderer } from '../render/GameRenderer';
 import { InputManager } from '../input/InputManager';
+import { EquipmentSlot, type EquipmentItem, type StatModifierValue, type StatModifiers } from './Equipment';
+
+const SLOT_LABELS: Record<EquipmentSlot, string> = {
+  [EquipmentSlot.Weapon]: '武器',
+  [EquipmentSlot.Armor]: '护甲',
+  [EquipmentSlot.Boots]: '靴子',
+  [EquipmentSlot.Accessory]: '饰品',
+};
+
+const STAT_LABELS: Record<keyof StatModifiers, string> = {
+  maxHp: '生命',
+  attack: '攻击',
+  defense: '防御',
+  attackSpeed: '攻速',
+  crit: '暴击',
+};
+
+/** "生命+100, 攻击+12, 攻击+5%" style summary of one item's modifiers - flat and percent bonuses for the same stat both get their own segment rather than being merged into one string. */
+function formatModifiers(modifiers: StatModifiers): string {
+  const parts: string[] = [];
+  (Object.keys(modifiers) as (keyof StatModifiers)[]).forEach((key) => {
+    const modifier: StatModifierValue | undefined = modifiers[key];
+    if (!modifier) {
+      return;
+    }
+    const label = STAT_LABELS[key];
+    if (modifier.flat) {
+      const displayValue = key === 'crit' || key === 'attackSpeed' ? modifier.flat.toFixed(2) : modifier.flat.toFixed(0);
+      parts.push(`${label}+${displayValue}`);
+    }
+    if (modifier.percent) {
+      parts.push(`${label}+${(modifier.percent * 100).toFixed(0)}%`);
+    }
+  });
+  return parts.join(', ');
+}
 
 /** Clamps deltaTime so a backgrounded/throttled tab doesn't feed a huge dt into GameManager.update on refocus. */
 const MAX_DELTA_SECONDS = 0.1;
@@ -43,6 +79,10 @@ const gameManager = new GameManager(
     onForceStartBonus: (amount) => {
       showMessage(`快速开局奖励 +${amount} 金币！`);
     },
+    onLootDropped: (item) => {
+      showMessage(`战利品掉落：${item.name}（${item.rarity}）`);
+      refreshInventoryPanel();
+    },
   },
   { startingGold: STARTING_GOLD, maxBaseHp: BASE_MAX_HP },
 );
@@ -57,6 +97,7 @@ const hudWave = document.getElementById('hud-wave') as HTMLSpanElement;
 const hudMessage = document.getElementById('hud-message') as HTMLDivElement;
 const buildPanel = document.getElementById('build-panel') as HTMLDivElement;
 const heroPanel = document.getElementById('hero-panel') as HTMLDivElement;
+const inventoryItemsContainer = document.getElementById('inventory-items') as HTMLDivElement;
 
 let messageTimeoutId: number | undefined;
 function showMessage(text: string): void {
@@ -100,6 +141,7 @@ const inputManager = new InputManager(canvas, {
       .find((candidate) => Math.hypot(candidate.x - worldX, candidate.y - worldY) <= hitRadius);
     inputManager.setSelectedHero(hero?.instanceId ?? null);
     refreshHeroPanel();
+    refreshInventoryPanel();
   },
 });
 
@@ -187,9 +229,40 @@ function refreshHeroPanel(): void {
       攻击力: ${hero.stats.currentAttack.toFixed(1)}<br>
       攻速: ${hero.stats.currentAttackSpeed.toFixed(2)}<br>
       防御: ${hero.stats.currentDefense.toFixed(1)}<br>
+      暴击: ${(hero.stats.currentCrit * 100).toFixed(1)}%<br>
       生命: ${hero.stats.currentHp.toFixed(0)} / ${hero.stats.maxHp.toFixed(0)}
     </div>
   `;
+
+  // 4 equipment slots (Weapon/Armor/Boots/Accessory) - reads straight off
+  // hero.getAllEquipment() every refresh, so it can never drift out of
+  // sync with what's actually equipped. Each filled slot gets its own
+  // "卸下" (unequip) button; equipping itself happens from the inventory
+  // panel's own "装备" buttons (see refreshInventoryPanel), not from here.
+  const equipmentSlotsContainer = document.createElement('div');
+  equipmentSlotsContainer.className = 'equipment-slots';
+  const equippedItems = hero.getAllEquipment();
+  for (const slot of Object.values(EquipmentSlot)) {
+    const item = equippedItems[slot];
+    const slotDiv = document.createElement('div');
+    slotDiv.className = item ? 'equipment-slot filled' : 'equipment-slot';
+    slotDiv.innerHTML = `<div class="slot-name">${SLOT_LABELS[slot]}</div>${item ? item.name : '（空）'}`;
+
+    if (item) {
+      const unequipButton = document.createElement('button');
+      unequipButton.textContent = '卸下';
+      unequipButton.disabled = runOver;
+      unequipButton.addEventListener('click', () => {
+        gameManager.tryUnequipItem(hero.instanceId, slot);
+        refreshHeroPanel();
+        refreshInventoryPanel();
+      });
+      slotDiv.appendChild(unequipButton);
+    }
+
+    equipmentSlotsContainer.appendChild(slotDiv);
+  }
+  heroPanel.appendChild(equipmentSlotsContainer);
 
   const upgradeButton = document.createElement('button');
   upgradeButton.textContent = `升级 (${upgradeCost}金币)`;
@@ -225,6 +298,61 @@ function refreshHeroPanel(): void {
   }
 }
 
+/**
+ * Rebuilds #inventory-items from gameManager.inventory.getItems() every
+ * call, same "cheap enough to fully rebuild, never diffed" approach
+ * refreshHeroPanel/refreshBuildPanel already use. Each item gets one
+ * "装备" button; it's only enabled while a hero is actually selected
+ * (equipping needs a target), and clicking it calls tryEquipItem then
+ * refreshes both this panel and the hero panel so the swap shows up
+ * immediately in both places.
+ */
+function refreshInventoryPanel(): void {
+  inventoryItemsContainer.innerHTML = '';
+
+  const selectedHeroId = inputManager.selectedHeroInstanceId;
+  const runOver = gameManager.gameState !== GameState.Playing;
+  const items = gameManager.inventory.getItems();
+
+  if (items.length === 0) {
+    const empty = document.createElement('div');
+    empty.textContent = '（背包是空的）';
+    empty.style.opacity = '0.6';
+    inventoryItemsContainer.appendChild(empty);
+    return;
+  }
+
+  for (const item of items) {
+    inventoryItemsContainer.appendChild(buildInventoryItemCard(item, selectedHeroId, runOver));
+  }
+}
+
+function buildInventoryItemCard(item: EquipmentItem, selectedHeroId: string | null, runOver: boolean): HTMLDivElement {
+  const card = document.createElement('div');
+  card.className = 'inventory-item';
+  card.innerHTML = `
+    <div class="item-name rarity-${item.rarity}">${item.name}</div>
+    <div class="item-meta">${SLOT_LABELS[item.slot]} · ${item.rarity}</div>
+    <div class="item-meta">${formatModifiers(item.modifiers)}</div>
+  `;
+
+  const equipButton = document.createElement('button');
+  equipButton.textContent = selectedHeroId ? '装备到已选英雄' : '请先选择英雄';
+  equipButton.disabled = runOver || !selectedHeroId;
+  equipButton.addEventListener('click', () => {
+    if (!selectedHeroId) {
+      return;
+    }
+    const result = gameManager.tryEquipItem(selectedHeroId, item.instanceId);
+    showMessage(result.success ? `已装备：${item.name}` : '装备失败');
+    refreshHeroPanel();
+    refreshInventoryPanel();
+  });
+  card.appendChild(equipButton);
+
+  return card;
+}
+
 function updateHud(): void {
   hudGold.textContent = String(gameManager.gold);
   hudExp.textContent = String(gameManager.experience);
@@ -241,6 +369,7 @@ function updateHud(): void {
   }
   refreshBuildPanel();
   refreshHeroPanel();
+  refreshInventoryPanel();
 }
 
 let lastTimestamp: number | null = null;

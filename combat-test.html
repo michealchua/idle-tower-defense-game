@@ -108,6 +108,92 @@
         opacity: 0.4;
         cursor: not-allowed;
       }
+      #hero-panel .equipment-slots {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+        margin-bottom: 8px;
+      }
+      #hero-panel .equipment-slot {
+        border: 1px dashed #555;
+        border-radius: 4px;
+        padding: 4px 6px;
+        font-size: 11px;
+        line-height: 1.4;
+      }
+      #hero-panel .equipment-slot.filled {
+        border-style: solid;
+        border-color: #facc15;
+      }
+      #hero-panel .equipment-slot .slot-name {
+        opacity: 0.6;
+      }
+      #hero-panel .equipment-slot button {
+        margin-top: 2px;
+        padding: 2px 6px;
+        font-size: 10px;
+      }
+      #inventory-panel {
+        width: 960px;
+        margin-top: 14px;
+        padding: 10px 14px;
+        background: #161616;
+        border: 1px solid #333;
+        border-radius: 6px;
+        font-size: 13px;
+      }
+      #inventory-panel .inventory-title {
+        font-weight: bold;
+        margin-bottom: 8px;
+        color: #eee;
+      }
+      #inventory-items {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .inventory-item {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 6px 10px;
+        border-radius: 4px;
+        border: 1px solid #444;
+        background: #1e1e1e;
+        min-width: 140px;
+      }
+      .inventory-item .item-name {
+        font-weight: bold;
+      }
+      .inventory-item .item-meta {
+        font-size: 11px;
+        opacity: 0.75;
+      }
+      .inventory-item button {
+        padding: 4px 8px;
+        font-size: 11px;
+        background: #262626;
+        color: #eee;
+        border: 1px solid #444;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      .inventory-item button:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+      .rarity-common {
+        color: #cbd5e1;
+      }
+      .rarity-rare {
+        color: #60a5fa;
+      }
+      .rarity-epic {
+        color: #c084fc;
+      }
+      .rarity-legendary {
+        color: #facc15;
+      }
     </style>
   </head>
   <body>
@@ -122,6 +208,10 @@
     </div>
     <div id="build-panel"></div>
     <div id="hud-message"></div>
+    <div id="inventory-panel">
+      <div class="inventory-title">背包 / 战利品</div>
+      <div id="inventory-items"></div>
+    </div>
     <script type="module" src="/src/combat/main.ts"></script>
   </body>
 </html>

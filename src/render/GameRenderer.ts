@@ -64,6 +64,9 @@ const STATUS_RING_RADIUS_OFFSET = 6;
 const SELECTION_RING_COLOR = '#facc15';
 const LEVEL_BADGE_COLOR = '#facc15';
 
+/** Opacity a dead hero's sprite is drawn at (on top of a grayscale filter) - faded enough to read as "down" against still-alive heroes without disappearing entirely. */
+const DEAD_HERO_ALPHA = 0.45;
+
 // Matches CanvasRenderer's SPRITE_SHEET_CONFIG convention: hero/enemy sheets
 // dropped into public/sprites/ are laid out as 32x32 cells (row 0 = walk).
 // This renderer doesn't animate - it just samples the first walk frame -
@@ -312,7 +315,10 @@ export class GameRenderer {
     // heroClass one - same fallback-to-class-sprite convention the old
     // CanvasRenderer already established for the save-game hero system.
     const spriteSrc = hero.evolvedInto ? getHeroEvolvedSpriteSrc(hero.evolvedInto) : getHeroSpriteSrc(hero.heroClass);
-    this.drawSprite(spriteSrc, topLeftX, topLeftY, HERO_SIZE, '#3b82f6');
+    // A dead hero (BattleHero.isDead, step 18) stays on the grid instead of
+    // being removed - drawn grayscale + faded so it reads as "down" at a
+    // glance without needing a dedicated death sprite.
+    this.drawSprite(spriteSrc, topLeftX, topLeftY, HERO_SIZE, '#3b82f6', hero.isDead ? DEAD_HERO_ALPHA : 1);
     this.drawHpBar(topLeftX, topLeftY, HERO_SIZE, hero.stats.currentHp, hero.stats.maxHp);
     this.drawLabel(hero.evolvedInto ?? hero.heroClass, hero.x, topLeftY + HERO_SIZE + 14);
     this.drawLevelBadge(hero, topLeftX, topLeftY);
@@ -481,16 +487,26 @@ export class GameRenderer {
    * squashing the whole strip into the box; a single-image source (e.g.
    * demon_boss.png) is drawn whole with its aspect ratio preserved.
    */
-  private drawSprite(src: string, x: number, y: number, size: number, fallbackColor: string): void {
+  /** `alpha < 1` also applies a grayscale filter alongside the opacity drop - together they're what drawHero uses to render a dead BattleHero as visibly "down" (see DEAD_HERO_ALPHA) without needing a dedicated death sprite. Every other call site passes the default alpha=1, which skips both. */
+  private drawSprite(src: string, x: number, y: number, size: number, fallbackColor: string, alpha = 1): void {
     const image = getImage(src);
+
+    this.ctx.save();
+    if (alpha < 1) {
+      this.ctx.globalAlpha = alpha;
+      this.ctx.filter = 'grayscale(1)';
+    }
+
     if (!image) {
       this.ctx.fillStyle = fallbackColor;
       this.ctx.fillRect(x, y, size, size);
+      this.ctx.restore();
       return;
     }
 
     if (isFrameSheet(image)) {
       this.ctx.drawImage(image, 0, 0, SHEET_FRAME_SIZE, SHEET_FRAME_SIZE, x, y, size, size);
+      this.ctx.restore();
       return;
     }
 
@@ -500,6 +516,7 @@ export class GameRenderer {
     const offsetX = x + (size - drawWidth) / 2;
     const offsetY = y + (size - drawHeight) / 2;
     this.ctx.drawImage(image, offsetX, offsetY, drawWidth, drawHeight);
+    this.ctx.restore();
   }
 
   private drawHpBar(spriteX: number, spriteY: number, width: number, currentHp: number, maxHp: number): void {

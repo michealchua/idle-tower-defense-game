@@ -1,4 +1,4 @@
-import { CombatEngine, type DamageDealtEvent } from './CombatEngine';
+import { CombatEngine, type DamageDealtEvent, type HeroDamagedEvent } from './CombatEngine';
 import { WaveManager } from './WaveManager';
 import type { LevelConfig, WaveConfig } from './WaveConfig';
 import type { BattleHero } from './BattleHero';
@@ -6,6 +6,8 @@ import type { BattleEnemy } from './BattleEnemy';
 import { heroCatalog, createBattleHeroFromCatalog } from './heroCatalog';
 import { heroEvolutions } from './heroEvolution';
 import { gridCellCenter, type GridCell } from './gridConfig';
+import { InventoryManager } from './InventoryManager';
+import type { EquipmentItem, EquipmentSlot } from './Equipment';
 
 /** Coarse run state - GameManager.update becomes a no-op the instant this leaves Playing, and tryPlaceHero starts rejecting every request. */
 export enum GameState {
@@ -16,7 +18,11 @@ export enum GameState {
 
 export interface GameManagerCallbacks {
   onDamageDealt?: (event: DamageDealtEvent) => void;
+  /** Fired for every enemy attack or AoE-pulse hit that lands on a hero - see CombatEngine's HeroDamagedEvent doc comment. */
+  onHeroDamaged?: (event: HeroDamagedEvent) => void;
   onEnemyDefeated?: (enemy: BattleEnemy, goldGained: number, expGained: number) => void;
+  /** Fired whenever a defeated elite/boss enemy's loot roll actually produces an item (see InventoryManager.rollLootFor) - the item's already in `inventory` by the time this fires. */
+  onLootDropped?: (item: EquipmentItem) => void;
   /** An enemy walked past ENEMY_PATH's final waypoint uncontested - fired *after* GameManager has already applied its baseDamage to baseHp (and, if that dropped baseHp to 0, after gameState has already flipped to GameOver and onGameOver has already fired). */
   onEnemyReachedEnd?: (enemy: BattleEnemy) => void;
   onWaveStart?: (config: WaveConfig, waveIndex: number) => void;
@@ -39,6 +45,9 @@ export interface GameManagerOptions {
   forceStartBonusGold?: number;
 }
 
+/** Fraction of maxHp a dead hero comes back with when reviveDeadHeroes() runs at the start of the next wave - a real cost (not a full heal) for having gone down, but enough to actually contribute again rather than dying to the first hit. */
+const HERO_REVIVE_HP_RATIO = 0.5;
+
 export type PlaceHeroResult =
   | { success: true; hero: BattleHero }
   | { success: false; reason: 'unknown_hero_type' | 'insufficient_gold' | 'cell_occupied' | 'game_over' };
@@ -54,6 +63,14 @@ export type EvolveHeroResult =
       reason: 'game_over' | 'unknown_hero' | 'already_evolved' | 'no_evolution_available' | 'level_too_low' | 'unknown_evolution_option' | 'insufficient_gold';
     };
 
+export type EquipItemResult =
+  | { success: true; hero: BattleHero; equippedItem: EquipmentItem; previousItem: EquipmentItem | null }
+  | { success: false; reason: 'game_over' | 'unknown_hero' | 'unknown_item' };
+
+export type UnequipItemResult =
+  | { success: true; hero: BattleHero; unequippedItem: EquipmentItem | null }
+  | { success: false; reason: 'game_over' | 'unknown_hero' };
+
 /**
  * Top-level orchestrator that owns the run's CombatEngine + WaveManager and
  * the persistent gold/experience/baseHp totals across the whole level.
@@ -65,6 +82,8 @@ export type EvolveHeroResult =
 export class GameManager {
   readonly combatEngine: CombatEngine;
   readonly waveManager: WaveManager;
+  /** Global, run-scoped bag of unequipped EquipmentItems - see InventoryManager's doc comment. Populated by handleEnemyDefeated's loot roll, drained/refilled by tryEquipItem/tryUnequipItem. */
+  readonly inventory = new InventoryManager();
 
   gold = 0;
   experience = 0;
@@ -87,11 +106,29 @@ export class GameManager {
       onDamageDealt: (event) => this.callbacks.onDamageDealt?.(event),
       onEnemyDefeated: (enemy) => this.handleEnemyDefeated(enemy),
       onEnemyReachedEnd: (enemy) => this.handleEnemyReachedEnd(enemy),
+      onHeroDamaged: (event) => this.callbacks.onHeroDamaged?.(event),
     });
     this.waveManager = new WaveManager(this.combatEngine, levelConfig, {
-      onWaveStart: (config, index) => this.callbacks.onWaveStart?.(config, index),
+      onWaveStart: (config, index) => {
+        // Whatever heroes died during the wave that just finished get a
+        // chance to fight again from the very next wave, not left dead for
+        // the rest of the run - fired here (spawning actually beginning,
+        // not just the WAITING countdown starting) so the field is fully
+        // reset before the first enemy of the new wave appears.
+        this.reviveDeadHeroes();
+        this.callbacks.onWaveStart?.(config, index);
+      },
       onWaveComplete: (waveId, index, nextDelay) => this.callbacks.onWaveComplete?.(waveId, index, nextDelay),
     });
+  }
+
+  /** Revives every hero still dead (see BattleHero.isDead) at HERO_REVIVE_HP_RATIO of its maxHp - a no-op for any hero that's still alive, so calling this over the whole roster every wave never disturbs a hero mid-fight. */
+  private reviveDeadHeroes(): void {
+    for (const hero of this.combatEngine.getHeroes()) {
+      if (hero.isDead) {
+        hero.revive(HERO_REVIVE_HP_RATIO);
+      }
+    }
   }
 
   addHero(hero: BattleHero): void {
@@ -221,6 +258,64 @@ export class GameManager {
     return { success: true, hero };
   }
 
+  /**
+   * Validates the run state, that `heroInstanceId` names a hero on the
+   * field, and that `itemInstanceId` names an item actually sitting in
+   * `inventory` - in that order. Only once both pass does it remove the
+   * item from the bag and hand it to hero.equipItem; whatever was
+   * previously worn in that slot (if anything) goes straight back into
+   * the bag, so gear is never lost, just swapped. Free (no gold cost) -
+   * equipping is a loadout choice, not a purchase.
+   */
+  tryEquipItem(heroInstanceId: string, itemInstanceId: string): EquipItemResult {
+    if (this.isRunOver) {
+      return { success: false, reason: 'game_over' };
+    }
+
+    const hero = this.combatEngine.getHero(heroInstanceId);
+    if (!hero) {
+      return { success: false, reason: 'unknown_hero' };
+    }
+
+    const item = this.inventory.getItem(itemInstanceId);
+    if (!item) {
+      return { success: false, reason: 'unknown_item' };
+    }
+
+    this.inventory.removeItem(itemInstanceId);
+    const previousItem = hero.equipItem(item);
+    if (previousItem) {
+      this.inventory.addItem(previousItem);
+    }
+
+    return { success: true, hero, equippedItem: item, previousItem };
+  }
+
+  /**
+   * Validates the run state and that `heroInstanceId` names a hero on the
+   * field, then removes whatever's equipped in `slot` (if anything) and
+   * returns it to `inventory`. A no-op-but-successful call (unequippedItem:
+   * null) if the slot was already empty, same "typed result, not a thrown
+   * error" convention every other try* method here follows.
+   */
+  tryUnequipItem(heroInstanceId: string, slot: EquipmentSlot): UnequipItemResult {
+    if (this.isRunOver) {
+      return { success: false, reason: 'game_over' };
+    }
+
+    const hero = this.combatEngine.getHero(heroInstanceId);
+    if (!hero) {
+      return { success: false, reason: 'unknown_hero' };
+    }
+
+    const removed = hero.unequipItem(slot);
+    if (removed) {
+      this.inventory.addItem(removed);
+    }
+
+    return { success: true, hero, unequippedItem: removed };
+  }
+
   /** Starts the level's first wave. No-op if already started or the level has no waves (see WaveManager.start). */
   start(): void {
     this.waveManager.start();
@@ -248,6 +343,12 @@ export class GameManager {
   private handleEnemyDefeated(enemy: BattleEnemy): void {
     this.gold += enemy.goldReward;
     this.experience += enemy.expReward;
+
+    const droppedItem = this.inventory.rollLootFor(enemy.isElite);
+    if (droppedItem) {
+      this.callbacks.onLootDropped?.(droppedItem);
+    }
+
     this.callbacks.onEnemyDefeated?.(enemy, enemy.goldReward, enemy.expReward);
   }
 
