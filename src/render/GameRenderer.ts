@@ -1,4 +1,4 @@
-import { GameState, type GameManager } from '../combat/GameManager';
+import { GameState, FLOATING_TEXT_LIFETIME_MS, type GameManager } from '../combat/GameManager';
 import type { BattleHero } from '../combat/BattleHero';
 import type { BattleEnemy } from '../combat/BattleEnemy';
 import type { Projectile } from '../combat/Projectile';
@@ -22,8 +22,19 @@ import type { InputManager } from '../input/InputManager';
 import { getImage, getEnemySpriteSrc, getHeroSpriteSrc, getHeroEvolvedSpriteSrc, preloadSprites } from './assetLoader';
 import { EquipmentRarity, EquipmentSlot, type EquipmentItem } from '../combat/Equipment';
 import { equipmentSpriteSrc, equipmentTemplates } from '../combat/equipmentCatalog';
+import { allThemeBackgroundSrcs, type ThemeDefinition } from '../combat/ThemeManager';
+import { ParticleType, type Particle, type ParticleManager } from '../combat/ParticleManager';
+import { affixDefinitions } from '../combat/AffixManager';
 
-const BACKGROUND_SRC = '/backgrounds/ancient-ruins.jpg';
+/** Length of the cross-dissolve played over the background when the theme changes (step 22) - "1 秒的交叉溶解（透明度渐变）过渡". */
+const THEME_TRANSITION_MS = 1000;
+
+/** How far a heal callout (step 23) rises over its lifetime, in canvas px. */
+const FLOATING_TEXT_RISE_PX = 24;
+const FLOATING_TEXT_GLOW_RADIUS = 16;
+
+/** Total duration of the prestige white-flash (step 27) - "透明度从 0 到 1 再到 0 渐变，持续 1.5 秒". */
+const PRESTIGE_FLASH_MS = 1500;
 
 // Slightly smaller than a full cell so adjacent placed heroes stay visually
 // separated instead of their sprites touching edge-to-edge.
@@ -34,6 +45,13 @@ const FREE_PLACEHOLDER_COLOR = '#3b82f6';
 const GRID_LINE_COLOR = 'rgba(255, 255, 255, 0.12)';
 
 const ENEMY_SIZE = CELL_SIZE * 0.75;
+
+/** Step 28: CSS filter string approximating a red tint for a berserking enemy's sprite - "使用...Canvas 滤镜将其色调变红", applied via drawSprite's optional filter param instead of a second sprite/recolor asset. */
+const BERSERKER_TINT_FILTER = 'sepia(1) saturate(6) hue-rotate(-50deg) brightness(0.9)';
+/** Step 28: translucent blue ring drawn around a Shielded enemy's sprite while shieldHp > 0. */
+const SHIELD_RING_COLOR = 'rgba(96, 165, 250, 0.55)';
+/** Step 28: affix name labels drawn above the HP bar - deliberately smaller than drawLabel's default 13px ("极小的彩色字体"). */
+const AFFIX_LABEL_FONT = '9px sans-serif';
 
 const HP_BAR_HEIGHT = 8;
 const HP_BAR_OFFSET_Y = 10;
@@ -121,10 +139,19 @@ function isFrameSheet(image: HTMLImageElement): boolean {
 export class GameRenderer {
   private readonly ctx: CanvasRenderingContext2D;
 
+  /** Theme drawn on the previous render() call - compared against gameManager.themeManager.currentTheme.id every frame to detect a stage-advance switch and (re)start the cross-dissolve below. Also what drawThemeTransition draws *underneath* the new background while the dissolve is in flight, so the outgoing theme doesn't just vanish. Starts undefined so the very first frame never plays a transition. */
+  private lastTheme: ThemeDefinition | undefined;
+  /** Date.now() timestamp the current transition started, or null while no transition is in flight. */
+  private themeTransitionStartMs: number | null = null;
+  /** Date.now() timestamp the current prestige white-flash (step 27) started, or null while none is in flight - see triggerPrestigeFlash/drawPrestigeFlash. */
+  private prestigeFlashStartMs: number | null = null;
+
   constructor(
     private readonly canvas: HTMLCanvasElement,
     private readonly gameManager: GameManager,
     private readonly inputManager?: InputManager,
+    /** Step 26's loot-burst particle system - optional so every existing GameRenderer call site (test-run.ts has none, but nothing here requires one) keeps working unchanged; omit it and drawParticles below is simply a no-op every frame. */
+    private readonly particleManager?: ParticleManager,
   ) {
     const ctx = canvas.getContext('2d');
     if (!ctx) {
@@ -139,11 +166,18 @@ export class GameRenderer {
     // already be loaded by the time drawHero first asks for it, instead of
     // popping in a few frames late from its solid-color fallback.
     preloadSprites(equipmentTemplates.map((template) => equipmentSpriteSrc(template.itemId)));
+
+    // Same reasoning, for every theme's background image (step 22) - only
+    // ~10 files, cheap enough to kick off all of them up front rather than
+    // loading each theme's art lazily the first time a stage reaches it.
+    preloadSprites(allThemeBackgroundSrcs());
   }
 
   render(): void {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    this.detectThemeChange();
     this.drawBackground();
+    this.drawThemeTransition();
     this.drawEnemyPath();
     this.drawGridLines();
     this.drawBaseMarker();
@@ -162,18 +196,146 @@ export class GameRenderer {
 
     this.drawHoveredHeroRange();
     this.drawBuildModePlaceholder();
+    this.drawFloatingTexts();
     this.drawBaseHpBar();
     this.drawEndOverlay();
+    // Absolute topmost layer (step 26's "在所有 UI 元素的最上层绘制") - drawn
+    // dead last so a loot-burst particle mid-flight is never occluded by
+    // anything else this renderer draws, including drawEndOverlay's dim wash.
+    this.drawParticles();
+    // Even further on top than particles - a full-screen rebirth flash
+    // (step 27) is meant to visually blank out everything, particles
+    // included, for its brief peak.
+    this.drawPrestigeFlash();
   }
 
+  /** Starts the 1.5s white-flash overlay (step 27's "白屏闪烁") - main.ts calls this the instant a prestige is confirmed, before/alongside GameManager.resetForPrestige, so the flash's peak (~0.75s in) roughly coincides with the run actually resetting underneath it. Restarts cleanly even if called again before a previous flash finished (no queuing - a second prestige confirmed mid-flash simply restarts the 1.5s window). */
+  triggerPrestigeFlash(): void {
+    this.prestigeFlashStartMs = Date.now();
+  }
+
+  /** Triangular opacity envelope (0 -> 1 over the first half of PRESTIGE_FLASH_MS, 1 -> 0 over the second half) painted as a solid white full-canvas rect - same "no image dependency" reasoning drawThemeTransition's black-flash predecessor used, just white and full-screen. A no-op once PRESTIGE_FLASH_MS has fully elapsed (leaves prestigeFlashStartMs set rather than clearing it - harmless, the elapsed-ratio check below always short-circuits past 1 from then on). */
+  private drawPrestigeFlash(): void {
+    if (this.prestigeFlashStartMs === null) {
+      return;
+    }
+    const elapsed = Date.now() - this.prestigeFlashStartMs;
+    if (elapsed >= PRESTIGE_FLASH_MS) {
+      return;
+    }
+
+    const t = elapsed / PRESTIGE_FLASH_MS;
+    const alpha = t < 0.5 ? t * 2 : (1 - t) * 2;
+
+    this.ctx.save();
+    this.ctx.globalAlpha = alpha;
+    this.ctx.fillStyle = '#ffffff';
+    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    this.ctx.restore();
+  }
+
+  /**
+   * Step 23's "+XX" heal callout: one per GameManager.getActiveFloatingTexts()
+   * entry, drawn above its recorded (x, y) - not the hero's *current*
+   * position, since the hero may have moved/died since the heal landed -
+   * rising and fading linearly over its FLOATING_TEXT_LIFETIME_MS window.
+   * A small pulsing ring (the spec's "十字星或绿色光效") is drawn under the
+   * text at the same fading alpha, both keyed off the same age so they
+   * animate in lockstep. Drawn after every other gameplay layer so a
+   * callout is never occluded by a sprite passing behind it.
+   */
+  private drawFloatingTexts(): void {
+    const now = Date.now();
+    for (const entry of this.gameManager.getActiveFloatingTexts()) {
+      const age = now - entry.createdAtMs;
+      const t = Math.min(1, Math.max(0, age / FLOATING_TEXT_LIFETIME_MS));
+      const alpha = 1 - t;
+      const riseY = entry.y - FLOATING_TEXT_RISE_PX * t;
+
+      this.ctx.save();
+      this.ctx.globalAlpha = alpha;
+      this.ctx.strokeStyle = entry.color;
+      this.ctx.lineWidth = 2;
+      this.ctx.beginPath();
+      this.ctx.arc(entry.x, entry.y, FLOATING_TEXT_GLOW_RADIUS * (0.5 + t * 0.5), 0, Math.PI * 2);
+      this.ctx.stroke();
+      this.ctx.restore();
+
+      this.ctx.save();
+      this.ctx.globalAlpha = alpha;
+      this.ctx.fillStyle = entry.color;
+      this.ctx.font = 'bold 14px sans-serif';
+      this.ctx.textAlign = 'center';
+      this.ctx.fillText(entry.text, entry.x, riseY - 20);
+      this.ctx.restore();
+    }
+  }
+
+  /** Records whether gameManager.themeManager.currentTheme changed since the last render() call and, if so, (re)starts the cross-dissolve - called once at the very top of render(), before any drawing, so drawBackground/drawThemeTransition below always see an up-to-date `lastTheme`/`themeTransitionStartMs`. Deliberately does NOT overwrite `lastTheme` until the dissolve finishes (see drawThemeTransition) - it needs to keep pointing at the *outgoing* theme for the whole transition window, not whatever the theme was one frame ago. */
+  private detectThemeChange(): void {
+    const theme = this.gameManager.themeManager.currentTheme;
+    if (this.lastTheme !== undefined && theme.id !== this.lastTheme.id && this.themeTransitionStartMs === null) {
+      this.themeTransitionStartMs = Date.now();
+    }
+  }
+
+  /**
+   * Bottom-most layer, per step 22's "渲染层级的绝对正确" requirement -
+   * this is the very first draw call in render(), so nothing (grid, path,
+   * heroes, enemies, UI overlays) can ever end up beneath it. Reads the
+   * *current* stage's theme off gameManager.themeManager every frame rather
+   * than caching it, so a stage advance (see ThemeManager.updateForWave,
+   * driven from GameManager.updateEnvironmentForWave) is reflected on the
+   * very next frame with no extra plumbing. Draws the plain, un-dissolved
+   * background whenever no transition is in flight; drawThemeTransition
+   * (called right after this by render()) is what actually cross-fades in
+   * the new theme over the old one while `themeTransitionStartMs` is set.
+   */
   private drawBackground(): void {
-    const image = getImage(BACKGROUND_SRC);
+    this.drawThemeLayer(this.gameManager.themeManager.currentTheme, 1);
+    if (this.themeTransitionStartMs === null) {
+      this.lastTheme = this.gameManager.themeManager.currentTheme;
+    }
+  }
+
+  /** Draws one theme's background (image if loaded, else its flat fallbackColor) at the given opacity, full-canvas. Shared by drawBackground (current theme, alpha 1 outside a transition) and drawThemeTransition (both themes, blended). */
+  private drawThemeLayer(theme: ThemeDefinition, alpha: number): void {
+    const image = getImage(theme.backgroundImage);
+    this.ctx.save();
+    this.ctx.globalAlpha = alpha;
     if (image) {
       this.ctx.drawImage(image, 0, 0, this.canvas.width, this.canvas.height);
     } else {
-      this.ctx.fillStyle = '#1a1a1a';
+      this.ctx.fillStyle = theme.fallbackColor;
       this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     }
+    this.ctx.restore();
+  }
+
+  /**
+   * True cross-dissolve (step 22: "1 秒的交叉溶解（透明度渐变）过渡"): while
+   * a transition is in flight, redraws the outgoing theme (`lastTheme`) at
+   * full opacity underneath, then the incoming theme (already drawn once by
+   * drawBackground at alpha 1) again on top at a linearly ramping 0 -> 1
+   * opacity - net effect is the old background fading out exactly as fast
+   * as the new one fades in. Once elapsed >= THEME_TRANSITION_MS, clears
+   * themeTransitionStartMs and finally commits `lastTheme` to the new
+   * theme, ending the transition.
+   */
+  private drawThemeTransition(): void {
+    if (this.themeTransitionStartMs === null || !this.lastTheme) {
+      return;
+    }
+    const elapsed = Date.now() - this.themeTransitionStartMs;
+    if (elapsed >= THEME_TRANSITION_MS) {
+      this.themeTransitionStartMs = null;
+      this.lastTheme = this.gameManager.themeManager.currentTheme;
+      return;
+    }
+
+    const t = elapsed / THEME_TRANSITION_MS;
+    this.drawThemeLayer(this.lastTheme, 1);
+    this.drawThemeLayer(this.gameManager.themeManager.currentTheme, t);
   }
 
   /**
@@ -617,14 +779,81 @@ export class GameRenderer {
   }
 
   // BattleEnemy.x/y (see BattleEnemy.moveAlongPath) are the enemy's center
-  // point, same top-left-offset convention as drawHero.
+  // point, same top-left-offset convention as drawHero. Step 28: the whole
+  // sprite/HP-bar footprint scales by enemy.visualScale (1 for a normal
+  // spawn, CLONER_SCALE for a split copy - "体型缩小 50%"), and affixed
+  // enemies get three extra passes: drawShieldRing (Shielded, drawn first
+  // so it sits under the sprite/HP bar like a ground-level aura), a red
+  // tint filter on the sprite itself while isBerserking, and a small
+  // colored affix-name label above the HP bar.
   private drawEnemy(enemy: BattleEnemy): void {
-    const topLeftX = enemy.x - ENEMY_SIZE / 2;
-    const topLeftY = enemy.y - ENEMY_SIZE / 2;
-    this.drawSprite(getEnemySpriteSrc(enemy.archetypeId), topLeftX, topLeftY, ENEMY_SIZE, '#dc2626');
-    this.drawHpBar(topLeftX, topLeftY, ENEMY_SIZE, enemy.currentHp, enemy.maxHp);
-    this.drawLabel(enemy.archetypeId, enemy.x, topLeftY + ENEMY_SIZE + 14);
+    const size = ENEMY_SIZE * enemy.visualScale;
+    const topLeftX = enemy.x - size / 2;
+    const topLeftY = enemy.y - size / 2;
+
+    this.drawShieldRing(enemy, size);
+    this.drawSprite(
+      getEnemySpriteSrc(enemy.archetypeId),
+      topLeftX,
+      topLeftY,
+      size,
+      '#dc2626',
+      1,
+      enemy.isBerserking ? BERSERKER_TINT_FILTER : undefined,
+    );
+    this.drawHpBar(topLeftX, topLeftY, size, enemy.currentHp, enemy.maxHp);
+    this.drawAffixLabels(enemy, topLeftY);
+    this.drawLabel(enemy.archetypeId, enemy.x, topLeftY + size + 14);
     this.drawStatusRings(enemy);
+  }
+
+  /** Shielded affix (step 28): a translucent blue ring around the enemy's sprite footprint, only while shieldHp > 0 - reads as "still has a shield up" at a glance, gone the instant the shield's fully depleted (no lingering "empty shield" ring). */
+  private drawShieldRing(enemy: BattleEnemy, size: number): void {
+    if (enemy.shieldHp <= 0) {
+      return;
+    }
+    this.ctx.save();
+    this.ctx.strokeStyle = SHIELD_RING_COLOR;
+    this.ctx.lineWidth = 3;
+    this.ctx.beginPath();
+    this.ctx.arc(enemy.x, enemy.y, size / 2 + 4, 0, Math.PI * 2);
+    this.ctx.stroke();
+    this.ctx.restore();
+  }
+
+  /**
+   * One line of small colored affix-name text directly above the HP bar
+   * (which itself sits HP_BAR_OFFSET_Y above the sprite) - "在其头顶的 HP
+   * 条上方，用极小的彩色字体显示其词缀名称（如 "[Shielded] [Vampiric]"）".
+   * Each affix draws in its own AffixManager-defined color rather than one
+   * flat color for the whole line, so e.g. a Shielded+Berserker enemy's
+   * label visually distinguishes which name is which affix. No-op for an
+   * enemy with no affixes at all (the vast majority of spawns).
+   */
+  private drawAffixLabels(enemy: BattleEnemy, topLeftY: number): void {
+    if (enemy.affixes.length === 0) {
+      return;
+    }
+
+    const y = topLeftY - HP_BAR_OFFSET_Y - 4;
+    this.ctx.save();
+    this.ctx.font = AFFIX_LABEL_FONT;
+    this.ctx.textAlign = 'center';
+
+    const labels = enemy.affixes.map((id) => `[${affixDefinitions[id].label}]`);
+    const totalWidth = labels.reduce((sum, label) => sum + this.ctx.measureText(label).width + 4, -4);
+    let x = enemy.x - totalWidth / 2;
+
+    for (let i = 0; i < enemy.affixes.length; i += 1) {
+      const label = labels[i];
+      this.ctx.fillStyle = affixDefinitions[enemy.affixes[i]].color;
+      const width = this.ctx.measureText(label).width;
+      this.ctx.textAlign = 'left';
+      this.ctx.fillText(label, x, y);
+      x += width + 4;
+    }
+
+    this.ctx.restore();
   }
 
   /** One thin ring per distinct active status type (blue for Slow, orange for DOT) - a quick "this enemy is currently affected" glance, without needing to read activeStatuses' raw numbers. */
@@ -671,14 +900,26 @@ export class GameRenderer {
    * squashing the whole strip into the box; a single-image source (e.g.
    * demon_boss.png) is drawn whole with its aspect ratio preserved.
    */
-  /** `alpha < 1` also applies a grayscale filter alongside the opacity drop - together they're what drawHero uses to render a dead BattleHero as visibly "down" (see DEAD_HERO_ALPHA) without needing a dedicated death sprite. Every other call site passes the default alpha=1, which skips both. */
-  private drawSprite(src: string, x: number, y: number, size: number, fallbackColor: string, alpha = 1): void {
+  /**
+   * `alpha < 1` also applies a grayscale filter alongside the opacity drop
+   * - together they're what drawHero uses to render a dead BattleHero as
+   * visibly "down" (see DEAD_HERO_ALPHA) without needing a dedicated death
+   * sprite. `filter`, when given, overrides that grayscale entirely (step
+   * 28's BERSERKER_TINT_FILTER) - the two are mutually exclusive per call,
+   * never combined. Every other call site passes the defaults (alpha=1, no
+   * filter), which skips both.
+   */
+  private drawSprite(src: string, x: number, y: number, size: number, fallbackColor: string, alpha = 1, filter?: string): void {
     const image = getImage(src);
 
     this.ctx.save();
+    if (filter) {
+      this.ctx.filter = filter;
+    } else if (alpha < 1) {
+      this.ctx.filter = 'grayscale(1)';
+    }
     if (alpha < 1) {
       this.ctx.globalAlpha = alpha;
-      this.ctx.filter = 'grayscale(1)';
     }
 
     if (!image) {
@@ -720,5 +961,44 @@ export class GameRenderer {
     this.ctx.font = '13px sans-serif';
     this.ctx.textAlign = 'center';
     this.ctx.fillText(text, centerX, y);
+  }
+
+  /**
+   * Step 26's loot-burst particles - reads particleManager.getParticles()
+   * fresh every frame (no local caching, same pattern every other entity
+   * list in this file follows) and draws each with its own rotation/scale.
+   * Equipment particles draw as a small rotated square, Gold/Fragment as a
+   * circle - a plain shape+color pair for now (particle.sprite is a CSS
+   * color, not an image path yet), swappable for a real sprite later
+   * without touching ParticleManager's physics at all. A no-op entirely
+   * when this renderer wasn't constructed with a particleManager.
+   */
+  private drawParticles(): void {
+    if (!this.particleManager) {
+      return;
+    }
+    for (const particle of this.particleManager.getParticles()) {
+      this.drawParticle(particle);
+    }
+  }
+
+  private drawParticle(particle: Particle): void {
+    this.ctx.save();
+    this.ctx.translate(particle.x, particle.y);
+    this.ctx.rotate(particle.rotation);
+    this.ctx.scale(particle.scale, particle.scale);
+    this.ctx.fillStyle = particle.sprite;
+    this.ctx.shadowBlur = 6;
+    this.ctx.shadowColor = particle.sprite;
+
+    if (particle.type === ParticleType.Equipment) {
+      this.ctx.fillRect(-6, -6, 12, 12);
+    } else {
+      this.ctx.beginPath();
+      this.ctx.arc(0, 0, 6, 0, Math.PI * 2);
+      this.ctx.fill();
+    }
+
+    this.ctx.restore();
   }
 }

@@ -7,7 +7,7 @@ import { WaveState } from './WaveManager';
 import { heroCatalog } from './heroCatalog';
 import { heroEvolutions } from './heroEvolution';
 import { sampleLevelConfig } from './sampleLevelConfig';
-import { CELL_SIZE } from './gridConfig';
+import { CELL_SIZE, CANVAS_WIDTH, CANVAS_HEIGHT } from './gridConfig';
 import { GameRenderer } from '../render/GameRenderer';
 import { InputManager } from '../input/InputManager';
 import {
@@ -21,8 +21,21 @@ import {
   type StatModifierValue,
   type StatModifiers,
 } from './Equipment';
-import { equipmentSpriteSrc } from './equipmentCatalog';
+import { equipmentSpriteSrc, generateRandomEquipment } from './equipmentCatalog';
 import type { BattleHero } from './BattleHero';
+import { talentManager } from './TalentManager';
+import { addMemoryFragments, getMemoryFragments } from './MetaProgression';
+import { load as loadSave, getLastSaveTime, getHighestStageCleared, recordSaveNow } from './SaveManager';
+import { OfflineManager, type OfflineRewards } from './OfflineManager';
+import { ParticleManager, ParticleType, type ParticleArrivedEvent } from './ParticleManager';
+import { PrestigeManager, SPARK_BONUS_PER_POINT } from './PrestigeManager';
+
+// Step 24: "在游戏初始化时，最优先调用 SaveManager.load()" - the very first
+// thing this module does, before GameManager is even constructed, so every
+// later read of talent levels/Memory Fragments/highestStageCleared already
+// reflects whatever was actually persisted rather than briefly reading
+// SaveManager's in-memory defaults.
+loadSave();
 
 const SLOT_LABELS: Record<EquipmentSlot, string> = {
   [EquipmentSlot.Weapon]: '武器',
@@ -87,6 +100,9 @@ const MAX_DELTA_SECONDS = 0.1;
 const STARTING_GOLD = 100;
 const BASE_MAX_HP = 10;
 const BUILD_MESSAGE_DURATION_MS = 2000;
+/** Where a loot burst (step 26) originates from - dead center of the game canvas, matching the spec's "在屏幕中心生成对应数量的粒子". */
+const CANVAS_CENTER_X = CANVAS_WIDTH / 2;
+const CANVAS_CENTER_Y = CANVAS_HEIGHT / 2;
 
 const gameManager = new GameManager(
   sampleLevelConfig,
@@ -117,23 +133,63 @@ const gameManager = new GameManager(
       showMessage(`战利品掉落：${item.name}（${item.rarity}）`);
       refreshInventoryPanel();
     },
+    onMemoryFragmentsGained: (amount, total) => {
+      showMessage(`获得记忆碎片 +${amount}（共 ${total}）`);
+    },
   },
   { startingGold: STARTING_GOLD, maxBaseHp: BASE_MAX_HP },
 );
 
-gameManager.start();
+// Step 25: run start is gated on the Welcome Back panel (see
+// showWelcomeBackIfNeeded below, called once the rest of this module has
+// finished wiring up canvas/DOM) rather than fired immediately here - a
+// player with real offline rewards waiting should see and claim them
+// before the first wave's countdown starts eating into their prep time.
+// `hasStarted` guards against a stray double-call (there's only one call
+// site today, but this keeps beginRun() itself safe to call more than
+// once if that ever changes).
+let hasStarted = false;
+function beginRun(): void {
+  if (hasStarted) {
+    return;
+  }
+  hasStarted = true;
+  gameManager.start();
+}
+
+// Browsers block audio.play() before any user gesture on the page -
+// gameManager.audioManager already has a track queued from its constructor/
+// first onWaveStart, this just retries it once real input happens. `once`
+// so it never re-attaches after firing.
+window.addEventListener('pointerdown', () => gameManager.audioManager.unlock(), { once: true });
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
 
 const hudGold = document.getElementById('hud-gold') as HTMLSpanElement;
 const hudExp = document.getElementById('hud-exp') as HTMLSpanElement;
 const hudWave = document.getElementById('hud-wave') as HTMLSpanElement;
+const hudTheme = document.getElementById('hud-theme') as HTMLSpanElement;
+const hudHazard = document.getElementById('hud-hazard') as HTMLDivElement;
+const hudFragments = document.getElementById('hud-fragments') as HTMLSpanElement;
 const hudMessage = document.getElementById('hud-message') as HTMLDivElement;
 const buildPanel = document.getElementById('build-panel') as HTMLDivElement;
 const heroPanel = document.getElementById('hero-panel') as HTMLDivElement;
 const inventoryItemsContainer = document.getElementById('inventory-items') as HTMLDivElement;
+const talentsButton = document.getElementById('talents-button') as HTMLButtonElement;
+const talentsOverlay = document.getElementById('talents-overlay') as HTMLDivElement;
+const talentsPanel = document.getElementById('talents-panel') as HTMLDivElement;
+const talentConfirmOverlay = document.getElementById('talent-confirm-overlay') as HTMLDivElement;
+const talentConfirmDialog = document.getElementById('talent-confirm-dialog') as HTMLDivElement;
 const enhanceModalOverlay = document.getElementById('enhance-modal-overlay') as HTMLDivElement;
 const enhanceModal = document.getElementById('enhance-modal') as HTMLDivElement;
+const welcomeBackOverlay = document.getElementById('welcome-back-overlay') as HTMLDivElement;
+const welcomeBackPanel = document.getElementById('welcome-back-panel') as HTMLDivElement;
+const backpackAnchor = document.getElementById('hud-backpack-anchor') as HTMLDivElement;
+const testLootBurstButton = document.getElementById('test-loot-burst-button') as HTMLButtonElement;
+const hudSparks = document.getElementById('hud-sparks') as HTMLSpanElement;
+const ascensionButton = document.getElementById('ascension-button') as HTMLButtonElement;
+const ascensionConfirmOverlay = document.getElementById('ascension-confirm-overlay') as HTMLDivElement;
+const ascensionConfirmDialog = document.getElementById('ascension-confirm-dialog') as HTMLDivElement;
 
 let messageTimeoutId: number | undefined;
 function showMessage(text: string): void {
@@ -142,6 +198,23 @@ function showMessage(text: string): void {
   messageTimeoutId = window.setTimeout(() => {
     hudMessage.textContent = '';
   }, BUILD_MESSAGE_DURATION_MS);
+}
+
+/** Restarts `.hud-bump`'s pulse animation (step 26's "让对应的 HUD 数值...跳动增加") - removing then re-adding the class (with a forced reflow in between, via reading offsetWidth) is what lets this retrigger even if particles of the same type land in quick succession, rather than the second bump silently no-oping because the class was already present. */
+function bumpHudElement(element: HTMLElement): void {
+  element.classList.remove('hud-bump');
+  void element.offsetWidth;
+  element.classList.add('hud-bump');
+}
+
+/** Canvas-local (not viewport) center point of `element` - both rects come from getBoundingClientRect() in the same viewport space, so subtracting the canvas's own origin converts straight into the coordinate space GameRenderer/ParticleManager already draw/simulate in (this canvas has no devicePixelRatio/letterbox scaling - see combat-test.html's fixed 960x540 width/height attributes matching its CSS size exactly). */
+function canvasLocalCenter(element: HTMLElement): { x: number; y: number } {
+  const canvasRect = canvas.getBoundingClientRect();
+  const elementRect = element.getBoundingClientRect();
+  return {
+    x: elementRect.left + elementRect.width / 2 - canvasRect.left,
+    y: elementRect.top + elementRect.height / 2 - canvasRect.top,
+  };
 }
 
 /**
@@ -211,7 +284,12 @@ const inputManager = new InputManager(canvas, {
   },
 });
 
-const renderer = new GameRenderer(canvas, gameManager, inputManager);
+// Step 26's loot-burst particle system - constructed here (not inside
+// GameRenderer) since main.ts is also what needs to mutate real game state
+// (gold/fragments/inventory) and play chimes once a particle arrives; see
+// particleManager.setOnArrived below.
+const particleManager = new ParticleManager();
+const renderer = new GameRenderer(canvas, gameManager, inputManager, particleManager);
 
 // Build-mode buttons are generated straight from heroCatalog, one per entry,
 // plus a cancel button - so the UI can never drift out of sync with cost/
@@ -564,6 +642,16 @@ function updateHud(): void {
 
   const { currentIndex, totalWaveCount } = gameManager.waveManager;
   hudWave.textContent = currentIndex >= 0 ? `Wave ${currentIndex + 1} / ${totalWaveCount}` : '-';
+  hudTheme.textContent = gameManager.themeManager.currentTheme.displayName;
+  hudHazard.textContent = gameManager.themeManager.currentTheme.hazardText;
+  hudFragments.textContent = String(gameManager.memoryFragments);
+  hudSparks.textContent = String(PrestigeManager.getEternitySparks());
+  // Step 27: only re-evaluates eligibility (highestStageCleared changes at
+  // most once per wave clear, via SaveManager.recordStageCleared) rather
+  // than assuming a fixed disabled/enabled state for the whole session -
+  // the button flips live from disabled to enabled the instant a run
+  // crosses PRESTIGE_UNLOCK_STAGE, without needing a page reload.
+  ascensionButton.disabled = !PrestigeManager.canPrestige(getHighestStageCleared());
 
   // Self-healing rather than relying solely on the onGameOver/onVictory
   // callbacks' one-shot cancelBuildMode() - if build mode somehow got
@@ -575,7 +663,351 @@ function updateHud(): void {
   refreshBuildPanel();
   refreshHeroPanel();
   refreshInventoryPanel();
+  // Live-refreshes button enabled/disabled state (fragment balance can
+  // change mid-run from an elite/boss kill) whenever the panel's actually
+  // open - skipped while closed so this isn't rebuilding hidden DOM every
+  // frame for nothing.
+  if (talentsOverlay.classList.contains('open')) {
+    refreshTalentsPanel();
+  }
 }
+
+/**
+ * Full-screen talent tree panel (step 23/24) - rebuilt from scratch on
+ * every open/upgrade (same "cheap enough to fully rebuild, never diffed"
+ * convention refreshHeroPanel/refreshInventoryPanel already use). Each node
+ * shows name/description/level/next-level cost (talentManager.
+ * getNextLevelCost - step 24's dynamic costFormula, not a flat fee) and an
+ * upgrade button disabled when already maxed, dependencies aren't met, or
+ * fragments are insufficient - locked nodes (dependencies not met)
+ * additionally get the `.locked` CSS class. Clicking "升级" never upgrades
+ * directly - it opens openTalentConfirmDialog, since every level here is
+ * permanent (see TalentManager's own "落子无悔" doc comment).
+ */
+function refreshTalentsPanel(): void {
+  const fragments = getMemoryFragments();
+  talentsPanel.innerHTML = `
+    <div class="talents-header">
+      <div class="talents-title">🌟 天赋树 (Talents)</div>
+      <div class="talents-fragments">记忆碎片: ${fragments}</div>
+      <button class="talents-close" id="talents-close-button">关闭</button>
+    </div>
+  `;
+
+  for (const node of talentManager.getAllNodes()) {
+    const level = talentManager.getLevel(node.id);
+    const unlocked = node.dependencies.every((dependency) => talentManager.getLevel(dependency.nodeId) >= dependency.requiredLevel);
+    const maxed = level >= node.maxLevel;
+    const nextCost = talentManager.getNextLevelCost(node.id);
+
+    const nodeDiv = document.createElement('div');
+    nodeDiv.className = unlocked ? 'talent-node' : 'talent-node locked';
+
+    const dependencyText =
+      node.dependencies.length > 0
+        ? `前置: ${node.dependencies.map((dependency) => `${talentManager.getNode(dependency.nodeId)?.name ?? dependency.nodeId} Lv.${dependency.requiredLevel}+`).join(', ')}`
+        : '无前置';
+
+    nodeDiv.innerHTML = `
+      <div class="talent-node-name">${node.name} · Lv.${level}/${node.maxLevel}</div>
+      <div class="talent-node-desc">${node.description}</div>
+      <div class="talent-node-desc">${dependencyText}</div>
+    `;
+
+    const row = document.createElement('div');
+    row.className = 'talent-node-row';
+
+    const status = document.createElement('span');
+    status.textContent = maxed ? '已满级' : `升级消耗: ${nextCost} 碎片`;
+    row.appendChild(status);
+
+    const upgradeButton = document.createElement('button');
+    upgradeButton.textContent = '升级';
+    upgradeButton.disabled = maxed || !unlocked || fragments < nextCost;
+    upgradeButton.addEventListener('click', () => openTalentConfirmDialog(node.id, node.name, nextCost));
+    row.appendChild(upgradeButton);
+
+    nodeDiv.appendChild(row);
+    talentsPanel.appendChild(nodeDiv);
+  }
+
+  const closeButton = document.getElementById('talents-close-button');
+  closeButton?.addEventListener('click', closeTalentsPanel);
+}
+
+function closeTalentsPanel(): void {
+  talentsOverlay.classList.remove('open');
+}
+
+/**
+ * Step 24's mandatory second confirmation before any talent upgrade - the
+ * spec's "落子无悔" design means every level bought here is permanent, so
+ * this dialog exists specifically to make that unmistakable before the
+ * fragments are actually spent: it quotes the exact cost and a bold red
+ * "此操作不可撤销" warning. Only "确认升级" actually calls
+ * talentManager.upgradeTalent; "取消" (or clicking the overlay backdrop)
+ * closes the dialog with nothing spent.
+ */
+function openTalentConfirmDialog(nodeId: string, nodeName: string, cost: number): void {
+  talentConfirmDialog.innerHTML = `
+    <div class="talent-confirm-title">升级「${nodeName}」？</div>
+    <div class="talent-confirm-cost">将消耗 <b>${cost}</b> 记忆碎片</div>
+    <div class="talent-confirm-warning">⚠️ 此操作不可撤销 - 天赋一经投入，无法重置或返还。</div>
+    <div class="talent-confirm-actions">
+      <button id="talent-confirm-cancel">取消</button>
+      <button id="talent-confirm-commit">确认升级</button>
+    </div>
+  `;
+
+  document.getElementById('talent-confirm-cancel')?.addEventListener('click', closeTalentConfirmDialog);
+  document.getElementById('talent-confirm-commit')?.addEventListener('click', () => {
+    const result = talentManager.upgradeTalent(nodeId);
+    showMessage(result.success ? `${nodeName} 升级至 Lv.${result.newLevel}！（已永久生效）` : '升级失败');
+    closeTalentConfirmDialog();
+    refreshTalentsPanel();
+  });
+
+  talentConfirmOverlay.classList.add('open');
+}
+
+function closeTalentConfirmDialog(): void {
+  talentConfirmOverlay.classList.remove('open');
+  talentConfirmDialog.innerHTML = '';
+}
+
+talentConfirmOverlay.addEventListener('click', (event) => {
+  if (event.target === talentConfirmOverlay) {
+    closeTalentConfirmDialog();
+  }
+});
+
+// --- Step 27: prestige/rebirth ("转生仪式") --------------------------------
+
+/**
+ * Second confirmation before a prestige - same "irreversible action needs
+ * an explicit, informative gate" reasoning the talent confirm dialog
+ * follows, laid out here as the spec's own two-column "您即将失去/您将
+ * 获得" comparison instead of a single warning line. Sparks are computed
+ * fresh from the current highestStageCleared every time this opens (not
+ * cached), so the quoted number is always exactly what executePrestige
+ * would actually grant if confirmed right now.
+ */
+function openAscensionConfirmDialog(): void {
+  const highestStage = getHighestStageCleared();
+  const sparksGain = PrestigeManager.calculateSparks(highestStage);
+  const bonusPercent = Math.round(sparksGain * SPARK_BONUS_PER_POINT * 100);
+
+  ascensionConfirmDialog.innerHTML = `
+    <div class="ascension-title">✨ 转生仪式 ✨</div>
+    <div class="ascension-section lose">
+      <div class="ascension-section-title">您即将失去：</div>
+      <div>波次进度、金币、英雄等级</div>
+    </div>
+    <div class="ascension-section gain">
+      <div class="ascension-section-title">您将获得：</div>
+      <div>${sparksGain} 枚永恒星火（全局伤害与生命 +${bonusPercent}%）</div>
+    </div>
+    <div class="ascension-actions">
+      <button id="ascension-confirm-cancel">取消</button>
+      <button id="ascension-confirm-commit">确认转生</button>
+    </div>
+  `;
+
+  document.getElementById('ascension-confirm-cancel')?.addEventListener('click', closeAscensionConfirmDialog);
+  document.getElementById('ascension-confirm-commit')?.addEventListener('click', () => {
+    closeAscensionConfirmDialog();
+
+    // Step 27's "白屏闪烁" + "空灵的音效" - triggered together right as the
+    // reset itself happens, so the flash's ~0.75s peak roughly coincides
+    // with the run actually resetting underneath it. No explicit revert
+    // for the BGM: resetForPrestige() restarts WaveManager and immediately
+    // calls start(), which fires onWaveStart -> updateEnvironmentForWave
+    // on its own very next tick, naturally crossfading away from
+    // sky-realm.wav into whatever theme wave 1 actually landed on.
+    renderer.triggerPrestigeFlash();
+    gameManager.audioManager.playTrack('/audio/sky-realm.wav');
+
+    const sparksGained = PrestigeManager.executePrestige(gameManager);
+    showMessage(`转生完成！获得永恒星火 +${sparksGained}`);
+  });
+
+  ascensionConfirmOverlay.classList.add('open');
+}
+
+function closeAscensionConfirmDialog(): void {
+  ascensionConfirmOverlay.classList.remove('open');
+  ascensionConfirmDialog.innerHTML = '';
+}
+
+ascensionConfirmOverlay.addEventListener('click', (event) => {
+  if (event.target === ascensionConfirmOverlay) {
+    closeAscensionConfirmDialog();
+  }
+});
+
+ascensionButton.addEventListener('click', () => {
+  if (ascensionButton.disabled) {
+    return;
+  }
+  openAscensionConfirmDialog();
+});
+
+talentsButton.addEventListener('click', () => {
+  refreshTalentsPanel();
+  talentsOverlay.classList.add('open');
+});
+
+talentsOverlay.addEventListener('click', (event) => {
+  if (event.target === talentsOverlay) {
+    closeTalentsPanel();
+  }
+});
+
+/** Below this many offline seconds, the Welcome Back panel is skipped entirely (run starts immediately) - a page refresh a few seconds after the last one shouldn't interrupt the player with an empty-looking reward popup. */
+const MIN_OFFLINE_SECONDS_TO_SHOW = 60;
+
+function formatOfflineDuration(seconds: number): string {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (hours <= 0) {
+    return `${minutes} 分钟`;
+  }
+  return `${hours} 小时 ${minutes} 分钟`;
+}
+
+// --- Step 26: loot-burst particle wiring ---------------------------------
+
+/** Items still waiting to be added to the inventory as their Equipment particle arrives (see particleManager.setOnArrived below) - populated by triggerLootBurst. Only one burst is ever in flight at a time in this UI, so a single shared FIFO queue (not one per burst) is enough: equipment particles always resolve in the same order they were queued. */
+let pendingEquipmentQueue: EquipmentItem[] = [];
+
+particleManager.setOnArrived((event: ParticleArrivedEvent) => {
+  gameManager.audioManager.playChime();
+
+  if (event.type === ParticleType.Gold) {
+    gameManager.gold += event.value;
+    bumpHudElement(hudGold);
+  } else if (event.type === ParticleType.Fragment) {
+    addMemoryFragments(event.value);
+    bumpHudElement(hudFragments);
+  } else {
+    for (let i = 0; i < event.value; i += 1) {
+      const item = pendingEquipmentQueue.shift();
+      if (item) {
+        gameManager.inventory.addItem(item);
+      }
+    }
+    bumpHudElement(backpackAnchor);
+    refreshInventoryPanel();
+  }
+});
+
+/**
+ * Step 26's "大爆开" trigger: spawns a representative particle burst from
+ * (originX, originY) toward the gold/fragments/backpack HUD anchors.
+ * Deliberately does NOT touch gameManager.gold/inventory or
+ * addMemoryFragments here - per the spec's "隐藏面板，但不立即更新玩家的
+ * 实际资源数值", every reward only actually lands once its own particle
+ * physically arrives (see particleManager.setOnArrived above), which is
+ * also what keeps the visible HUD number's final total exactly right
+ * regardless of how the burst's particle count was scaled down.
+ */
+function triggerLootBurst(originX: number, originY: number, gold: number, memoryFragments: number, equipment: EquipmentItem[]): void {
+  pendingEquipmentQueue.push(...equipment);
+  particleManager.spawnBurst(
+    originX,
+    originY,
+    { gold, memoryFragments, equipmentCount: equipment.length },
+    {
+      gold: canvasLocalCenter(hudGold),
+      fragments: canvasLocalCenter(hudFragments),
+      equipment: canvasLocalCenter(backpackAnchor),
+    },
+  );
+}
+
+testLootBurstButton.addEventListener('click', () => {
+  const demoEquipment = [
+    generateRandomEquipment([EquipmentRarity.Common]),
+    generateRandomEquipment([EquipmentRarity.Common]),
+    generateRandomEquipment([EquipmentRarity.Common]),
+  ];
+  triggerLootBurst(CANVAS_CENTER_X, CANVAS_CENTER_Y, 500, 25, demoEquipment);
+  showMessage('测试爆金币：金币 x500，记忆碎片 x25，普通装备 x3');
+});
+
+/**
+ * Step 25's "上线狂欢" panel - rendered once, on load, from a single
+ * already-computed OfflineRewards snapshot (not recomputed on click,
+ * so what's displayed is guaranteed to be exactly what gets claimed).
+ * "全部领取" hides the panel and fires triggerLootBurst from the canvas
+ * center - the actual gold/fragments/inventory mutation happens
+ * particle-by-particle as step 26 requires, not synchronously here.
+ * Still stamps SaveManager's lastSaveTime to now (so the *next* offline
+ * window starts counting from this claim) and calls beginRun() right
+ * away - the run's first wave never starts spawning while the panel is
+ * still open, but it doesn't wait for the burst animation to finish
+ * either (nothing about the burst is combat-relevant).
+ */
+function showWelcomeBackPanel(rewards: OfflineRewards): void {
+  const equipmentIcons = rewards.equipment
+    .map((item) => `<div class="welcome-equipment-icon rarity-${item.rarity}">${item.name.slice(0, 2)}</div>`)
+    .join('');
+
+  welcomeBackPanel.innerHTML = `
+    <div class="welcome-title">🎉 欢迎回来！</div>
+    <div class="welcome-duration">离线时间：${formatOfflineDuration(rewards.offlineSeconds)}</div>
+    <div class="welcome-rewards-row">
+      <div class="welcome-reward-stat">
+        <div class="welcome-reward-value">+${rewards.gold}</div>
+        <div class="welcome-reward-label">金币</div>
+      </div>
+      <div class="welcome-reward-stat">
+        <div class="welcome-reward-value fragments">+${rewards.memoryFragments}</div>
+        <div class="welcome-reward-label">记忆碎片</div>
+      </div>
+    </div>
+    ${
+      rewards.equipment.length > 0
+        ? `<div class="welcome-equipment-title">获得装备 x${rewards.equipment.length}</div>
+           <div class="welcome-equipment-grid">${equipmentIcons}</div>`
+        : ''
+    }
+    <button id="claim-all-button">全部领取 (Claim All)</button>
+  `;
+
+  const claimButton = document.getElementById('claim-all-button') as HTMLButtonElement;
+  claimButton.addEventListener('click', () => {
+    // Hide first, mutate later (per particle) - see triggerLootBurst's doc
+    // comment for why gold/fragments/inventory are deliberately untouched
+    // right here.
+    welcomeBackOverlay.classList.remove('open');
+    triggerLootBurst(CANVAS_CENTER_X, CANVAS_CENTER_Y, rewards.gold, rewards.memoryFragments, rewards.equipment);
+    recordSaveNow();
+    beginRun();
+  });
+
+  welcomeBackOverlay.classList.add('open');
+}
+
+/** Computes this session's offline rewards from SaveManager's persisted lastSaveTime/highestStageCleared and either shows showWelcomeBackPanel or, below MIN_OFFLINE_SECONDS_TO_SHOW, starts the run immediately with nothing to claim. */
+function showWelcomeBackIfNeeded(): void {
+  const elapsedSeconds = Math.max(0, (Date.now() - getLastSaveTime()) / 1000);
+  if (elapsedSeconds < MIN_OFFLINE_SECONDS_TO_SHOW) {
+    beginRun();
+    return;
+  }
+
+  const rewards = OfflineManager.calculateRewards(getHighestStageCleared(), elapsedSeconds);
+  showWelcomeBackPanel(rewards);
+}
+
+// Same "record on unload" convention any local-first save system needs -
+// without this, lastSaveTime would only ever move forward via a claimed
+// Welcome Back panel, so a session that's never away long enough to trigger
+// one would never advance the offline clock at all.
+window.addEventListener('beforeunload', () => recordSaveNow());
+
+showWelcomeBackIfNeeded();
 
 let lastTimestamp: number | null = null;
 
@@ -589,6 +1021,9 @@ function gameLoop(timestamp: number): void {
   const deltaSeconds = Math.min(rawDeltaSeconds, MAX_DELTA_SECONDS);
 
   gameManager.update(deltaSeconds);
+  // Runs regardless of hasStarted/beginRun() - a loot burst from the
+  // Welcome Back panel can be mid-flight before the run itself has begun.
+  particleManager.update(deltaSeconds);
   renderer.render();
   updateHud();
 

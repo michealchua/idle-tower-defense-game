@@ -3,8 +3,10 @@ import type { HeroTemplate } from '../data/hero/heroTypes';
 import type { SkillDefinition } from '../data/skills/skillTypes';
 import { swordsmanTemplate, berserkerTemplate } from '../data/hero/warriorTemplates';
 import { cryomancerTemplate, pyromancerTemplate, apprenticeMageTemplate } from '../data/hero/mageTemplates';
+import { priestTemplate } from '../data/hero/priestTemplates';
 import { bladeSlashSkill } from '../data/skills/warriorSkills';
 import { frostBoltSkill, fireballSkill, arcaneBoltSkill } from '../data/skills/mageSkills';
+import { holyMendSkill } from '../data/skills/priestSkills';
 import { BattleHero } from './BattleHero';
 
 export interface HeroCatalogEntry {
@@ -54,6 +56,17 @@ export const heroCatalog: Record<string, HeroCatalogEntry> = {
     cost: 40,
     template: apprenticeMageTemplate,
     baseSkill: arcaneBoltSkill,
+  },
+  // Step 23's support class - deals no damage of its own (holyMendSkill is
+  // a MechanicTag.Heal skill, routed entirely away from CombatEngine's
+  // enemy-attack path), so it's priced as a utility pick rather than
+  // against the DPS roster above.
+  priest: {
+    heroTypeId: 'priest',
+    displayName: '牧师',
+    cost: 55,
+    template: priestTemplate,
+    baseSkill: holyMendSkill,
   },
 };
 

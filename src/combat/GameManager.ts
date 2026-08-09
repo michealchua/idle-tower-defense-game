@@ -1,6 +1,6 @@
-import { CombatEngine, type DamageDealtEvent, type HeroDamagedEvent } from './CombatEngine';
+import { CombatEngine, type DamageDealtEvent, type HeroDamagedEvent, type HeroHealedEvent } from './CombatEngine';
 import { WaveManager } from './WaveManager';
-import type { LevelConfig, WaveConfig } from './WaveConfig';
+import { getWaveBossKind, type LevelConfig, type WaveConfig } from './WaveConfig';
 import type { BattleHero } from './BattleHero';
 import type { BattleEnemy } from './BattleEnemy';
 import { heroCatalog, createBattleHeroFromCatalog } from './heroCatalog';
@@ -8,6 +8,11 @@ import { heroEvolutions } from './heroEvolution';
 import { gridCellCenter, type GridCell } from './gridConfig';
 import { InventoryManager } from './InventoryManager';
 import { RARITY_MAX_LEVEL, applyEnhancementExp, type EquipmentItem, type EquipmentSlot } from './Equipment';
+import { enemyTypeDefinitions } from './EnemyFactory';
+import { ThemeManager, bossMusicTracks } from './ThemeManager';
+import { AudioManager } from './AudioManager';
+import { addMemoryFragments, getMemoryFragments } from './MetaProgression';
+import { recordStageCleared, save as saveMeta } from './SaveManager';
 
 /** Coarse run state - GameManager.update becomes a no-op the instant this leaves Playing, and tryPlaceHero starts rejecting every request. */
 export enum GameState {
@@ -34,6 +39,19 @@ export interface GameManagerCallbacks {
   onVictory?: () => void;
   /** Fired whenever forceStartNextWave() actually skipped a WAITING countdown (not on a no-op call) - `amount` is however much bonus gold that just earned. */
   onForceStartBonus?: (amount: number) => void;
+  /** Fired every time a Priest's heal cast actually lands (step 23) - see CombatEngine's HeroHealedEvent doc comment. */
+  onHeroHealed?: (event: HeroHealedEvent) => void;
+  /** Fired whenever an elite/boss kill drops Memory Fragments (step 23's out-of-run currency, see MetaProgression.ts) - `total` is the persisted balance immediately after this drop. */
+  onMemoryFragmentsGained?: (amount: number, total: number) => void;
+}
+
+/** One transient "+XX" heal callout GameRenderer draws above its target and fades out over FLOATING_TEXT_LIFETIME_MS - see GameManager.floatingTexts and handleHeroHealed. */
+export interface FloatingText {
+  x: number;
+  y: number;
+  text: string;
+  color: string;
+  createdAtMs: number;
 }
 
 export interface GameManagerOptions {
@@ -47,6 +65,14 @@ export interface GameManagerOptions {
 
 /** Fraction of maxHp a dead hero comes back with when reviveDeadHeroes() runs at the start of the next wave - a real cost (not a full heal) for having gone down, but enough to actually contribute again rather than dying to the first hit. */
 const HERO_REVIVE_HP_RATIO = 0.5;
+
+/** Memory Fragments (step 23's meta currency) awarded per elite/boss kill, as a fraction of that enemy's own goldReward - "按比例掉落" per the spec, rounded up so even a cheap elite always drops at least MEMORY_FRAGMENT_MINIMUM. */
+const MEMORY_FRAGMENT_DROP_RATIO = 0.1;
+const MEMORY_FRAGMENT_MINIMUM = 1;
+
+/** How long a heal's "+XX" floating text (see FloatingText) stays visible before GameManager.update() prunes it - GameRenderer imports this too, so its own fade/rise animation window always matches exactly. */
+export const FLOATING_TEXT_LIFETIME_MS = 1000;
+const HEAL_FLOATING_TEXT_COLOR = '#4ade80';
 
 export type PlaceHeroResult =
   | { success: true; hero: BattleHero }
@@ -91,6 +117,16 @@ export class GameManager {
   readonly waveManager: WaveManager;
   /** Global, run-scoped bag of unequipped EquipmentItems - see InventoryManager's doc comment. Populated by handleEnemyDefeated's loot roll, drained/refilled by tryEquipItem/tryUnequipItem. */
   readonly inventory = new InventoryManager();
+  /** Tracks the current background/BGM theme and its stage-based rotation (step 22) - GameRenderer reads `.currentTheme` every frame to draw the bottom-most background layer and detect when to play its transition effect. */
+  readonly themeManager = new ThemeManager();
+  /** Owns the actual <audio> playback for `themeManager.currentTheme.musicTrack`, overridden by a boss track for the duration of a boss wave - see the onWaveStart hook below and handleEnemyDefeated. */
+  readonly audioManager = new AudioManager();
+
+  /** Set for the duration of a boss/miniboss wave (see getWaveBossKind) so handleEnemyDefeated knows a defeated `isElite` enemy is *the* boss whose death should revert the BGM, not just any elite spawn. */
+  private activeBossKind: 'miniboss' | 'boss' | undefined;
+
+  /** Live "+XX" heal callouts (step 23) - pushed by handleHeroHealed, pruned once older than FLOATING_TEXT_LIFETIME_MS by update(). GameRenderer reads getActiveFloatingTexts() every frame to draw them; this array is otherwise never read outside this class. */
+  private readonly floatingTexts: FloatingText[] = [];
 
   gold = 0;
   experience = 0;
@@ -114,6 +150,12 @@ export class GameManager {
       onEnemyDefeated: (enemy) => this.handleEnemyDefeated(enemy),
       onEnemyReachedEnd: (enemy) => this.handleEnemyReachedEnd(enemy),
       onHeroDamaged: (event) => this.callbacks.onHeroDamaged?.(event),
+      // Step 22's onEnemySpawn biome hook (Snow Mountain's permanent
+      // on-spawn Slow) - reads the *current* theme fresh on every call
+      // rather than closing over one, so it stays correct across a
+      // mid-run theme rotation.
+      onEnemyAdded: (enemy) => this.themeManager.currentTheme.mechanics.onEnemySpawn?.(enemy),
+      onHeroHealed: (event) => this.handleHeroHealed(event),
     });
     this.waveManager = new WaveManager(this.combatEngine, levelConfig, {
       onWaveStart: (config, index) => {
@@ -123,10 +165,40 @@ export class GameManager {
         // not just the WAITING countdown starting) so the field is fully
         // reset before the first enemy of the new wave appears.
         this.reviveDeadHeroes();
+        this.updateEnvironmentForWave(config, index);
         this.callbacks.onWaveStart?.(config, index);
       },
-      onWaveComplete: (waveId, index, nextDelay) => this.callbacks.onWaveComplete?.(waveId, index, nextDelay),
+      onWaveComplete: (waveId, index, nextDelay) => {
+        // Step 25's offline-progress basis (see OfflineManager.calculateRewards)
+        // - a monotonic high-water mark across every run on this save, not
+        // this run's own progress alone (recordStageCleared already no-ops
+        // below any previously-recorded value).
+        recordStageCleared(index + 1);
+        this.callbacks.onWaveComplete?.(waveId, index, nextDelay);
+      },
     });
+
+    // Environment check on init (step 22 spec) - so the very first wave's
+    // theme/BGM is already correct before onWaveStart ever fires, rather
+    // than starting on ThemeManager's hardcoded initial theme with silence.
+    this.audioManager.playTrack(this.themeManager.currentTheme.musicTrack);
+  }
+
+  /**
+   * Re-derives the current stage's theme from the wave index that's about
+   * to start spawning, and points the BGM at either that theme's ambient
+   * track or a dedicated boss track, per getWaveBossKind. ThemeManager
+   * itself only updates `currentTheme` when the stage actually advances
+   * (see ThemeManager.updateForWave) - GameRenderer picks up that change on
+   * its own next frame by comparing theme ids, so no separate "theme
+   * changed" callback is needed here.
+   */
+  private updateEnvironmentForWave(config: WaveConfig, waveIndex: number): void {
+    this.themeManager.updateForWave(waveIndex);
+
+    this.activeBossKind = getWaveBossKind(config, (enemyType) => enemyTypeDefinitions[enemyType]?.isElite ?? false);
+    const track = this.activeBossKind ? bossMusicTracks[this.activeBossKind] : this.themeManager.currentTheme.musicTrack;
+    this.audioManager.playTrack(track);
   }
 
   /** Revives every hero still dead (see BattleHero.isDead) at HERO_REVIVE_HP_RATIO of its maxHp - a no-op for any hero that's still alive, so calling this over the whole roster every wave never disturbs a hero mid-fight. */
@@ -397,6 +469,39 @@ export class GameManager {
   }
 
   /**
+   * Step 27's prestige reset - "重置GameManager的当前波次为1 -> 重置金币为0
+   * -> 重置所有英雄的Level为1". PrestigeManager.executePrestige is the only
+   * real caller (after it's already granted and persisted the Eternity
+   * Sparks this reset is being traded for); called directly it's just an
+   * unconditional reset with no eligibility check of its own, so callers
+   * that need the "highestStageCleared > 20" gate must go through
+   * PrestigeManager instead.
+   *
+   * Equipment (worn and bagged, via `inventory`/each hero's own
+   * `equipment`), Memory Fragments, and TalentManager node levels are all
+   * left completely untouched - none of them are reset by anything in this
+   * method, per the spec's "绝对保留" list. Also resets baseHp/gameState
+   * back to a fresh-run state and clears any mid-flight enemies/
+   * projectiles (see CombatEngine.clearField) so "波次归1" is actually
+   * true even if prestige was triggered mid-wave or after a loss/win,
+   * neither of which the spec's own reset list mentions by name but both
+   * of which that guarantee implicitly requires.
+   */
+  resetForPrestige(): void {
+    this.gold = 0;
+    this.baseHp = this.maxBaseHp;
+    this.gameState = GameState.Playing;
+
+    for (const hero of this.combatEngine.getHeroes()) {
+      hero.resetLevel();
+    }
+
+    this.combatEngine.clearField();
+    this.waveManager.restart();
+    this.waveManager.start();
+  }
+
+  /**
    * Skips the current wave's WAITING countdown (see
    * WaveManager.forceStartNextWave) - gated on the run still being Playing
    * so a stray click after GameOver/Victory can't flip WaveManager into
@@ -424,7 +529,71 @@ export class GameManager {
       this.callbacks.onLootDropped?.(droppedItem);
     }
 
+    // Step 23's meta currency - persisted immediately (addMemoryFragments
+    // writes straight to localStorage/its Node fallback), not batched to
+    // run-end, so it survives even a crash/force-quit mid-run same as the
+    // spec's "存入 localStorage" calls for.
+    if (enemy.isElite) {
+      const fragmentsGained = Math.max(MEMORY_FRAGMENT_MINIMUM, Math.round(enemy.goldReward * MEMORY_FRAGMENT_DROP_RATIO));
+      const total = addMemoryFragments(fragmentsGained);
+      this.callbacks.onMemoryFragmentsGained?.(fragmentsGained, total);
+    }
+
+    // The boss itself dying reverts the BGM to the current theme's ambient
+    // track immediately, rather than waiting for the wave to fully clear
+    // (which can lag behind by however long trailing trash mobs take) -
+    // guarded on activeBossKind so a stray isElite kill outside a tracked
+    // boss wave can't trigger a spurious revert/restart of the same track
+    // (playTrack already no-ops if it's already playing, but this also
+    // avoids clearing activeBossKind's "we are still in a boss wave" state
+    // for enemies that aren't actually it).
+    if (this.activeBossKind && enemy.isElite) {
+      this.activeBossKind = undefined;
+      this.audioManager.playTrack(this.themeManager.currentTheme.musicTrack);
+      // Step 24's "单局游戏结束（如 Boss 死亡结算）时" save checkpoint -
+      // the boss kill just banked a chunk of Memory Fragments (see the
+      // addMemoryFragments call above) that would otherwise only persist
+      // at the next checkpoint; flushing here means that reward survives
+      // even a crash the very next moment.
+      saveMeta();
+    }
+
     this.callbacks.onEnemyDefeated?.(enemy, enemy.goldReward, enemy.expReward);
+  }
+
+  /** Records one FloatingText entry at the heal target's position (step 23's "绿色的 +XX 文本" visual feedback) and forwards the raw event to callbacks - GameRenderer never sees CombatEngine's HeroHealedEvent directly, only the FloatingText this produces via getActiveFloatingTexts(). */
+  private handleHeroHealed(event: HeroHealedEvent): void {
+    this.floatingTexts.push({
+      x: event.target.x,
+      y: event.target.y,
+      text: `+${Math.round(event.amount)}`,
+      color: HEAL_FLOATING_TEXT_COLOR,
+      createdAtMs: Date.now(),
+    });
+    this.callbacks.onHeroHealed?.(event);
+  }
+
+  /** Every heal callout still within its FLOATING_TEXT_LIFETIME_MS window - GameRenderer reads this every frame to draw/fade/rise them; update() is what actually prunes expired entries out of the backing array. */
+  getActiveFloatingTexts(): readonly FloatingText[] {
+    return this.floatingTexts;
+  }
+
+  /** Current persisted Memory Fragments balance (step 23) - a thin passthrough to MetaProgression.getMemoryFragments() so UI code only ever needs to reach into GameManager, not a second module, for run-adjacent numbers. */
+  get memoryFragments(): number {
+    return getMemoryFragments();
+  }
+
+  /** Drops any FloatingText entry older than FLOATING_TEXT_LIFETIME_MS - called once per update() tick so the array never grows unbounded over a long run and GameRenderer never has to filter it itself. */
+  private pruneExpiredFloatingTexts(): void {
+    if (this.floatingTexts.length === 0) {
+      return;
+    }
+    const now = Date.now();
+    for (let i = this.floatingTexts.length - 1; i >= 0; i -= 1) {
+      if (now - this.floatingTexts[i].createdAtMs >= FLOATING_TEXT_LIFETIME_MS) {
+        this.floatingTexts.splice(i, 1);
+      }
+    }
   }
 
   /**
@@ -446,6 +615,8 @@ export class GameManager {
     this.baseHp = Math.max(0, this.baseHp - enemy.baseDamage);
     if (this.baseHp <= 0) {
       this.gameState = GameState.GameOver;
+      // Step 24's "单局游戏结束...时" save checkpoint, the run-over case.
+      saveMeta();
       this.callbacks.onGameOver?.();
     }
 
@@ -470,15 +641,24 @@ export class GameManager {
     }
 
     this.combatEngine.update(deltaTime);
+    this.pruneExpiredFloatingTexts();
 
     if (this.isRunOver) {
       return;
     }
 
+    // Step 22's periodic biome hook (Volcano's burn pulse, Poison Swamp's
+    // enemy regen, Forest's lowest-HP heal, Ocean's knockback wave) - runs
+    // after combat resolves for the tick, same ordering onEnemyReachedEnd's
+    // baseHp change already follows relative to combatEngine.update().
+    this.themeManager.currentTheme.mechanics.onUpdate?.(deltaTime, this.combatEngine);
+
     this.waveManager.update(deltaTime);
 
     if (this.waveManager.isLevelCleared() && this.baseHp > 0) {
       this.gameState = GameState.Victory;
+      // Step 24's "单局游戏结束...时" save checkpoint, the victory case.
+      saveMeta();
       this.callbacks.onVictory?.();
     }
   }

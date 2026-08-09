@@ -29,3 +29,22 @@ export interface WaveConfig {
 export interface LevelConfig {
   waves: WaveConfig[];
 }
+
+export type BossKind = 'miniboss' | 'boss';
+
+/**
+ * Derives whether a wave contains a boss-tier enemy directly from its spawn
+ * list, rather than a separate hand-authored flag on WaveConfig that could
+ * drift out of sync with the spawns themselves. Any spawn whose enemyType
+ * resolves to an `isElite` EnemyTypeDefinition counts; the enemyType id
+ * containing "miniboss" (case-insensitive) selects the miniboss BGM instead
+ * of the full boss one - a naming convention, not a schema field, so new
+ * miniboss types need no changes here. Returns undefined for a normal wave.
+ */
+export function getWaveBossKind(config: WaveConfig, isEliteEnemyType: (enemyType: string) => boolean): BossKind | undefined {
+  const eliteSpawn = config.spawns.find((spawn) => isEliteEnemyType(spawn.enemyType));
+  if (!eliteSpawn) {
+    return undefined;
+  }
+  return /miniboss/i.test(eliteSpawn.enemyType) ? 'miniboss' : 'boss';
+}

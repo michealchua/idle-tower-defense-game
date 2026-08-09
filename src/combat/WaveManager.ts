@@ -88,6 +88,27 @@ export class WaveManager {
   }
 
   /**
+   * Step 27's prestige reset seam: unwinds every field back to exactly its
+   * pre-start() value (currentWaveIndex -1, WAITING, empty spawn queue,
+   * `cleared` false) so a subsequent start() call begins the level over
+   * from wave 0 again - "重置GameManager的当前波次为1". Does NOT itself
+   * call start() (GameManager.resetForPrestige does that immediately
+   * after, but a caller that wants the WaveManager to just sit idle post-
+   * reset is free to not call it). Safe to call at any point, including
+   * mid-SPAWNING - whatever's still queued is simply discarded, same as
+   * GameManager.resetForPrestige discarding live enemies via
+   * CombatEngine.clearField() alongside this.
+   */
+  restart(): void {
+    this.currentWaveIndex = -1;
+    this.waveState = WaveState.Waiting;
+    this.waitTimer = 0;
+    this.spawnQueue = [];
+    this.spawnTimer = 0;
+    this.cleared = false;
+  }
+
+  /**
    * Hardcore-mechanic seam: skips the rest of the current wave's WAITING
    * countdown and begins SPAWNING immediately. Returns whether it actually
    * did that - false outside WAITING (already spawning, level cleared, or
@@ -172,7 +193,10 @@ export class WaveManager {
     while (this.spawnTimer <= 0 && this.spawnQueue.length > 0) {
       const next = this.spawnQueue.shift();
       if (next) {
-        this.combatEngine.addEnemy(this.enemyFactory.create(next.enemyType));
+        // 1-based wave number (currentWaveIndex is 0-based) - step 28's
+        // affix roll uses the same "wave N" convention SaveManager.
+        // recordStageCleared/PrestigeManager already do.
+        this.combatEngine.addEnemy(this.enemyFactory.create(next.enemyType, this.currentWaveIndex + 1));
         this.spawnTimer += next.interval;
       }
     }

@@ -18,6 +18,17 @@ import { StatusEffectType } from '../data/skills/skillTypes';
 import { heroEvolutions } from './heroEvolution';
 import { gridCellCenter } from './gridConfig';
 import { EquipmentRarity, EquipmentSlot, type EquipmentItem } from './Equipment';
+import { setActiveBiomeMechanics } from './activeBiome';
+import { themeDefinitions } from './ThemeManager';
+import { ANCIENT_RUINS_MAXHP_PENALTY } from './biomeMechanicsCatalog';
+import { priestTemplate } from '../data/hero/priestTemplates';
+import { holyMendSkill } from '../data/skills/priestSkills';
+import { talentManager } from './TalentManager';
+import { addMemoryFragments, getMemoryFragments } from './MetaProgression';
+import { OfflineManager, MAX_OFFLINE_SECONDS } from './OfflineManager';
+import { load as loadSave, save as saveMeta, clearInMemorySnapshotForTesting, recordStageCleared, getHighestStageCleared } from './SaveManager';
+import { PrestigeManager, SPARK_BONUS_PER_POINT } from './PrestigeManager';
+import { AffixId, SHIELDED_SHIELD_RATIO } from './AffixManager';
 
 // --- forceStartNextWave edge cases -----------------------------------
 //
@@ -546,6 +557,534 @@ console.log('=== 边界测试 6：装备强化（消耗狗粮升级已穿戴装�
   }
 }
 console.log('[PASS] 装备强化边界测试通过：已穿戴装备成功升级，狗粮被彻底销毁，英雄攻击力实时反映了强化后的装备加成。\n');
+
+// --- Boundary test 7: Volcano biome mechanic - burn drains hero HP ------
+//
+// Places a single hero (no enemies, no combat at all) under Volcano's
+// mechanics via setActiveBiomeMechanics directly - isolates the biome's
+// onUpdate hook itself from GameManager/ThemeManager's own wave-driven
+// rotation, which would take many simulated waves to land on Volcano at
+// all (see ThemeManager.updateForWave's now-random rotation). Fast-forwards
+// 10 simulated seconds (several of Volcano's 3-second burn pulses) and
+// asserts HP strictly decreased.
+console.log('=== 边界测试 7：Volcano 环境机制 - 灼烧是否随时间降低英雄 HP ===');
+{
+  setActiveBiomeMechanics(null);
+  const heroInstance = HeroFactory.createHero(swordsmanTemplate);
+  const hero = new BattleHero(heroInstance, [bladeSlashSkill], { x: 0, y: 0 });
+  const initialHp = hero.stats.currentHp;
+
+  setActiveBiomeMechanics(themeDefinitions.volcano.mechanics);
+  const engine = new CombatEngine();
+  engine.addHero(hero);
+
+  const dt = 0.1;
+  for (let i = 0; i < 100; i += 1) {
+    // 10 simulated seconds total
+    engine.update(dt);
+    themeDefinitions.volcano.mechanics.onUpdate?.(dt, engine);
+  }
+
+  console.log(`  10 秒后英雄 HP: ${hero.stats.currentHp.toFixed(1)} (初始 ${initialHp.toFixed(1)}, 期望因灼烧下降)`);
+  if (hero.stats.currentHp >= initialHp) {
+    throw new Error(`Expected Volcano's burn mechanic to have reduced the hero's HP over time: got ${hero.stats.currentHp}, started at ${initialHp}.`);
+  }
+  setActiveBiomeMechanics(null);
+}
+console.log('[PASS] Volcano 环境机制通过：英雄因持续灼烧损失了生命值。\n');
+
+// --- Boundary test 8: Ancient Ruins biome mechanic - hero maxHp penalty -
+//
+// A fresh hero's maxHp is read once with no biome active, then again with
+// Ancient Ruins' mechanics live - asserts the *live* getter (BattleHero.
+// stats.maxHp, via computeFinalStat's biome-hook final step) reflects the
+// exact expected -15% penalty, and that removing the biome again restores
+// the original value (proving the reduction is a runtime layer, not a
+// mutation of the hero's own levelStats).
+console.log('=== 边界测试 8：Ancient Ruins 环境机制 - 英雄 maxHp 是否正确降低 ===');
+{
+  setActiveBiomeMechanics(null);
+  const heroInstance = HeroFactory.createHero(swordsmanTemplate);
+  const hero = new BattleHero(heroInstance, [bladeSlashSkill], { x: 0, y: 0 });
+  const baseMaxHp = hero.stats.maxHp;
+
+  setActiveBiomeMechanics(themeDefinitions.ancientRuins.mechanics);
+  const expectedMaxHp = baseMaxHp * (1 - ANCIENT_RUINS_MAXHP_PENALTY);
+  console.log(`  基础 maxHp=${baseMaxHp.toFixed(2)}, 遗迹加成后=${hero.stats.maxHp.toFixed(2)} (期望 ${expectedMaxHp.toFixed(2)})`);
+  if (Math.abs(hero.stats.maxHp - expectedMaxHp) > 0.001) {
+    throw new Error(`Expected Ancient Ruins to reduce hero maxHp by exactly ${ANCIENT_RUINS_MAXHP_PENALTY * 100}%: got ${hero.stats.maxHp}, expected ${expectedMaxHp}.`);
+  }
+
+  setActiveBiomeMechanics(null);
+  console.log(`  移除环境后 maxHp 回落至=${hero.stats.maxHp.toFixed(2)} (期望恢复为 ${baseMaxHp.toFixed(2)})`);
+  if (Math.abs(hero.stats.maxHp - baseMaxHp) > 0.001) {
+    throw new Error(`Expected hero maxHp to fall back to its pre-biome value once Ancient Ruins is no longer active: got ${hero.stats.maxHp}, expected ${baseMaxHp}.`);
+  }
+}
+console.log('[PASS] Ancient Ruins 环境机制通过：英雄 maxHp 按预期比例降低，且环境移除后正确回落。\n');
+
+// --- Boundary test 9: Priest heal + cleanse (step 23) --------------------
+//
+// A priest and a heavily-damaged, burning ally on an otherwise empty field
+// (no enemies at all) - isolates CombatEngine's Heal-tagged branch
+// (resolveHealCast/findLowestHpAlly) from every other combat system.
+// Detects "the heal actually landed" by watching for the first HP increase
+// (burn only ever decreases HP, so any rise can only be the heal), then
+// asserts the target's one active burn stack was cleared by the same cast.
+console.log('=== 边界测试 9：牧师治疗与净化 - 治疗残血英雄并移除 BURN 状态 ===');
+{
+  setActiveBiomeMechanics(null);
+
+  const priestInstance = HeroFactory.createHero(priestTemplate);
+  const priest = new BattleHero(priestInstance, [holyMendSkill], { x: 0, y: 0 });
+
+  const targetInstance = HeroFactory.createHero(swordsmanTemplate);
+  const target = new BattleHero(targetInstance, [bladeSlashSkill], { x: 50, y: 0 });
+  target.stats.currentHp = target.stats.maxHp * 0.2;
+  target.applyBurn(5, 999);
+
+  // Read counts through this indirection rather than `target.activeBurnCount`
+  // directly - TypeScript's control-flow narrowing otherwise treats repeated
+  // reads of that exact dotted expression as one "aliased condition" and
+  // keeps pinning it to whatever literal an earlier `!==` check excluded,
+  // straight through the engine.update() calls in between that actually
+  // change it (same pitfall this file's other tests already call out for
+  // getters like WaveManager.state) - a plain function call has no such
+  // aliasing, so each call is read fresh.
+  function burnCount(hero: BattleHero): number {
+    return hero.activeBurnCount;
+  }
+
+  console.log(`  初始状态: HP=${target.stats.currentHp.toFixed(1)}/${target.stats.maxHp.toFixed(1)}, 活跃灼烧层数=${burnCount(target)}`);
+  if (burnCount(target) !== 1) {
+    throw new Error(`Expected the test target to start with exactly one active burn stack: got ${burnCount(target)}.`);
+  }
+
+  const engine = new CombatEngine();
+  engine.addHero(priest);
+  engine.addHero(target);
+
+  const hpBeforeHeal = target.stats.currentHp;
+  const dt = 0.1;
+  let healed = false;
+  for (let i = 0; i < 200 && !healed; i += 1) {
+    engine.update(dt);
+    if (target.stats.currentHp > hpBeforeHeal + 0.01) {
+      healed = true;
+    }
+  }
+
+  console.log(`  治疗后: HP=${target.stats.currentHp.toFixed(1)} (治疗前 ${hpBeforeHeal.toFixed(1)}), 剩余灼烧层数=${burnCount(target)}`);
+  if (!healed) {
+    throw new Error('Expected the priest to have healed the low-HP target within the simulated window.');
+  }
+  if (burnCount(target) !== 0) {
+    throw new Error(`Expected the priest's cleansesDebuff heal to have removed the target's burn stack: still has ${burnCount(target)}.`);
+  }
+}
+console.log('[PASS] 牧师治疗/净化边界测试通过：残血友军获得治疗，且身上的灼烧状态被清除。\n');
+
+// --- Boundary test 10: Vitality talent raises a fresh hero's maxHp -------
+//
+// Grants enough Memory Fragments to buy 3 levels of Vitality, upgrades it
+// via the real talentManager.upgradeTalent path (step 24's dynamic
+// costFormula, not a flat fee - each level's cost is read fresh via
+// getNextLevelCost rather than assumed constant), then instantiates a
+// brand new hero afterward and asserts its live maxHp getter (BattleHero.
+// stats.maxHp, via computeFinalStat's talent layer) reflects the exact
+// expected percentage bonus - proves the talent affects hero construction/
+// stats globally, not just a hero that happened to already exist.
+//
+// Isolation note: TalentManager deliberately exposes no reset/respec
+// method at all (see its own "落子无悔" doc comment) - test isolation here
+// goes through SaveManager's clearInMemorySnapshotForTesting() + an
+// explicit save() instead, which establishes a clean *persisted* baseline
+// the normal way (saving the all-default snapshot), not by pretending a
+// talent was ever un-bought.
+console.log('=== 边界测试 10：天赋树 - Vitality 是否正确提升新英雄的初始 maxHp ===');
+{
+  setActiveBiomeMechanics(null);
+  clearInMemorySnapshotForTesting();
+  saveMeta();
+
+  const heroBefore = new BattleHero(HeroFactory.createHero(swordsmanTemplate), [bladeSlashSkill], { x: 0, y: 0 });
+  const baseMaxHp = heroBefore.stats.maxHp;
+
+  const vitalityNode = talentManager.getNode('vitality');
+  if (!vitalityNode) {
+    throw new Error('Expected a "vitality" talent node to be registered in talentNodes.');
+  }
+
+  // Ample fragments for 3 upgrades - costFormula grows per level, so this
+  // over-provisions rather than trying to predict the exact running total.
+  addMemoryFragments(vitalityNode.costFormula(0) + vitalityNode.costFormula(1) + vitalityNode.costFormula(2) + 100);
+
+  for (let i = 0; i < 3; i += 1) {
+    const result = talentManager.upgradeTalent('vitality');
+    if (!result.success) {
+      throw new Error(`Expected upgradeTalent('vitality') to succeed on attempt ${i + 1} with ample fragments (reason: ${'reason' in result ? result.reason : 'n/a'}).`);
+    }
+  }
+  console.log(`  升级后 Vitality 等级=${talentManager.getLevel('vitality')} (期望 3)`);
+  if (talentManager.getLevel('vitality') !== 3) {
+    throw new Error(`Expected Vitality to be at level 3 after 3 successful upgrades: got ${talentManager.getLevel('vitality')}.`);
+  }
+
+  const heroAfter = new BattleHero(HeroFactory.createHero(swordsmanTemplate), [bladeSlashSkill], { x: 0, y: 0 });
+  const expectedMaxHp = baseMaxHp * (1 + 3 * vitalityNode.bonusPerLevel);
+  console.log(`  天赋加成前 maxHp=${baseMaxHp.toFixed(2)}, 加成后=${heroAfter.stats.maxHp.toFixed(2)} (期望 ${expectedMaxHp.toFixed(2)})`);
+  if (Math.abs(heroAfter.stats.maxHp - expectedMaxHp) > 0.001) {
+    throw new Error(`Expected the freshly-instantiated hero's maxHp to reflect Vitality's talent bonus: got ${heroAfter.stats.maxHp}, expected ${expectedMaxHp}.`);
+  }
+
+  // Clean baseline for the choke-point simulation below - saves the
+  // all-default snapshot (not a talent-specific reset) so nothing here
+  // secretly buffs it.
+  clearInMemorySnapshotForTesting();
+  saveMeta();
+}
+console.log('[PASS] 天赋树边界测试通过：消耗记忆碎片升级 Vitality 后，新实例化英雄的 maxHp 正确享受了百分比加成。\n');
+
+// --- Boundary test 10b: Persistence round trip (step 24) -----------------
+//
+// Spends 100 Memory Fragments on a Vitality upgrade through the real
+// upgradeTalent path (which itself calls SaveManager.save() on success -
+// see that method's doc comment), then simulates the process being killed
+// and restarted: clearInMemorySnapshotForTesting() wipes SaveManager's
+// in-memory `current` snapshot (but not whatever was actually persisted by
+// that save() call), and only *then* does load() get called again - so a
+// passing assertion here proves an actual serialize/deserialize round
+// trip through persistentStore, not just that an in-memory value never
+// changed.
+console.log('=== 边界测试 10b：数据持久化 - 天赋等级与记忆碎片的序列化/反序列化往返 ===');
+{
+  clearInMemorySnapshotForTesting();
+  saveMeta();
+
+  addMemoryFragments(100);
+  const fragmentsBeforeUpgrade = getMemoryFragments();
+  const vitalityNode = talentManager.getNode('vitality');
+  if (!vitalityNode) {
+    throw new Error('Expected a "vitality" talent node to be registered in talentNodes.');
+  }
+  const expectedCost = vitalityNode.costFormula(talentManager.getLevel('vitality'));
+
+  const upgradeResult = talentManager.upgradeTalent('vitality');
+  if (!upgradeResult.success) {
+    throw new Error(`Expected upgradeTalent('vitality') to succeed with 100 fragments in hand (reason: ${'reason' in upgradeResult ? upgradeResult.reason : 'n/a'}).`);
+  }
+  const fragmentsAfterUpgrade = getMemoryFragments();
+  const levelAfterUpgrade = talentManager.getLevel('vitality');
+  console.log(
+    `  升级前碎片=${fragmentsBeforeUpgrade}, 花费=${upgradeResult.fragmentsSpent} (期望 ${expectedCost}), 升级后碎片=${fragmentsAfterUpgrade}, 天赋等级=${levelAfterUpgrade}`,
+  );
+  if (upgradeResult.fragmentsSpent !== expectedCost) {
+    throw new Error(`Expected upgradeTalent to spend exactly costFormula(currentLevel): got ${upgradeResult.fragmentsSpent}, expected ${expectedCost}.`);
+  }
+  if (fragmentsAfterUpgrade !== fragmentsBeforeUpgrade - expectedCost) {
+    throw new Error(`Expected Memory Fragments to be deducted by exactly the upgrade's cost: got ${fragmentsAfterUpgrade}, expected ${fragmentsBeforeUpgrade - expectedCost}.`);
+  }
+  if (levelAfterUpgrade !== 1) {
+    throw new Error(`Expected Vitality to be at level 1 after a single successful upgrade: got ${levelAfterUpgrade}.`);
+  }
+
+  // "强制清空当前内存数据，再调用读取接口" - the actual persistence assertion.
+  clearInMemorySnapshotForTesting();
+  loadSave();
+  const fragmentsAfterReload = getMemoryFragments();
+  const levelAfterReload = talentManager.getLevel('vitality');
+  console.log(`  清空内存并重新 load() 后: 碎片=${fragmentsAfterReload} (期望 ${fragmentsAfterUpgrade}), 天赋等级=${levelAfterReload} (期望 ${levelAfterUpgrade})`);
+  if (fragmentsAfterReload !== fragmentsAfterUpgrade) {
+    throw new Error(`Expected Memory Fragments to survive a save()/clear-memory/load() round trip exactly: got ${fragmentsAfterReload}, expected ${fragmentsAfterUpgrade}.`);
+  }
+  if (levelAfterReload !== levelAfterUpgrade) {
+    throw new Error(`Expected the Vitality talent level to survive a save()/clear-memory/load() round trip exactly: got ${levelAfterReload}, expected ${levelAfterUpgrade}.`);
+  }
+
+  // Clean baseline for the choke-point simulation below.
+  clearInMemorySnapshotForTesting();
+  saveMeta();
+}
+console.log('[PASS] 数据持久化边界测试通过：碎片扣除与天赋等级提升正确生效，且在内存被清空后经 save()/load() 完美恢复。\n');
+
+// --- Boundary test 11: Offline progress rewards (step 25) ---------------
+//
+// A pure function test of OfflineManager.calculateRewards - no SaveManager/
+// localStorage involved at all, since calculateRewards takes its two
+// inputs (highestStageCleared, elapsedSeconds) directly rather than
+// reading them itself. Covers both the spec's explicit cases: a scaled
+// 4-hour/stage-20 reward package, and the MAX_OFFLINE_SECONDS cap (an
+// absurdly long absence must be clamped, not paid out linearly forever).
+console.log('=== 边界测试 11：离线收益 - 固定低保奖励按历史最高层数与离线时长计算 ===');
+{
+  const FOUR_HOURS_SECONDS = 4 * 60 * 60;
+  const HIGHEST_STAGE = 20;
+
+  const rewards = OfflineManager.calculateRewards(HIGHEST_STAGE, FOUR_HOURS_SECONDS);
+  console.log(
+    `  4 小时离线 @ 历史最高第 ${HIGHEST_STAGE} 波: 金币=+${rewards.gold}, 记忆碎片=+${rewards.memoryFragments}, 装备=${rewards.equipment.length} 件`,
+  );
+
+  if (rewards.offlineSeconds !== FOUR_HOURS_SECONDS) {
+    throw new Error(`Expected offlineSeconds to pass an under-cap elapsed time through unchanged: got ${rewards.offlineSeconds}, expected ${FOUR_HOURS_SECONDS}.`);
+  }
+  if (rewards.gold <= 0) {
+    throw new Error('Expected a positive gold reward for a stage-20 save with 4 hours offline.');
+  }
+  if (rewards.memoryFragments <= 0) {
+    throw new Error('Expected a positive Memory Fragments reward for a stage-20 save with 4 hours offline.');
+  }
+  if (rewards.equipment.length === 0) {
+    throw new Error('Expected at least one piece of offline "dog food" equipment over a 4-hour window.');
+  }
+
+  const forbiddenRarities = rewards.equipment.filter(
+    (item) => item.rarity === EquipmentRarity.Epic || item.rarity === EquipmentRarity.Legendary,
+  );
+  console.log(`  掉落稀有度分布: ${rewards.equipment.map((item) => item.rarity).join(', ')}`);
+  if (forbiddenRarities.length > 0) {
+    throw new Error(`Expected offline equipment to never include Epic/Legendary rarity: got ${forbiddenRarities.map((item) => item.rarity).join(', ')}.`);
+  }
+  if (!rewards.equipment.every((item) => item.rarity === EquipmentRarity.Common || item.rarity === EquipmentRarity.Rare)) {
+    throw new Error('Expected every offline equipment drop to be exactly Common or Rare rarity.');
+  }
+
+  // A wildly-longer absence must clamp to MAX_OFFLINE_SECONDS, not scale
+  // linearly forever - same total reward as being away exactly the cap.
+  const cappedRewards = OfflineManager.calculateRewards(HIGHEST_STAGE, MAX_OFFLINE_SECONDS * 10);
+  const atCapRewards = OfflineManager.calculateRewards(HIGHEST_STAGE, MAX_OFFLINE_SECONDS);
+  console.log(
+    `  离线 10x 上限 vs 恰好上限: gold=${cappedRewards.gold} vs ${atCapRewards.gold}, fragments=${cappedRewards.memoryFragments} vs ${atCapRewards.memoryFragments}`,
+  );
+  if (cappedRewards.offlineSeconds !== MAX_OFFLINE_SECONDS) {
+    throw new Error(`Expected an absence far beyond MAX_OFFLINE_SECONDS to clamp offlineSeconds to the cap: got ${cappedRewards.offlineSeconds}, expected ${MAX_OFFLINE_SECONDS}.`);
+  }
+  if (cappedRewards.gold !== atCapRewards.gold || cappedRewards.memoryFragments !== atCapRewards.memoryFragments) {
+    throw new Error('Expected rewards for an absence far beyond the cap to exactly match rewards for an absence of exactly the cap.');
+  }
+
+  // A save that's never cleared a single wave (highestStageCleared 0)
+  // still returns a well-formed package - no gold/fragments to give (there's
+  // nothing to scale the guarantee off yet), not a crash or negative value.
+  const freshSaveRewards = OfflineManager.calculateRewards(0, FOUR_HOURS_SECONDS);
+  console.log(`  历史最高第 0 波（全新存档）: 金币=${freshSaveRewards.gold}, 记忆碎片=${freshSaveRewards.memoryFragments}`);
+  if (freshSaveRewards.gold !== 0 || freshSaveRewards.memoryFragments !== 0) {
+    throw new Error(`Expected a fresh save (highestStageCleared 0) to earn no gold/fragments offline: got gold=${freshSaveRewards.gold}, fragments=${freshSaveRewards.memoryFragments}.`);
+  }
+}
+console.log('[PASS] 离线收益边界测试通过：奖励按历史最高层数与离线时长正确缩放，且装备产出严格排除 Epic/Legendary。\n');
+
+// --- Boundary test 12: Prestige system (step 27) -------------------------
+//
+// Forces a high historical highestStageCleared via SaveManager.
+// recordStageCleared - what PrestigeManager.calculateSparks/executePrestige
+// actually read from (there's no, nor should there be, a live "jump
+// WaveManager to wave 50" API; prestige eligibility is about the save's
+// all-time best, not any one GameManager instance's current wave). Places
+// a hero and levels it to 50, executes a real prestige, and asserts every
+// piece of state the spec calls out: wave back to "Wave 1" (waveManager.
+// currentIndex 0), gold zeroed, hero level back to 1. Finally captures a
+// baseline hero's attack *before* any Sparks exist and compares it against
+// a freshly-instantiated hero built *after* the prestige, proving the
+// (1 + Sparks * 0.05) multiplier is a persisted, account-wide bonus - not
+// something tied to the specific hero/run that was just reset.
+console.log('=== 边界测试 12：转生系统 - 星火结算与全局属性乘区 ===');
+{
+  setActiveBiomeMechanics(null);
+  clearInMemorySnapshotForTesting();
+  saveMeta();
+
+  // Captured before recordStageCleared/executePrestige below, so this is
+  // guaranteed to reflect zero Eternity Sparks - the "before" half of the
+  // global-multiplier comparison at the end of this test.
+  const baselineHero = new BattleHero(HeroFactory.createHero(swordsmanTemplate), [bladeSlashSkill], { x: 0, y: 0 });
+  const baselineAttack = baselineHero.stats.currentAttack;
+
+  recordStageCleared(50);
+
+  const gm = new GameManager(sampleLevelConfig, {}, { startingGold: 10000, maxBaseHp: 100 });
+  gm.start();
+
+  const placeResult = gm.tryPlaceHero('swordsman', { col: 1, row: 3 });
+  if (!placeResult.success) {
+    throw new Error('Expected placing the swordsman hero to succeed with ample gold.');
+  }
+  const hero = placeResult.hero;
+  gm.gold = 10000; // tryPlaceHero already spent some on the placement itself - top back up so "金币为 10000" going into the prestige matches the spec's forced precondition exactly.
+  for (let i = 0; i < 49; i += 1) {
+    hero.upgrade();
+  }
+  // Read through this indirection rather than `hero.level` directly -
+  // TypeScript's control-flow narrowing otherwise treats repeated reads of
+  // that exact property as one "aliased condition" and keeps pinning it to
+  // whatever literal an earlier `!==` check excluded, straight through the
+  // executePrestige() call in between that's exactly what changes it (same
+  // pitfall this file's Priest/burn-count test already works around).
+  function heroLevel(h: BattleHero): number {
+    return h.level;
+  }
+
+  console.log(`  转生前: 波次索引=${gm.waveManager.currentIndex}, 金币=${gm.gold}, 英雄等级=${heroLevel(hero)}`);
+  if (heroLevel(hero) !== 50) {
+    throw new Error(`Expected the hero to be exactly level 50 before prestiging: got ${heroLevel(hero)}.`);
+  }
+
+  const sparksPreview = PrestigeManager.calculateSparks(getHighestStageCleared());
+  console.log(`  历史最高波次=${getHighestStageCleared()}, calculateSparks 预览=${sparksPreview}`);
+  if (sparksPreview <= 0) {
+    throw new Error(`Expected calculateSparks to return a positive value for a highestStageCleared of 50: got ${sparksPreview}.`);
+  }
+
+  const sparksGained = PrestigeManager.executePrestige(gm);
+  console.log(`  转生结算: 获得星火=${sparksGained}, 转生后波次索引=${gm.waveManager.currentIndex}, 金币=${gm.gold}, 英雄等级=${heroLevel(hero)}`);
+  if (sparksGained !== sparksPreview) {
+    throw new Error(`Expected executePrestige to grant exactly the previewed Sparks amount: got ${sparksGained}, expected ${sparksPreview}.`);
+  }
+  if (gm.waveManager.currentIndex !== 0) {
+    throw new Error(`Expected the wave to reset back to "Wave 1" (currentIndex 0) after prestiging: got ${gm.waveManager.currentIndex}.`);
+  }
+  if (gm.gold !== 0) {
+    throw new Error(`Expected gold to reset to 0 after prestiging: got ${gm.gold}.`);
+  }
+  if (heroLevel(hero) !== 1) {
+    throw new Error(`Expected the hero's level to reset to 1 after prestiging: got ${heroLevel(hero)}.`);
+  }
+
+  const heroAfterPrestige = new BattleHero(HeroFactory.createHero(swordsmanTemplate), [bladeSlashSkill], { x: 0, y: 0 });
+  const expectedAttack = baselineAttack * (1 + sparksGained * SPARK_BONUS_PER_POINT);
+  console.log(
+    `  转生前基准攻击力=${baselineAttack.toFixed(2)}, 转生后新英雄攻击力=${heroAfterPrestige.stats.currentAttack.toFixed(2)} (期望 ${expectedAttack.toFixed(2)})`,
+  );
+  if (Math.abs(heroAfterPrestige.stats.currentAttack - expectedAttack) > 0.001) {
+    throw new Error(
+      `Expected a freshly-instantiated hero's attack to carry the full (1 + Sparks * ${SPARK_BONUS_PER_POINT}) global multiplier: got ${heroAfterPrestige.stats.currentAttack}, expected ${expectedAttack}.`,
+    );
+  }
+
+  // Reset so this doesn't secretly buff the choke-point simulation below.
+  clearInMemorySnapshotForTesting();
+  saveMeta();
+}
+console.log('[PASS] 转生系统边界测试通过：星火结算公式为正，转生后波次/金币/英雄等级正确归零，且全局伤害乘区对新英雄同样生效。\n');
+
+// --- Boundary test 13: Shielded affix (step 28) ---------------------------
+//
+// A hand-constructed enemy carrying only the Shielded affix (bypassing
+// EnemyFactory's random roll entirely, for a deterministic assertion) -
+// asserts the spawn-time shield value matches SHIELDED_SHIELD_RATIO of
+// maxHp exactly, then that two successive takeAttackDamage calls deplete
+// the shield before touching currentHp at all, with only the overflow
+// once the shield's actually exhausted landing on HP.
+console.log('=== 边界测试 13：Shielded 词缀 - 护盾优先扣除 ===');
+{
+  const enemy = new BattleEnemy({
+    instanceId: 'shield-test-enemy',
+    archetypeId: 'goblin',
+    maxHp: 100,
+    defense: 0,
+    speed: 1,
+    goldReward: 0,
+    expReward: 0,
+    baseDamage: 0,
+    attackDamage: 0,
+    attackRange: 0,
+    attackSpeed: 1,
+    affixes: [AffixId.Shielded],
+  });
+
+  // Read through this indirection rather than `enemy.shieldHp`/`enemy.
+  // currentHp` directly - TypeScript's control-flow narrowing otherwise
+  // treats repeated reads of the same property as one "aliased condition"
+  // and keeps pinning it to whatever literal an earlier `!==` check
+  // excluded, straight through the takeAttackDamage() calls in between
+  // that are exactly what change them (same pitfall this file's other
+  // tests already work around).
+  function shield(e: BattleEnemy): number {
+    return e.shieldHp;
+  }
+  function hp(e: BattleEnemy): number {
+    return e.currentHp;
+  }
+
+  const expectedInitialShield = 100 * SHIELDED_SHIELD_RATIO;
+  console.log(`  初始状态: 护盾=${shield(enemy)} (期望 ${expectedInitialShield}), HP=${hp(enemy)}/${enemy.maxHp}`);
+  if (shield(enemy) !== expectedInitialShield) {
+    throw new Error(`Expected a Shielded enemy's spawn-time shield to equal maxHp * ${SHIELDED_SHIELD_RATIO}: got ${shield(enemy)}, expected ${expectedInitialShield}.`);
+  }
+
+  enemy.takeAttackDamage(30);
+  console.log(`  受到 30 点伤害后: 护盾=${shield(enemy)} (期望 20), HP=${hp(enemy)} (期望 100，护盾未耗尽前不掉血)`);
+  if (shield(enemy) !== 20) {
+    throw new Error(`Expected the shield to absorb the full 30 damage: got shieldHp ${shield(enemy)}, expected 20.`);
+  }
+  if (hp(enemy) !== 100) {
+    throw new Error(`Expected currentHp to be untouched while the shield still covers the hit: got ${hp(enemy)}, expected 100.`);
+  }
+
+  enemy.takeAttackDamage(30);
+  console.log(`  再次受到 30 点伤害后: 护盾=${shield(enemy)} (期望 0), HP=${hp(enemy)} (期望 90，20 点护盾吸收 + 10 点溢出到血量)`);
+  if (shield(enemy) !== 0) {
+    throw new Error(`Expected the shield to be fully depleted: got ${shield(enemy)}, expected 0.`);
+  }
+  if (hp(enemy) !== 90) {
+    throw new Error(`Expected the 10-point overflow (30 damage - 20 remaining shield) to land on HP: got ${hp(enemy)}, expected 90.`);
+  }
+}
+console.log('[PASS] Shielded 词缀边界测试通过：护盾值正确初始化，且受击时严格优先于生命值被扣除。\n');
+
+// --- Boundary test 14: Cloner affix (step 28) ------------------------------
+//
+// A hand-constructed Cloner-affixed enemy, added directly into a real
+// GameManager's CombatEngine, zeroed to 0 HP, then ticked forward one small
+// step so CombatEngine.update's cleanupRemovedEnemies actually processes
+// the death - asserts GameManager's own live enemy list (combatEngine.
+// getAliveEnemies()) gains exactly two clones, each at exactly half the
+// original's maxHp and spawned at full (halved) HP, with Cloner itself
+// stripped off so neither clone can split again.
+console.log('=== 边界测试 14：Cloner 词缀 - 死亡分裂为两个减半克隆体 ===');
+{
+  const gm = new GameManager(sampleLevelConfig, {}, { maxBaseHp: 100 });
+  const originalMaxHp = 200;
+
+  const clonerEnemy = new BattleEnemy({
+    instanceId: 'cloner-test-enemy',
+    archetypeId: 'orc',
+    maxHp: originalMaxHp,
+    defense: 0,
+    speed: 1,
+    goldReward: 20,
+    expReward: 5,
+    baseDamage: 0,
+    attackDamage: 0,
+    attackRange: 0,
+    attackSpeed: 1,
+    affixes: [AffixId.Cloner],
+  });
+  gm.combatEngine.addEnemy(clonerEnemy);
+  clonerEnemy.currentHp = 0;
+
+  gm.combatEngine.update(0.01);
+
+  const aliveAfterSplit = gm.combatEngine.getAliveEnemies();
+  console.log(`  分裂后存活敌人数=${aliveAfterSplit.length} (期望 2)`);
+  if (aliveAfterSplit.length !== 2) {
+    throw new Error(`Expected exactly 2 clones to register into CombatEngine after the Cloner enemy died: got ${aliveAfterSplit.length}.`);
+  }
+
+  for (const clone of aliveAfterSplit) {
+    console.log(`    克隆体 ${clone.instanceId}: maxHp=${clone.maxHp} (期望 ${originalMaxHp / 2}), HP=${clone.currentHp}, 携带 Cloner=${clone.hasAffix(AffixId.Cloner)}`);
+    if (clone.maxHp !== originalMaxHp / 2) {
+      throw new Error(`Expected each clone's maxHp to be exactly half the original's: got ${clone.maxHp}, expected ${originalMaxHp / 2}.`);
+    }
+    if (clone.currentHp !== clone.maxHp) {
+      throw new Error(`Expected a freshly-spawned clone to be at full (halved) HP: got ${clone.currentHp}/${clone.maxHp}.`);
+    }
+    if (clone.hasAffix(AffixId.Cloner)) {
+      throw new Error(`Expected Cloner to be stripped from a clone's own affix list (no infinite splitting): clone ${clone.instanceId} still has it.`);
+    }
+  }
+}
+console.log('[PASS] Cloner 词缀边界测试通过：死亡后正确注册了两个减半克隆体，且克隆体自身不再携带 Cloner。\n');
 
 // A single melee hero's DPS (~4.3/s from blade slash's 4s cooldown) can't
 // out-damage a goblin (50hp) within the ~3.5s window one range circle

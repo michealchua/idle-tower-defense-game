@@ -1,5 +1,7 @@
 import { RARITY_MAX_LEVEL, applyEnhancementExp, type EquipmentItem } from './Equipment';
 import { generateRandomEquipment } from './equipmentCatalog';
+import { getActiveBiomeMechanics } from './activeBiome';
+import { talentManager } from './TalentManager';
 
 /** Chance [0,1] that a defeated elite/boss enemy drops a random equipment item into the player's inventory - see rollLootFor. */
 const ELITE_LOOT_DROP_CHANCE = 0.6;
@@ -46,7 +48,16 @@ export class InventoryManager {
    * actually happened.
    */
   rollLootFor(isElite: boolean): EquipmentItem | null {
-    if (!isElite || Math.random() >= ELITE_LOOT_DROP_CHANCE) {
+    if (!isElite) {
+      return null;
+    }
+    // Ancient Ruins' +20% loot-drop-chance biome buff (step 22) applied
+    // first, then step 23's Loot Luck talent stacked additively on top -
+    // the two are independent bonus sources (one per-run/environmental, one
+    // permanent/meta), so they add rather than one overriding the other.
+    const biomeChance = getActiveBiomeMechanics()?.modifyLootChance?.(ELITE_LOOT_DROP_CHANCE) ?? ELITE_LOOT_DROP_CHANCE;
+    const dropChance = Math.min(1, biomeChance + talentManager.getLootChanceBonus());
+    if (Math.random() >= dropChance) {
       return null;
     }
     const item = generateRandomEquipment();

@@ -20,6 +20,8 @@ export enum MechanicTag {
   Silence = 'silence',
   Slow = 'slow',
   Execute = 'execute',
+  /** Marks a skill as ally-targeted support rather than an enemy-targeted attack (step 23's Priest class) - CombatEngine.update() branches a Heal-tagged ready skill into resolveHealCast instead of the normal findTargetsInRange(enemy)/resolveSkillAction path entirely. damageMultiplier is reinterpreted as a heal ratio (sourceAttack * damageMultiplier) for these skills, not a damage multiplier. */
+  Heal = 'heal',
 }
 
 /** The two status effects BattleEnemy's activeStatuses engine resolves each tick (step 16). */
@@ -57,4 +59,6 @@ export interface SkillDefinition {
   projectileSpeed?: number;
   /** Applied to the target the instant this skill's damage resolves (on cast for melee, on impact for a projectile). */
   statusEffectOnHit?: StatusEffectConfig;
+  /** Heal-tagged skills only (step 23): whether landing this heal also removes one active debuff (currently: one BattleHero.activeBurns stack) from the target - see CombatEngine.resolveHealCast. */
+  cleansesDebuff?: boolean;
 }

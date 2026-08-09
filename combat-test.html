@@ -42,6 +42,61 @@
         color: #ffd54f;
         font-weight: bold;
       }
+      #hud-hazard {
+        position: absolute;
+        top: 12px;
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 6px 14px;
+        background: rgba(0, 0, 0, 0.6);
+        border: 1px solid #666;
+        border-radius: 6px;
+        font-size: 13px;
+        white-space: nowrap;
+        pointer-events: none;
+      }
+      /* Step 26: visual anchor a loot-burst's Equipment particles fly
+         toward ("装备飞向右侧背包区域") - this canvas layout has no
+         separate overlaid inventory panel, so this small icon stands in
+         for one. */
+      #hud-backpack-anchor {
+        position: absolute;
+        top: 50%;
+        right: 12px;
+        transform: translateY(-50%);
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: rgba(0, 0, 0, 0.55);
+        border: 1px solid #60a5fa;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 22px;
+        pointer-events: none;
+      }
+      /* Step 26: brief pulse on a HUD number the instant a particle of its
+         type arrives ("让对应的 HUD 数值...跳动增加") - toggled by
+         bumpHudElement() in main.ts, which removes+re-adds the class so it
+         can restart mid-animation if particles land in quick succession. */
+      .hud-bump {
+        display: inline-block;
+        animation: hud-bump-pulse 0.3s ease-out;
+      }
+      @keyframes hud-bump-pulse {
+        0% {
+          transform: scale(1);
+          color: inherit;
+        }
+        40% {
+          transform: scale(1.5);
+          color: #facc15;
+        }
+        100% {
+          transform: scale(1);
+          color: inherit;
+        }
+      }
       #build-panel {
         width: 960px;
         margin-top: 14px;
@@ -277,6 +332,363 @@
       #enhance-modal .enhance-actions button.confirm {
         border-color: #facc15;
       }
+      #talents-button {
+        padding: 8px 16px;
+        font-size: 14px;
+        background: #1e293b;
+        color: #a78bfa;
+        border: 1px solid #7c3aed;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      #talents-button:hover {
+        background: #2d1f4d;
+      }
+      #talents-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.8);
+        align-items: center;
+        justify-content: center;
+        z-index: 20;
+      }
+      #talents-overlay.open {
+        display: flex;
+      }
+      #talents-panel {
+        width: 640px;
+        max-height: 85vh;
+        overflow-y: auto;
+        padding: 20px 24px;
+        background: #161020;
+        border: 1px solid #7c3aed;
+        border-radius: 10px;
+      }
+      #talents-panel .talents-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+      }
+      #talents-panel .talents-title {
+        font-size: 18px;
+        font-weight: bold;
+        color: #a78bfa;
+      }
+      #talents-panel .talents-fragments {
+        font-size: 14px;
+        color: #ffd54f;
+      }
+      #talents-panel .talents-close {
+        padding: 4px 12px;
+        background: #262626;
+        color: #eee;
+        border: 1px solid #444;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      .talent-node {
+        padding: 12px 14px;
+        margin-bottom: 10px;
+        border: 1px solid #444;
+        border-radius: 6px;
+        background: #1e1e1e;
+      }
+      .talent-node.locked {
+        opacity: 0.5;
+      }
+      .talent-node .talent-node-name {
+        font-weight: bold;
+        color: #eee;
+      }
+      .talent-node .talent-node-desc {
+        font-size: 12px;
+        opacity: 0.75;
+        margin: 4px 0;
+      }
+      .talent-node .talent-node-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 6px;
+      }
+      .talent-node button {
+        padding: 6px 14px;
+        font-size: 12px;
+        background: #262626;
+        color: #eee;
+        border: 1px solid #7c3aed;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      .talent-node button:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+        border-color: #444;
+      }
+      #talent-confirm-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.75);
+        align-items: center;
+        justify-content: center;
+        z-index: 25;
+      }
+      #talent-confirm-overlay.open {
+        display: flex;
+      }
+      #talent-confirm-dialog {
+        width: 380px;
+        padding: 20px 24px;
+        background: #1a1020;
+        border: 1px solid #ef4444;
+        border-radius: 10px;
+      }
+      #talent-confirm-dialog .talent-confirm-title {
+        font-size: 16px;
+        font-weight: bold;
+        color: #facc15;
+        margin-bottom: 10px;
+      }
+      #talent-confirm-dialog .talent-confirm-cost {
+        font-size: 14px;
+        margin-bottom: 10px;
+      }
+      #talent-confirm-dialog .talent-confirm-cost b {
+        color: #a78bfa;
+        font-size: 18px;
+      }
+      #talent-confirm-dialog .talent-confirm-warning {
+        font-size: 13px;
+        font-weight: bold;
+        color: #ef4444;
+        border: 1px solid #ef4444;
+        border-radius: 6px;
+        padding: 8px 10px;
+        margin-bottom: 16px;
+      }
+      #talent-confirm-dialog .talent-confirm-actions {
+        display: flex;
+        gap: 10px;
+      }
+      #talent-confirm-dialog .talent-confirm-actions button {
+        flex: 1;
+        padding: 10px;
+        font-size: 14px;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      #talent-confirm-cancel {
+        background: #262626;
+        color: #eee;
+        border: 1px solid #444;
+      }
+      #talent-confirm-commit {
+        background: #ef4444;
+        color: #fff;
+        border: 1px solid #ef4444;
+        font-weight: bold;
+      }
+      #welcome-back-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.85);
+        align-items: center;
+        justify-content: center;
+        z-index: 30;
+      }
+      #welcome-back-overlay.open {
+        display: flex;
+      }
+      #welcome-back-panel {
+        width: 520px;
+        max-height: 85vh;
+        overflow-y: auto;
+        padding: 28px 32px;
+        background: radial-gradient(circle at top, #2a1f4d 0%, #120c22 75%);
+        border: 2px solid #facc15;
+        border-radius: 14px;
+        text-align: center;
+        box-shadow: 0 0 40px rgba(250, 204, 21, 0.35);
+      }
+      #welcome-back-panel .welcome-title {
+        font-size: 26px;
+        font-weight: bold;
+        color: #facc15;
+        margin-bottom: 4px;
+      }
+      #welcome-back-panel .welcome-duration {
+        font-size: 14px;
+        opacity: 0.8;
+        margin-bottom: 20px;
+      }
+      #welcome-back-panel .welcome-rewards-row {
+        display: flex;
+        justify-content: center;
+        gap: 28px;
+        margin-bottom: 18px;
+      }
+      #welcome-back-panel .welcome-reward-stat {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+      #welcome-back-panel .welcome-reward-value {
+        font-size: 32px;
+        font-weight: bold;
+        color: #4ade80;
+      }
+      #welcome-back-panel .welcome-reward-value.fragments {
+        color: #a78bfa;
+      }
+      #welcome-back-panel .welcome-reward-label {
+        font-size: 12px;
+        opacity: 0.75;
+        margin-top: 2px;
+      }
+      #welcome-back-panel .welcome-equipment-title {
+        font-size: 13px;
+        opacity: 0.75;
+        margin-bottom: 8px;
+      }
+      #welcome-back-panel .welcome-equipment-grid {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 8px;
+        margin-bottom: 24px;
+        max-height: 160px;
+        overflow-y: auto;
+      }
+      #welcome-back-panel .welcome-equipment-icon {
+        width: 42px;
+        height: 42px;
+        border-radius: 6px;
+        border: 2px solid #666;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+        font-weight: bold;
+      }
+      #welcome-back-panel .welcome-equipment-icon.rarity-common {
+        border-color: #cbd5e1;
+        color: #cbd5e1;
+      }
+      #welcome-back-panel .welcome-equipment-icon.rarity-rare {
+        border-color: #60a5fa;
+        color: #60a5fa;
+      }
+      #claim-all-button {
+        width: 100%;
+        padding: 14px;
+        font-size: 18px;
+        font-weight: bold;
+        background: linear-gradient(180deg, #facc15, #d97706);
+        color: #1a1200;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+      }
+      #claim-all-button:hover {
+        filter: brightness(1.1);
+      }
+      /* Step 27: prestige/rebirth ("转生仪式") */
+      #ascension-button {
+        padding: 8px 16px;
+        font-size: 14px;
+        font-weight: bold;
+        background: linear-gradient(180deg, #fef3c7, #d97706);
+        color: #1a1200;
+        border: 1px solid #facc15;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      #ascension-button:hover:not(:disabled) {
+        filter: brightness(1.1);
+      }
+      #ascension-button:disabled {
+        background: #262626;
+        color: #888;
+        border-color: #444;
+        cursor: not-allowed;
+      }
+      #ascension-confirm-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.85);
+        align-items: center;
+        justify-content: center;
+        z-index: 25;
+      }
+      #ascension-confirm-overlay.open {
+        display: flex;
+      }
+      #ascension-confirm-dialog {
+        width: 440px;
+        padding: 24px 28px;
+        background: radial-gradient(circle at top, #3a2a05 0%, #120c22 75%);
+        border: 2px solid #facc15;
+        border-radius: 12px;
+        box-shadow: 0 0 40px rgba(250, 204, 21, 0.35);
+      }
+      #ascension-confirm-dialog .ascension-title {
+        font-size: 20px;
+        font-weight: bold;
+        color: #facc15;
+        text-align: center;
+        margin-bottom: 16px;
+      }
+      #ascension-confirm-dialog .ascension-section {
+        margin-bottom: 14px;
+        padding: 10px 12px;
+        border-radius: 6px;
+      }
+      #ascension-confirm-dialog .ascension-section.lose {
+        border: 1px solid #ef4444;
+        background: rgba(239, 68, 68, 0.08);
+      }
+      #ascension-confirm-dialog .ascension-section.gain {
+        border: 1px solid #4ade80;
+        background: rgba(74, 222, 128, 0.08);
+      }
+      #ascension-confirm-dialog .ascension-section-title {
+        font-weight: bold;
+        margin-bottom: 6px;
+      }
+      #ascension-confirm-dialog .ascension-section.lose .ascension-section-title {
+        color: #ef4444;
+      }
+      #ascension-confirm-dialog .ascension-section.gain .ascension-section-title {
+        color: #4ade80;
+      }
+      #ascension-confirm-dialog .ascension-actions {
+        display: flex;
+        gap: 10px;
+        margin-top: 4px;
+      }
+      #ascension-confirm-dialog .ascension-actions button {
+        flex: 1;
+        padding: 12px;
+        font-size: 14px;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      #ascension-confirm-cancel {
+        background: #262626;
+        color: #eee;
+        border: 1px solid #444;
+      }
+      #ascension-confirm-commit {
+        background: linear-gradient(180deg, #fef3c7, #d97706);
+        color: #1a1200;
+        border: 1px solid #facc15;
+        font-weight: bold;
+      }
     </style>
   </head>
   <body>
@@ -286,10 +698,22 @@
         <div>金币: <span id="hud-gold">0</span></div>
         <div>经验: <span id="hud-exp">0</span></div>
         <div>波次: <span id="hud-wave">-</span></div>
+        <div>场景: <span id="hud-theme">-</span></div>
+        <div>记忆碎片: <span id="hud-fragments">0</span></div>
+        <div>永恒星火: <span id="hud-sparks">0</span></div>
       </div>
       <div id="hero-panel"></div>
+      <div id="hud-hazard"></div>
+      <div id="hud-backpack-anchor">🎒</div>
     </div>
-    <div id="build-panel"></div>
+    <div id="welcome-back-overlay">
+      <div id="welcome-back-panel"></div>
+    </div>
+    <div id="build-panel">
+      <button id="talents-button">🌟 天赋 (Talents)</button>
+      <button id="ascension-button">✨ 转生仪式 (Ascension)</button>
+      <button id="test-loot-burst-button">✨ 测试爆金币 (Test Loot Burst)</button>
+    </div>
     <div id="hud-message"></div>
     <div id="inventory-panel">
       <div class="inventory-title">背包 / 战利品</div>
@@ -297,6 +721,15 @@
     </div>
     <div id="enhance-modal-overlay">
       <div id="enhance-modal"></div>
+    </div>
+    <div id="talents-overlay">
+      <div id="talents-panel"></div>
+    </div>
+    <div id="talent-confirm-overlay">
+      <div id="talent-confirm-dialog"></div>
+    </div>
+    <div id="ascension-confirm-overlay">
+      <div id="ascension-confirm-dialog"></div>
     </div>
     <script type="module" src="/src/combat/main.ts"></script>
   </body>

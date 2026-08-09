@@ -1,4 +1,5 @@
 import { BattleEnemy, type AoePulseConfig, type EnrageConfig } from './BattleEnemy';
+import { rollAffixes } from './AffixManager';
 
 export interface EnemyTypeDefinition {
   maxHp: number;
@@ -80,7 +81,15 @@ export type EnemyTypeId = keyof typeof enemyTypeDefinitions;
 export class EnemyFactory {
   private nextInstanceId = 0;
 
-  create(enemyTypeId: string): BattleEnemy {
+  /**
+   * `waveNumber` (1-based, same convention as SaveManager.recordStageCleared/
+   * PrestigeManager) drives step 28's random elite affix roll - only ever
+   * consulted for an `isElite` definition (which already covers every boss,
+   * see enemyTypeDefinitions.boss_demon), via AffixManager.rollAffixes.
+   * Defaults to 0 (below the affix-unlock wave) for callers that don't care
+   * about affixes at all (most of test-run.ts's direct constructions).
+   */
+  create(enemyTypeId: string, waveNumber = 0): BattleEnemy {
     const definition = enemyTypeDefinitions[enemyTypeId];
     if (!definition) {
       throw new Error(`EnemyFactory: unknown enemy type id "${enemyTypeId}"`);
@@ -102,6 +111,7 @@ export class EnemyFactory {
       aoePulse: definition.aoePulse,
       enrage: definition.enrage,
       isElite: definition.isElite,
+      affixes: definition.isElite ? rollAffixes(waveNumber) : [],
     });
   }
 }

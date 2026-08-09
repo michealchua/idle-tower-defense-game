@@ -3,6 +3,9 @@ import type { HeroClass, HeroInstance } from '../data/hero/heroTypes';
 import type { SkillAction } from './SkillAction';
 import type { EvolutionOption } from './heroEvolution';
 import { EquipmentSlot, equipmentLevelMultiplier, type EquipmentItem, type StatModifiers } from './Equipment';
+import { getActiveBiomeMechanics } from './activeBiome';
+import { talentManager } from './TalentManager';
+import { PrestigeManager } from './PrestigeManager';
 
 /**
  * Live, battle-scoped stats. Seeded from HeroInstance.currentStats but
@@ -57,6 +60,8 @@ export class BattleHero {
 
   private readonly skillDefinitions = new Map<string, SkillDefinition>();
   private readonly skillCooldowns = new Map<string, number>();
+  /** Active Volcano-style burn stacks (step 22's global-rule-engine biome hazards) - independent of BattleEnemy's Slow/Dot activeStatuses system, since heroes had no status-effect engine of their own before this. Each entry ticks down and deals its own damagePerSecond * deltaTime every update(), same "stacks add, don't refresh" convention BattleEnemy.applyStatus already uses. */
+  private readonly activeBurns: { damagePerSecond: number; remaining: number }[] = [];
   /** Unlocked, owned skill ids in cast-priority order: growth skills (slot order) first, base skill last. Mutated wholesale by evolveInto - stays a stable array reference (not reassigned) so nothing holding onto it goes stale. */
   private readonly skillPriorityOrder: string[];
 
@@ -70,6 +75,8 @@ export class BattleHero {
    * to.
    */
   private readonly levelStats: { maxHp: number; attack: number; defense: number; attackSpeed: number; crit: number };
+  /** Frozen snapshot of levelStats as constructed (i.e. level 1's own values, before any upgrade() calls have scaled them) - upgrade() never touches this, only levelStats itself. What resetLevel() (step 27's prestige reset) restores levelStats back to. */
+  private readonly baseLevelStats: { maxHp: number; attack: number; defense: number; attackSpeed: number; crit: number };
   /** At most one item per EquipmentSlot - see equipItem/unequipItem. Never has more than 4 entries (Weapon/Armor/Boots/Accessory). */
   private readonly equipment: Partial<Record<EquipmentSlot, EquipmentItem>> = {};
 
@@ -87,6 +94,7 @@ export class BattleHero {
 
     const { hp, attack, defense, attackSpeed, crit } = heroInstance.currentStats;
     this.levelStats = { maxHp: hp, attack, defense, attackSpeed, crit };
+    this.baseLevelStats = { ...this.levelStats };
 
     // Captured so the object-literal getters below (whose own `this` binds
     // to the stats object itself, not BattleHero) can still reach
@@ -148,7 +156,79 @@ export class BattleHero {
       percentBonus += (modifier.percent ?? 0) * levelMultiplier;
     }
 
-    return base * (1 + percentBonus) + flatBonus;
+    const withEquipment = base * (1 + percentBonus) + flatBonus;
+
+    // Step 23's out-of-run talent layer, applied multiplicatively on top of
+    // equipment per the spec's "(基础属性 + 装备加成) * (1 + 天赋百分比加成)"
+    // formula - talentManager.getStatBonusPercent returns 0 for every stat
+    // besides maxHp (no other node governs one yet), so this is a no-op for
+    // currentAttack/currentDefense/etc. even with Vitality leveled.
+    const withTalent = withEquipment * (1 + talentManager.getStatBonusPercent(statKey));
+
+    // Step 27's prestige layer - an independent multiplier stacking on top
+    // of talent, per the spec's explicit "...*(1 + Sparks * 0.05)" formula.
+    // Only ever touches attack ("全局伤害" - what CombatEngine's damage math
+    // multiplies by) and maxHp ("全局最大生命值"); defense/attackSpeed/crit
+    // are untouched, same as talentManager.getStatBonusPercent above.
+    const withPrestige =
+      statKey === 'attack' || statKey === 'maxHp' ? withTalent * (1 + PrestigeManager.getGlobalBonusMultiplier()) : withTalent;
+
+    // Biome mechanics get the final word (step 22) - applied after
+    // equipment, talents, AND prestige, same "environment is a layer on
+    // top of the build, not baked into it" reasoning equipment itself
+    // follows relative to levelStats. A no-op whenever no theme is active
+    // (getActiveBiomeMechanics returns null - e.g. every pre-step-22
+    // headless test construction).
+    return getActiveBiomeMechanics()?.modifyHeroStat?.(statKey, withPrestige, this) ?? withPrestige;
+  }
+
+  /** True if this hero owns at least one projectile-based (ranged) skill - CombatEngine's own `definition.projectileSpeed !== undefined` check, mirrored here for biome hooks (Desert's range penalty/melee dodge) that need a hero-level "is this a ranged unit" answer rather than a per-cast one. A hero with a mix of melee and ranged skills counts as ranged. */
+  hasRangedSkill(): boolean {
+    for (const definition of this.skillDefinitions.values()) {
+      if (definition.projectileSpeed !== undefined) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** Number of currently-active burn stacks - read-only visibility into activeBurns for callers that just need to know "is this hero on fire" (GameRenderer's status-ring rendering, test-run.ts's Priest cleanse boundary test) without reaching into private state. */
+  get activeBurnCount(): number {
+    return this.activeBurns.length;
+  }
+
+  /** Pushes a fresh, independently-timed burn stack - see activeBurns' doc comment for why this is a separate system from BattleEnemy's Slow/Dot. Skipped on an already-dead hero, same "can't stack more damage onto something already at 0 HP" guard takeDamage itself applies. The stack's own damagePerSecond is reduced by talentManager.getEnvironmentalDamageReduction() (step 23's Environmental Adaptation node) before it's stored, not at tick time - so a talent level bought mid-burn doesn't retroactively change an already-applied stack's damage. */
+  applyBurn(damagePerSecond: number, duration: number): void {
+    if (this.isDead) {
+      return;
+    }
+    const reduction = talentManager.getEnvironmentalDamageReduction();
+    this.activeBurns.push({ damagePerSecond: damagePerSecond * (1 - reduction), remaining: duration });
+  }
+
+  /** Removes the single oldest active burn stack (FIFO) and reports whether one was actually there to remove - what a Priest's cleansesDebuff heal (step 23) calls on its target. Currently activeBurns is the only debuff-like state BattleHero tracks; a future second debuff type would need its own priority rule here rather than assuming "burn" is the only thing "cleanse" can mean. */
+  cleanseOneDebuff(): boolean {
+    if (this.activeBurns.length === 0) {
+      return false;
+    }
+    this.activeBurns.shift();
+    return true;
+  }
+
+  /** Resolves this tick's total burn damage (applied via takeDamage, so it can still kill and correctly flips isDead) and drops whatever just expired. */
+  private tickBurns(deltaTime: number): void {
+    if (this.activeBurns.length === 0) {
+      return;
+    }
+    const totalDps = this.activeBurns.reduce((sum, burn) => sum + burn.damagePerSecond, 0);
+    this.takeDamage(totalDps * deltaTime);
+
+    for (let i = this.activeBurns.length - 1; i >= 0; i -= 1) {
+      this.activeBurns[i].remaining -= deltaTime;
+      if (this.activeBurns[i].remaining <= 0) {
+        this.activeBurns.splice(i, 1);
+      }
+    }
   }
 
   /**
@@ -290,6 +370,27 @@ export class BattleHero {
   }
 
   /**
+   * Step 27's prestige reset: restores level back to 1 and levelStats back
+   * to their as-constructed baseLevelStats snapshot, undoing every
+   * upgrade() call this hero has ever received - equipment, evolution
+   * state, and skill cooldowns are all deliberately left untouched (the
+   * spec's prestige reset list is explicitly level-only; "绝对保留" calls
+   * out equipment by name). Also fully heals off the freshly-reset maxHp,
+   * same reasoning upgrade() itself heals on every level-up rather than
+   * potentially leaving currentHp reading as "overhealed" relative to a
+   * now-lower max.
+   */
+  resetLevel(): void {
+    this.level = 1;
+    this.levelStats.maxHp = this.baseLevelStats.maxHp;
+    this.levelStats.attack = this.baseLevelStats.attack;
+    this.levelStats.defense = this.baseLevelStats.defense;
+    this.levelStats.attackSpeed = this.baseLevelStats.attackSpeed;
+    this.levelStats.crit = this.baseLevelStats.crit;
+    this.stats.currentHp = this.stats.maxHp;
+  }
+
+  /**
    * Commits an evolution branch: wholesale-replaces this hero's entire
    * skill set with `option.skill` (not just adding it alongside the old
    * one - evolving is a Build change, not a buff) and marks evolvedInto so
@@ -327,9 +428,25 @@ export class BattleHero {
       return null;
     }
 
+    this.tickBurns(deltaTime);
+    if (this.isDead) {
+      // A burn tick just killed this hero this same frame - same "stop
+      // everything the instant isDead flips" rule the pre-existing guard
+      // above enforces for a hero that was already dead entering update().
+      return null;
+    }
+
+    // Cooldowns tick down at deltaTime * currentAttackSpeed, not raw
+    // deltaTime - "受攻速影响" (step 23's Priest ability spec, but applied
+    // uniformly to every class/skill, not special-cased to Priest alone):
+    // currentAttackSpeed was previously read only for display (main.ts's
+    // hero panel), never actually consulted by any gameplay system, so this
+    // gives it real effect for the first time rather than introducing a
+    // second, Priest-only cooldown formula.
+    const cooldownRate = this.stats.currentAttackSpeed;
     for (const [skillId, remaining] of this.skillCooldowns) {
       if (remaining > 0) {
-        this.skillCooldowns.set(skillId, Math.max(0, remaining - deltaTime));
+        this.skillCooldowns.set(skillId, Math.max(0, remaining - deltaTime * cooldownRate));
       }
     }
 

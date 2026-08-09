@@ -49,8 +49,20 @@ const RARITY_WEIGHTS: Record<EquipmentRarity, number> = {
   [EquipmentRarity.Legendary]: 5,
 };
 
-function rollRarity(): EquipmentRarity {
-  const entries = Object.entries(RARITY_WEIGHTS) as [EquipmentRarity, number][];
+/**
+ * Rarity-weighted roll, restricted to `allowedRarities` when given (step
+ * 25's offline rewards pass [Common, Rare] here, so a napping player can
+ * never walk away with an Epic/Legendary - those stay earnable only through
+ * InventoryManager.rollLootFor's real elite/boss kills). Relative weights
+ * between the allowed rarities are preserved exactly as RARITY_WEIGHTS
+ * defines them - restricting the pool doesn't change Common's odds
+ * relative to Rare, it just removes Epic/Legendary from consideration
+ * entirely.
+ */
+function rollRarity(allowedRarities?: EquipmentRarity[]): EquipmentRarity {
+  const entries = (Object.entries(RARITY_WEIGHTS) as [EquipmentRarity, number][]).filter(
+    ([rarity]) => !allowedRarities || allowedRarities.includes(rarity),
+  );
   const totalWeight = entries.reduce((sum, [, weight]) => sum + weight, 0);
   let roll = Math.random() * totalWeight;
 
@@ -61,8 +73,8 @@ function rollRarity(): EquipmentRarity {
     roll -= weight;
   }
   // Unreachable except for floating-point edge cases right at the top of
-  // the range - falls back to the last-listed rarity rather than ever
-  // returning undefined.
+  // the range - falls back to the last-listed (allowed) rarity rather than
+  // ever returning undefined.
   return entries[entries.length - 1][0];
 }
 
@@ -70,13 +82,15 @@ let nextInstanceSequence = 0;
 
 /**
  * Rolls one random equipment template - rarity-weighted first (see
- * RARITY_WEIGHTS), then a uniform pick among that rarity's own templates -
- * and returns a fresh, independently-instanced EquipmentItem. Never hands
- * back a template reference directly, the same "instance != template"
- * split EnemyFactory/HeroFactory already follow.
+ * rollRarity/RARITY_WEIGHTS), then a uniform pick among that rarity's own
+ * templates - and returns a fresh, independently-instanced EquipmentItem.
+ * Never hands back a template reference directly, the same "instance !=
+ * template" split EnemyFactory/HeroFactory already follow. `allowedRarities`
+ * restricts which rarities can be rolled at all (omit for the normal
+ * unrestricted in-run loot table); see rollRarity's doc comment.
  */
-export function generateRandomEquipment(): EquipmentItem {
-  const rarity = rollRarity();
+export function generateRandomEquipment(allowedRarities?: EquipmentRarity[]): EquipmentItem {
+  const rarity = rollRarity(allowedRarities);
   const candidates = equipmentTemplates.filter((template) => template.rarity === rarity);
   const template = candidates[Math.floor(Math.random() * candidates.length)];
 
