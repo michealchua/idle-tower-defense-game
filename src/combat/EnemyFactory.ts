@@ -73,6 +73,11 @@ export const enemyTypeDefinitions: Record<string, EnemyTypeDefinition> = {
 
 export type EnemyTypeId = keyof typeof enemyTypeDefinitions;
 
+/** Step 31's standard wave-scaling curve - "第 N 波怪物 HP = 基础 HP * (1.15 ^ N)", applied to every spawn against the enemy type's own base maxHp from enemyTypeDefinitions above. `waveNumber` 0 (the default `create()` already used before step 31, and every direct headless-test construction that doesn't care about scaling) leaves both exponents at 1 - i.e. this is purely additive to the existing wave-aware call sites, not a behavior change for anything that already omitted `waveNumber`. */
+export const ENEMY_HP_SCALING_BASE = 1.15;
+/** "攻击力 = 基础攻击 * (1.08 ^ N)" - same `waveNumber` convention as ENEMY_HP_SCALING_BASE, applied to attackDamage only (defense/speed/rewards/baseDamage are all left at their enemyTypeDefinitions value regardless of wave). */
+export const ENEMY_ATTACK_SCALING_BASE = 1.08;
+
 /**
  * Builds BattleEnemy instances from a registered enemy type id. Instantiated
  * per-encounter (see WaveManager) rather than shared globally, so its
@@ -83,11 +88,15 @@ export class EnemyFactory {
 
   /**
    * `waveNumber` (1-based, same convention as SaveManager.recordStageCleared/
-   * PrestigeManager) drives step 28's random elite affix roll - only ever
-   * consulted for an `isElite` definition (which already covers every boss,
-   * see enemyTypeDefinitions.boss_demon), via AffixManager.rollAffixes.
-   * Defaults to 0 (below the affix-unlock wave) for callers that don't care
-   * about affixes at all (most of test-run.ts's direct constructions).
+   * PrestigeManager) drives both step 28's random elite affix roll and step
+   * 31's exponential HP/attack scaling (see ENEMY_HP_SCALING_BASE/
+   * ENEMY_ATTACK_SCALING_BASE above) - affixes only ever consulted for an
+   * `isElite` definition (which already covers every boss, see
+   * enemyTypeDefinitions.boss_demon), via AffixManager.rollAffixes, while
+   * the HP/attack scaling applies to every spawn regardless of type.
+   * Defaults to 0 (below the affix-unlock wave, and `1.15^0 === 1.08^0 ===
+   * 1` so scaling is a no-op) for callers that don't care about either -
+   * most of test-run.ts's direct constructions.
    */
   create(enemyTypeId: string, waveNumber = 0): BattleEnemy {
     const definition = enemyTypeDefinitions[enemyTypeId];
@@ -99,13 +108,13 @@ export class EnemyFactory {
     return new BattleEnemy({
       instanceId: `${enemyTypeId}-${this.nextInstanceId}`,
       archetypeId: enemyTypeId,
-      maxHp: definition.maxHp,
+      maxHp: definition.maxHp * ENEMY_HP_SCALING_BASE ** waveNumber,
       defense: definition.defense,
       speed: definition.speed,
       goldReward: definition.goldReward,
       expReward: definition.expReward,
       baseDamage: definition.baseDamage,
-      attackDamage: definition.attackDamage,
+      attackDamage: definition.attackDamage * ENEMY_ATTACK_SCALING_BASE ** waveNumber,
       attackRange: definition.attackRange,
       attackSpeed: definition.attackSpeed,
       aoePulse: definition.aoePulse,
