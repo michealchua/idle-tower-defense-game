@@ -30,6 +30,7 @@ import { OfflineManager, type OfflineRewards } from './OfflineManager';
 import { ParticleManager, ParticleType, type ParticleArrivedEvent } from './ParticleManager';
 import { PrestigeManager, SPARK_BONUS_PER_POINT } from './PrestigeManager';
 import { formatNumber } from './utils';
+import { TutorialManager, TutorialStepId, type TutorialTargetKey } from './TutorialManager';
 
 // Step 24: "在游戏初始化时，最优先调用 SaveManager.load()" - the very first
 // thing this module does, before GameManager is even constructed, so every
@@ -105,6 +106,11 @@ const BUILD_MESSAGE_DURATION_MS = 2000;
 const CANVAS_CENTER_X = CANVAS_WIDTH / 2;
 const CANVAS_CENTER_Y = CANVAS_HEIGHT / 2;
 
+// Step 30's onboarding state machine - constructed ahead of gameManager
+// since the constructor's own onGameOver/onLootDropped callbacks below
+// already need to notify it.
+const tutorialManager = new TutorialManager();
+
 const gameManager = new GameManager(
   sampleLevelConfig,
   {
@@ -122,6 +128,11 @@ const gameManager = new GameManager(
     onGameOver: () => {
       showMessage('游戏结束！大本营已被攻陷');
       inputManager.cancelBuildMode();
+      // Step 30: "玩家首次在第 20 波以后团灭" - currentIndex is still
+      // whatever wave was in progress the instant baseHp hit 0 (WaveManager
+      // never advances past a wave that hasn't cleared), so +1 is the
+      // 1-based "which wave did I just get wiped on" the spec means.
+      tutorialManager.notifyGameOver(gameManager.waveManager.currentIndex + 1);
     },
     onVictory: () => {
       showMessage('胜利！所有波次已清空');
@@ -133,6 +144,10 @@ const gameManager = new GameManager(
     onLootDropped: (item) => {
       showMessage(`战利品掉落：${item.name}（${item.rarity}）`);
       refreshInventoryPanel();
+      // Step 30: "第一次掉落装备时" - event-driven (not a per-frame poll
+      // like the place-hero/upgrade-hero triggers), since there's no
+      // standing gameplay condition to keep checking, just a one-off event.
+      tutorialManager.notifyLootDropped();
     },
     onMemoryFragmentsGained: (amount, total) => {
       showMessage(`获得记忆碎片 +${amount}（共 ${total}）`);
@@ -195,6 +210,7 @@ const pauseButton = document.getElementById('pause-button') as HTMLButtonElement
 const settingsButton = document.getElementById('settings-button') as HTMLButtonElement;
 const settingsOverlay = document.getElementById('settings-overlay') as HTMLDivElement;
 const settingsPanel = document.getElementById('settings-panel') as HTMLDivElement;
+const tutorialLayer = document.getElementById('tutorial-layer') as HTMLDivElement;
 
 let messageTimeoutId: number | undefined;
 function showMessage(text: string): void {
@@ -257,6 +273,15 @@ const inputManager = new InputManager(canvas, {
     if (result.success) {
       showMessage(`已放置：${heroCatalog[heroTypeId].displayName}`);
       equipDemoLegendaryWeapon(result.hero);
+      // Step 30: the real "place a hero" action this step's spotlight was
+      // waiting on - only actually completes the step if it's the one
+      // currently active, so a placement that happens to occur while some
+      // other step is showing (e.g. re-placing after a wipe) doesn't
+      // wrongly consume PlaceFirstHero's flag.
+      if (tutorialManager.activeStep?.id === TutorialStepId.PlaceFirstHero) {
+        tutorialManager.completeActiveStep();
+        gameManager.isPaused = false;
+      }
     } else if (result.reason === 'insufficient_gold') {
       showMessage('金币不足！');
     } else if (result.reason === 'cell_occupied') {
@@ -425,6 +450,10 @@ function refreshHeroPanel(): void {
   upgradeButton.addEventListener('click', () => {
     const result = gameManager.tryUpgradeHero(hero.instanceId);
     showMessage(result.success ? `升级成功！当前 Lv.${hero.level}` : '升级失败：金币不足');
+    if (result.success && tutorialManager.activeStep?.id === TutorialStepId.UpgradeHero) {
+      tutorialManager.completeActiveStep();
+      gameManager.isPaused = false;
+    }
     refreshHeroPanel();
   });
   heroPanel.appendChild(upgradeButton);
@@ -501,6 +530,10 @@ function buildInventoryItemCard(item: EquipmentItem, selectedHeroId: string | nu
     }
     const result = gameManager.tryEquipItem(selectedHeroId, item.instanceId);
     showMessage(result.success ? `已装备：${item.name}` : '装备失败');
+    if (result.success && tutorialManager.activeStep?.id === TutorialStepId.EquipItem) {
+      tutorialManager.completeActiveStep();
+      gameManager.isPaused = false;
+    }
     refreshHeroPanel();
     refreshInventoryPanel();
   });
@@ -677,6 +710,152 @@ function updateHud(): void {
   if (talentsOverlay.classList.contains('open')) {
     refreshTalentsPanel();
   }
+
+  // Step 30: evaluated every frame (cheap boolean checks, same convention
+  // every other per-frame refresh* call above already follows), then the
+  // overlay itself is rebuilt to match whatever's active right now.
+  evaluateTutorialTriggers();
+  if (tutorialManager.isActive) {
+    // Forced every frame, not just on activation - keeps the run frozen
+    // even if something else (a stray settings-panel close, etc.) would
+    // otherwise have cleared isPaused this same tick.
+    gameManager.isPaused = true;
+  }
+  renderTutorialOverlay();
+}
+
+/** Step 30: per-frame poll for the two "standing condition" tutorial triggers - the other two (loot drop, game over) are event-driven and notified straight from GameManager's own callbacks above instead. Both check* calls are no-ops once TutorialManager already has a step active or that step's flag is already set, so calling this unconditionally every frame is cheap and safe. */
+function evaluateTutorialTriggers(): void {
+  const heroes = gameManager.combatEngine.getHeroes();
+  tutorialManager.checkPlaceFirstHeroTrigger(gameManager.waveManager.currentIndex, heroes.length);
+  if (heroes.length > 0) {
+    const cheapestUpgradeCost = Math.min(...heroes.map((hero) => hero.getUpgradeCost()));
+    tutorialManager.checkUpgradeHeroTrigger(gameManager.gold, cheapestUpgradeCost);
+  }
+}
+
+/**
+ * Resolves a tutorial step's symbolic TutorialTargetKey list into actual
+ * on-screen rects, in viewport (client) coordinates - the same space
+ * getBoundingClientRect() and the tutorial-hole/tutorial-blocker CSS below
+ * both work in. 'placed-hero' is the one target with no backing DOM element
+ * of its own: its "rect" is computed from the first placed hero's world x/y
+ * (BattleHero.x/y are canvas-local pixel coordinates) mapped through the
+ * canvas's own client rect and CSS scale factor, same math InputManager.
+ * toWorldPosition already uses in reverse. Its returned `element` is the
+ * canvas itself (there's nothing else to bump z-index on) - clicking
+ * anywhere on the canvas during this step is a looser gate than "only the
+ * hero", but InputManager's own hit-testing already only resolves an actual
+ * hero-upgrade action from a click that lands on one.
+ */
+function resolveTutorialTargets(targets: TutorialTargetKey[]): { element: HTMLElement; rect: DOMRect }[] {
+  const resolved: { element: HTMLElement; rect: DOMRect }[] = [];
+
+  for (const target of targets) {
+    if (target === 'build-panel') {
+      resolved.push({ element: buildPanel, rect: buildPanel.getBoundingClientRect() });
+    } else if (target === 'inventory-panel') {
+      const panel = document.getElementById('inventory-panel') as HTMLDivElement;
+      resolved.push({ element: panel, rect: panel.getBoundingClientRect() });
+    } else if (target === 'hero-equipment-panel') {
+      // Only spotlighted once a hero's actually selected (heroPanel is
+      // display:none otherwise) - the equip step's message still makes
+      // sense with just the inventory-panel hole showing until the player
+      // selects one.
+      if (heroPanel.style.display !== 'none') {
+        resolved.push({ element: heroPanel, rect: heroPanel.getBoundingClientRect() });
+      }
+    } else if (target === 'ascension-button') {
+      resolved.push({ element: ascensionButton, rect: ascensionButton.getBoundingClientRect() });
+    } else if (target === 'placed-hero') {
+      const hero = gameManager.combatEngine.getHeroes()[0];
+      if (hero) {
+        const canvasRect = canvas.getBoundingClientRect();
+        const scaleX = canvasRect.width / canvas.width;
+        const scaleY = canvasRect.height / canvas.height;
+        const heroSize = CELL_SIZE * 0.85;
+        resolved.push({
+          element: canvas,
+          rect: new DOMRect(
+            canvasRect.left + (hero.x - heroSize / 2) * scaleX,
+            canvasRect.top + (hero.y - heroSize / 2) * scaleY,
+            heroSize * scaleX,
+            heroSize * scaleY,
+          ),
+        });
+      }
+    }
+  }
+
+  return resolved;
+}
+
+/** Every real DOM element currently wearing `.tutorial-highlighted-target` (the CSS class that bumps it above the click-blocker) - tracked so the next render can strip it back off before deciding what needs it this frame, rather than the class silently accumulating on stale elements. */
+let tutorialHighlightedElements: HTMLElement[] = [];
+
+/**
+ * Rebuilds #tutorial-layer from scratch every call (same "cheap enough to
+ * fully rebuild, never diffed" convention every other refresh* function in
+ * this file already follows) - a full-screen click-blocker (step 30's
+ * "拦截所有与当前引导步骤无关的点击事件"), one CSS box-shadow "hole" per
+ * resolved target rect (the spotlight - box-shadow's 9999px spread darkens
+ * everything *outside* its own box, which reads as a cutout without any
+ * canvas globalCompositeOperation/mix-blend-mode trickery), and a dialog
+ * bubble with the step's message plus a "知道了" dismiss button - the
+ * safety valve that keeps a step whose real target happens to be disabled
+ * (e.g. Ascension before eligibility) from ever soft-locking the game, per
+ * the spec's own "防止玩家误触导致引导流程卡死" concern. Each target's real
+ * DOM element gets `.tutorial-highlighted-target` (position:relative +
+ * z-index above the blocker in CSS) so it - and only it - stays genuinely
+ * clickable through the overlay.
+ */
+function renderTutorialOverlay(): void {
+  for (const element of tutorialHighlightedElements) {
+    element.classList.remove('tutorial-highlighted-target');
+  }
+  tutorialHighlightedElements = [];
+  tutorialLayer.innerHTML = '';
+
+  const step = tutorialManager.activeStep;
+  if (!step) {
+    return;
+  }
+
+  const blocker = document.createElement('div');
+  blocker.className = 'tutorial-blocker';
+  tutorialLayer.appendChild(blocker);
+
+  for (const { element, rect } of resolveTutorialTargets(step.targets)) {
+    const hole = document.createElement('div');
+    hole.className = 'tutorial-hole';
+    hole.style.left = `${rect.left - 6}px`;
+    hole.style.top = `${rect.top - 6}px`;
+    hole.style.width = `${rect.width + 12}px`;
+    hole.style.height = `${rect.height + 12}px`;
+    tutorialLayer.appendChild(hole);
+
+    element.classList.add('tutorial-highlighted-target');
+    tutorialHighlightedElements.push(element);
+  }
+
+  const dialog = document.createElement('div');
+  dialog.className = 'tutorial-dialog';
+  const messageEl = document.createElement('div');
+  messageEl.className = 'tutorial-dialog-message';
+  messageEl.textContent = step.message;
+  dialog.appendChild(messageEl);
+
+  const dismissButton = document.createElement('button');
+  dismissButton.className = 'tutorial-dialog-dismiss';
+  dismissButton.textContent = '知道了';
+  dismissButton.addEventListener('click', () => {
+    tutorialManager.completeActiveStep();
+    gameManager.isPaused = false;
+    renderTutorialOverlay();
+  });
+  dialog.appendChild(dismissButton);
+
+  tutorialLayer.appendChild(dialog);
 }
 
 /**
@@ -855,6 +1034,14 @@ ascensionConfirmOverlay.addEventListener('click', (event) => {
 ascensionButton.addEventListener('click', () => {
   if (ascensionButton.disabled) {
     return;
+  }
+  // Step 30: clicking the highlighted button is "seen" this step's own
+  // completion condition, regardless of whether the confirm dialog that
+  // follows actually gets committed or cancelled - the tutorial is about
+  // pointing at Ascension, not about forcing a prestige.
+  if (tutorialManager.activeStep?.id === TutorialStepId.SeenPrestige) {
+    tutorialManager.completeActiveStep();
+    gameManager.isPaused = false;
   }
   openAscensionConfirmDialog();
 });

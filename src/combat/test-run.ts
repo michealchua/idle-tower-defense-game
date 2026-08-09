@@ -26,10 +26,11 @@ import { holyMendSkill } from '../data/skills/priestSkills';
 import { talentManager } from './TalentManager';
 import { addMemoryFragments, getMemoryFragments } from './MetaProgression';
 import { OfflineManager, MAX_OFFLINE_SECONDS } from './OfflineManager';
-import { load as loadSave, save as saveMeta, clearInMemorySnapshotForTesting, recordStageCleared, getHighestStageCleared } from './SaveManager';
+import { load as loadSave, save as saveMeta, clearInMemorySnapshotForTesting, recordStageCleared, getHighestStageCleared, getTutorialFlags } from './SaveManager';
 import { PrestigeManager, SPARK_BONUS_PER_POINT } from './PrestigeManager';
 import { AffixId, SHIELDED_SHIELD_RATIO } from './AffixManager';
 import { formatNumber } from './utils';
+import { TutorialManager, TutorialStepId } from './TutorialManager';
 
 // --- forceStartNextWave edge cases -----------------------------------
 //
@@ -1147,6 +1148,59 @@ console.log('=== 边界测试 16：暂停逻辑 - isPaused 时敌人不应移动
   }
 }
 console.log('[PASS] 暂停逻辑边界测试通过：isPaused 时物理更新被正确跳过，恢复后正常继续推进。\n');
+
+// --- Boundary test 17: progressive tutorial (step 30) ----------------------
+//
+// A fresh save (via SaveManager's own test-isolation seam, same pattern
+// every earlier persistence-touching test above already uses) must start
+// with every TutorialFlags entry false - asserted here for
+// hasPlacedFirstHero specifically, the spec's own explicit example. A fresh
+// TutorialManager's checkPlaceFirstHeroTrigger(0, 0) (wave 1, no heroes on
+// the field) must then activate exactly the PlaceFirstHero step, and
+// completeActiveStep() (main.ts's real call once tryPlaceHero actually
+// succeeds) must both clear activeStep and persist the flag - checked via a
+// *second*, independently-constructed TutorialManager to prove the
+// "only ever shown once per save" guarantee survives something like a page
+// reload, not just staying true within one already-warm instance.
+console.log('=== 边界测试 17：新手引导 - TutorialManager 的首次放置英雄标志位 ===');
+{
+  clearInMemorySnapshotForTesting();
+  saveMeta();
+
+  console.log(`  全新存档: hasPlacedFirstHero=${getTutorialFlags().hasPlacedFirstHero} (期望 false)`);
+  if (getTutorialFlags().hasPlacedFirstHero) {
+    throw new Error('Expected a fresh save to start with tutorialFlags.hasPlacedFirstHero === false.');
+  }
+
+  const tutorial = new TutorialManager();
+  tutorial.checkPlaceFirstHeroTrigger(0, 0);
+  console.log(`  第 1 波、场上无英雄时触发检查: isActive=${tutorial.isActive}, activeStep=${tutorial.activeStep?.id}`);
+  if (!tutorial.isActive || tutorial.activeStep?.id !== TutorialStepId.PlaceFirstHero) {
+    throw new Error('Expected checkPlaceFirstHeroTrigger(0, 0) to activate the PlaceFirstHero step.');
+  }
+
+  tutorial.completeActiveStep();
+  console.log(
+    `  放置英雄操作完成后: isActive=${tutorial.isActive} (期望 false), hasPlacedFirstHero=${getTutorialFlags().hasPlacedFirstHero} (期望 true)`,
+  );
+  if (tutorial.isActive) {
+    throw new Error('Expected completeActiveStep() to clear activeStep back to null.');
+  }
+  if (!getTutorialFlags().hasPlacedFirstHero) {
+    throw new Error('Expected completeActiveStep() to persist tutorialFlags.hasPlacedFirstHero as true.');
+  }
+
+  const tutorialAfterReload = new TutorialManager();
+  tutorialAfterReload.checkPlaceFirstHeroTrigger(0, 0);
+  console.log(`  模拟重新加载后再次触发检查: isActive=${tutorialAfterReload.isActive} (期望 false，该步骤已完成过，不应重复出现)`);
+  if (tutorialAfterReload.isActive) {
+    throw new Error('Expected a step whose flag is already true to never reactivate, even from a brand new TutorialManager instance.');
+  }
+
+  clearInMemorySnapshotForTesting();
+  saveMeta();
+}
+console.log('[PASS] 新手引导边界测试通过：全新存档标志位为 false，触发并完成放置英雄步骤后正确持久化为 true，且不会重复出现。\n');
 
 // A single melee hero's DPS (~4.3/s from blade slash's 4s cooldown) can't
 // out-damage a goblin (50hp) within the ~3.5s window one range circle

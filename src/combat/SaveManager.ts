@@ -17,6 +17,23 @@
 import type { EquipmentItem } from './Equipment';
 import { createPersistentValue } from './persistentStore';
 
+/** Step 30's onboarding flags - one per tutorial step, flipped true the instant that step's real completion action happens (or its dialog is dismissed - see TutorialManager) and never reset, so a step only ever shows once per save, on its first playthrough. */
+export interface TutorialFlags {
+  hasPlacedFirstHero: boolean;
+  hasUpgradedHero: boolean;
+  hasEquippedItem: boolean;
+  hasSeenPrestige: boolean;
+}
+
+function defaultTutorialFlags(): TutorialFlags {
+  return {
+    hasPlacedFirstHero: false,
+    hasUpgradedHero: false,
+    hasEquippedItem: false,
+    hasSeenPrestige: false,
+  };
+}
+
 export interface SaveData {
   /** Unix ms timestamp of the last time save() ran - what OfflineManager's offline-window calculation measures "now" against. */
   lastSaveTime: number;
@@ -30,6 +47,8 @@ export interface SaveData {
   heirloomEquipment: EquipmentItem[];
   /** Step 27's prestige/rebirth currency ("永恒星火") - never spent, only ever accumulated across prestiges; every unspent point contributes a permanent global damage/maxHp multiplier (see PrestigeManager.getGlobalBonusMultiplier, consumed by BattleHero.computeFinalStat). */
   eternitySparks: number;
+  /** Step 30's progressive tutorial flags - see TutorialFlags' own doc comment. */
+  tutorialFlags: TutorialFlags;
 }
 
 function defaultSaveData(): SaveData {
@@ -40,6 +59,7 @@ function defaultSaveData(): SaveData {
     talentLevels: {},
     heirloomEquipment: [],
     eternitySparks: 0,
+    tutorialFlags: defaultTutorialFlags(),
   };
 }
 
@@ -64,7 +84,12 @@ function ensureLoaded(): void {
  * the first frame rather than briefly reading stale defaults.
  */
 export function load(): SaveData {
-  current = saveDataStore.get();
+  const loaded = saveDataStore.get();
+  // Merges onto a fresh default rather than trusting `loaded` wholesale -
+  // a save written before tutorialFlags (or any future field) existed
+  // would otherwise come back with that key simply missing, and every
+  // getter/setter below assumes the full shape is always present.
+  current = { ...defaultSaveData(), ...loaded, tutorialFlags: { ...defaultTutorialFlags(), ...loaded.tutorialFlags } };
   hasLoadedOnce = true;
   return current;
 }
@@ -166,6 +191,18 @@ export function addEternitySparks(amount: number): number {
   ensureLoaded();
   current = { ...current, eternitySparks: Math.max(0, current.eternitySparks + Math.max(0, amount)) };
   return current.eternitySparks;
+}
+
+/** Read-only snapshot of every tutorial flag at once - TutorialManager never caches its own copy, it just reads through here on every check. */
+export function getTutorialFlags(): Readonly<TutorialFlags> {
+  ensureLoaded();
+  return current.tutorialFlags;
+}
+
+/** Flips a single tutorial flag - permanently (there's no un-see-a-tutorial-step mechanic, mirroring TalentManager's own "no regrets" one-way state). Doesn't call save() itself; TutorialManager.completeActiveStep() does that immediately after, same "irreversible progress persists right away" rule upgradeTalent already follows. */
+export function setTutorialFlag(flag: keyof TutorialFlags, value: boolean): void {
+  ensureLoaded();
+  current = { ...current, tutorialFlags: { ...current.tutorialFlags, [flag]: value } };
 }
 
 /**
