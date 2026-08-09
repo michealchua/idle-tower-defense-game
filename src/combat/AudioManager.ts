@@ -104,6 +104,8 @@ export class AudioManager {
   private activeIndex = 0;
   private currentSrc: string | null = null;
   private masterVolume = 0.5;
+  /** Step 29's separate SFX slider - only ever read by playChime, distinct from masterVolume (which drives the BGM crossfade above). */
+  private sfxVolume = 0.5;
   private muted = false;
   private unlocked = false;
   /** Lazily-created, shared AudioContext for playChime - one per AudioManager instance, not one per chime (a fresh context per call would eventually hit the browser's concurrent-context limit under a burst of rapid chimes, see ParticleManager's arrival callback in step 26). */
@@ -185,6 +187,15 @@ export class AudioManager {
     return this.masterVolume;
   }
 
+  /** 0..1 global SFX volume (step 29) - only used by playChime today, kept separate from setVolume's BGM volume so the settings panel's two sliders are genuinely independent. */
+  setSfxVolume(volume: number): void {
+    this.sfxVolume = Math.max(0, Math.min(1, volume));
+  }
+
+  getSfxVolume(): number {
+    return this.sfxVolume;
+  }
+
   toggleMute(): boolean {
     this.muted = !this.muted;
     this.activeSlot.fadeTo(this.effectiveVolume(), FADE_STEP_MS * 2);
@@ -210,7 +221,7 @@ export class AudioManager {
    * calls this anyway, but it should still be safe to call defensively).
    */
   playChime(): void {
-    if (!this.unlocked || this.muted) {
+    if (!this.unlocked || this.muted || this.sfxVolume <= 0) {
       return;
     }
     const ctx = this.ensureChimeContext();
@@ -223,7 +234,7 @@ export class AudioManager {
     oscillator.type = 'sine';
     oscillator.frequency.setValueAtTime(880, ctx.currentTime);
     oscillator.frequency.exponentialRampToValueAtTime(1320, ctx.currentTime + 0.08);
-    gain.gain.setValueAtTime(this.masterVolume * 0.3, ctx.currentTime);
+    gain.gain.setValueAtTime(this.sfxVolume * 0.3, ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
     oscillator.connect(gain);
     gain.connect(ctx.destination);

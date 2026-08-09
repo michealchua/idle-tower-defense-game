@@ -25,6 +25,7 @@ import { equipmentSpriteSrc, equipmentTemplates } from '../combat/equipmentCatal
 import { allThemeBackgroundSrcs, type ThemeDefinition } from '../combat/ThemeManager';
 import { ParticleType, type Particle, type ParticleManager } from '../combat/ParticleManager';
 import { affixDefinitions } from '../combat/AffixManager';
+import { formatNumber } from '../combat/utils';
 
 /** Length of the cross-dissolve played over the background when the theme changes (step 22) - "1 秒的交叉溶解（透明度渐变）过渡". */
 const THEME_TRANSITION_MS = 1000;
@@ -456,7 +457,7 @@ export class GameRenderer {
     }
     this.ctx.restore();
 
-    this.drawLabel(`大本营 HP ${baseHp}/${maxBaseHp}`, CANVAS_WIDTH / 2, BASE_HP_BAR_Y + 22);
+    this.drawLabel(`大本营 HP ${formatNumber(baseHp)}/${formatNumber(maxBaseHp)}`, CANVAS_WIDTH / 2, BASE_HP_BAR_Y + 22);
   }
 
   /**

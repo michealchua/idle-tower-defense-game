@@ -29,6 +29,7 @@ import { load as loadSave, getLastSaveTime, getHighestStageCleared, recordSaveNo
 import { OfflineManager, type OfflineRewards } from './OfflineManager';
 import { ParticleManager, ParticleType, type ParticleArrivedEvent } from './ParticleManager';
 import { PrestigeManager, SPARK_BONUS_PER_POINT } from './PrestigeManager';
+import { formatNumber } from './utils';
 
 // Step 24: "在游戏初始化时，最优先调用 SaveManager.load()" - the very first
 // thing this module does, before GameManager is even constructed, so every
@@ -190,6 +191,10 @@ const hudSparks = document.getElementById('hud-sparks') as HTMLSpanElement;
 const ascensionButton = document.getElementById('ascension-button') as HTMLButtonElement;
 const ascensionConfirmOverlay = document.getElementById('ascension-confirm-overlay') as HTMLDivElement;
 const ascensionConfirmDialog = document.getElementById('ascension-confirm-dialog') as HTMLDivElement;
+const pauseButton = document.getElementById('pause-button') as HTMLButtonElement;
+const settingsButton = document.getElementById('settings-button') as HTMLButtonElement;
+const settingsOverlay = document.getElementById('settings-overlay') as HTMLDivElement;
+const settingsPanel = document.getElementById('settings-panel') as HTMLDivElement;
 
 let messageTimeoutId: number | undefined;
 function showMessage(text: string): void {
@@ -637,15 +642,17 @@ enhanceModalOverlay.addEventListener('click', (event) => {
 });
 
 function updateHud(): void {
-  hudGold.textContent = String(gameManager.gold);
-  hudExp.textContent = String(gameManager.experience);
+  hudGold.textContent = formatNumber(gameManager.gold);
+  hudExp.textContent = formatNumber(gameManager.experience);
 
   const { currentIndex, totalWaveCount } = gameManager.waveManager;
   hudWave.textContent = currentIndex >= 0 ? `Wave ${currentIndex + 1} / ${totalWaveCount}` : '-';
   hudTheme.textContent = gameManager.themeManager.currentTheme.displayName;
   hudHazard.textContent = gameManager.themeManager.currentTheme.hazardText;
-  hudFragments.textContent = String(gameManager.memoryFragments);
-  hudSparks.textContent = String(PrestigeManager.getEternitySparks());
+  hudFragments.textContent = formatNumber(gameManager.memoryFragments);
+  hudSparks.textContent = formatNumber(PrestigeManager.getEternitySparks());
+  updatePauseButtonLabel();
+  pauseButton.disabled = gameManager.gameState !== GameState.Playing;
   // Step 27: only re-evaluates eligibility (highestStageCleared changes at
   // most once per wave clear, via SaveManager.recordStageCleared) rather
   // than assuming a fixed disabled/enabled state for the whole session -
@@ -852,6 +859,96 @@ ascensionButton.addEventListener('click', () => {
   openAscensionConfirmDialog();
 });
 
+// --- Step 29: pause/resume + settings panel --------------------------------
+
+function updatePauseButtonLabel(): void {
+  pauseButton.textContent = gameManager.isPaused ? '▶️' : '⏸️';
+}
+
+pauseButton.addEventListener('click', () => {
+  gameManager.togglePause();
+  updatePauseButtonLabel();
+});
+
+/** isPaused's state the instant the settings panel was opened - restored (not just forced back to false) on close, so opening Settings while already paused via the ⏸️ button doesn't un-pause the run out from under the player. */
+let pauseStateBeforeSettings = false;
+
+function openSettingsPanel(): void {
+  pauseStateBeforeSettings = gameManager.isPaused;
+  gameManager.isPaused = true;
+  updatePauseButtonLabel();
+  renderSettingsPanel();
+  settingsOverlay.classList.add('open');
+}
+
+function closeSettingsPanel(): void {
+  settingsOverlay.classList.remove('open');
+  gameManager.isPaused = pauseStateBeforeSettings;
+  updatePauseButtonLabel();
+}
+
+function renderSettingsPanel(): void {
+  const bgmPercent = Math.round(gameManager.audioManager.getVolume() * 100);
+  const sfxPercent = Math.round(gameManager.audioManager.getSfxVolume() * 100);
+
+  settingsPanel.innerHTML = `
+    <div class="settings-title">⚙️ 设置 (Settings)</div>
+    <div class="settings-row">
+      <label for="bgm-volume-slider">BGM 音量</label>
+      <input type="range" id="bgm-volume-slider" min="0" max="100" value="${bgmPercent}">
+      <span id="bgm-volume-value">${bgmPercent}%</span>
+    </div>
+    <div class="settings-row">
+      <label for="sfx-volume-slider">SFX 音量</label>
+      <input type="range" id="sfx-volume-slider" min="0" max="100" value="${sfxPercent}">
+      <span id="sfx-volume-value">${sfxPercent}%</span>
+    </div>
+    <div class="settings-danger">
+      <div class="settings-danger-title">⚠️ 重置存档 (Hard Reset)</div>
+      <div class="settings-danger-desc">将清空本地保存的所有数据并刷新页面，此操作不可撤销。请输入 "RESET" 以确认。</div>
+      <input type="text" id="reset-confirm-input" placeholder="输入 RESET 以确认" autocomplete="off">
+      <button id="reset-confirm-button" disabled>重置存档</button>
+    </div>
+    <button id="settings-close-button">关闭</button>
+  `;
+
+  const bgmSlider = document.getElementById('bgm-volume-slider') as HTMLInputElement;
+  const bgmValue = document.getElementById('bgm-volume-value') as HTMLSpanElement;
+  bgmSlider.addEventListener('input', () => {
+    gameManager.audioManager.setVolume(Number(bgmSlider.value) / 100);
+    bgmValue.textContent = `${bgmSlider.value}%`;
+  });
+
+  const sfxSlider = document.getElementById('sfx-volume-slider') as HTMLInputElement;
+  const sfxValue = document.getElementById('sfx-volume-value') as HTMLSpanElement;
+  sfxSlider.addEventListener('input', () => {
+    gameManager.audioManager.setSfxVolume(Number(sfxSlider.value) / 100);
+    sfxValue.textContent = `${sfxSlider.value}%`;
+  });
+
+  const resetInput = document.getElementById('reset-confirm-input') as HTMLInputElement;
+  const resetButton = document.getElementById('reset-confirm-button') as HTMLButtonElement;
+  resetInput.addEventListener('input', () => {
+    resetButton.disabled = resetInput.value !== 'RESET';
+  });
+  resetButton.addEventListener('click', () => {
+    if (resetInput.value !== 'RESET') {
+      return;
+    }
+    localStorage.clear();
+    window.location.reload();
+  });
+
+  document.getElementById('settings-close-button')?.addEventListener('click', closeSettingsPanel);
+}
+
+settingsButton.addEventListener('click', openSettingsPanel);
+settingsOverlay.addEventListener('click', (event) => {
+  if (event.target === settingsOverlay) {
+    closeSettingsPanel();
+  }
+});
+
 talentsButton.addEventListener('click', () => {
   refreshTalentsPanel();
   talentsOverlay.classList.add('open');
@@ -1023,7 +1120,11 @@ function gameLoop(timestamp: number): void {
   gameManager.update(deltaSeconds);
   // Runs regardless of hasStarted/beginRun() - a loot burst from the
   // Welcome Back panel can be mid-flight before the run itself has begun.
-  particleManager.update(deltaSeconds);
+  // Step 29: skipped while paused, same "physics freezes, rendering
+  // doesn't" rule GameManager.update() itself follows for combat/waves.
+  if (!gameManager.isPaused) {
+    particleManager.update(deltaSeconds);
+  }
   renderer.render();
   updateHud();
 

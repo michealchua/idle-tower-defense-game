@@ -13,6 +13,7 @@ import { ThemeManager, bossMusicTracks } from './ThemeManager';
 import { AudioManager } from './AudioManager';
 import { addMemoryFragments, getMemoryFragments } from './MetaProgression';
 import { recordStageCleared, save as saveMeta } from './SaveManager';
+import { formatNumber } from './utils';
 
 /** Coarse run state - GameManager.update becomes a no-op the instant this leaves Playing, and tryPlaceHero starts rejecting every request. */
 export enum GameState {
@@ -73,6 +74,8 @@ const MEMORY_FRAGMENT_MINIMUM = 1;
 /** How long a heal's "+XX" floating text (see FloatingText) stays visible before GameManager.update() prunes it - GameRenderer imports this too, so its own fade/rise animation window always matches exactly. */
 export const FLOATING_TEXT_LIFETIME_MS = 1000;
 const HEAL_FLOATING_TEXT_COLOR = '#4ade80';
+/** Step 29's damage floating text color - distinct from the heal callout's green so the two read as opposite events at a glance. */
+const DAMAGE_FLOATING_TEXT_COLOR = '#f87171';
 
 export type PlaceHeroResult =
   | { success: true; hero: BattleHero }
@@ -135,6 +138,9 @@ export class GameManager {
   baseHp: number;
   gameState: GameState = GameState.Playing;
 
+  /** Step 29's pause/resume toggle - while true, update() returns immediately before touching combatEngine/waveManager/theme mechanics at all, so every entity's physics and environment settlement freeze in place; GameRenderer keeps drawing every frame regardless (rendering is driven by main.ts's own requestAnimationFrame loop, not gated on this). Deliberately independent of gameState/isRunOver - pausing mid-run never ends it, and a paused run still rejects nothing tryPlaceHero et al. wouldn't already reject on their own terms. */
+  isPaused = false;
+
   private readonly forceStartBonusGold: number;
   private readonly callbacks: GameManagerCallbacks;
 
@@ -146,7 +152,7 @@ export class GameManager {
     this.forceStartBonusGold = options.forceStartBonusGold ?? 20;
 
     this.combatEngine = new CombatEngine({
-      onDamageDealt: (event) => this.callbacks.onDamageDealt?.(event),
+      onDamageDealt: (event) => this.handleDamageDealt(event),
       onEnemyDefeated: (enemy) => this.handleEnemyDefeated(enemy),
       onEnemyReachedEnd: (enemy) => this.handleEnemyReachedEnd(enemy),
       onHeroDamaged: (event) => this.callbacks.onHeroDamaged?.(event),
@@ -468,6 +474,11 @@ export class GameManager {
     this.waveManager.start();
   }
 
+  /** Flips isPaused - the HUD's ⏸️/▶️ button's handler. */
+  togglePause(): void {
+    this.isPaused = !this.isPaused;
+  }
+
   /**
    * Step 27's prestige reset - "重置GameManager的当前波次为1 -> 重置金币为0
    * -> 重置所有英雄的Level为1". PrestigeManager.executePrestige is the only
@@ -561,6 +572,18 @@ export class GameManager {
     this.callbacks.onEnemyDefeated?.(enemy, enemy.goldReward, enemy.expReward);
   }
 
+  /** Step 29's damage floating text: one "-XX" callout per landed hit, formatted through formatNumber so late-run hits past 10,000 stay short (e.g. "-15.2K") instead of overlapping the target's HP bar with a long digit string. Reuses the exact same FloatingText array/lifetime/renderer as handleHeroHealed's heal callouts, just red instead of green and rounded/negated. */
+  private handleDamageDealt(event: DamageDealtEvent): void {
+    this.floatingTexts.push({
+      x: event.target.x,
+      y: event.target.y,
+      text: `-${formatNumber(event.amount)}`,
+      color: DAMAGE_FLOATING_TEXT_COLOR,
+      createdAtMs: Date.now(),
+    });
+    this.callbacks.onDamageDealt?.(event);
+  }
+
   /** Records one FloatingText entry at the heal target's position (step 23's "绿色的 +XX 文本" visual feedback) and forwards the raw event to callbacks - GameRenderer never sees CombatEngine's HeroHealedEvent directly, only the FloatingText this produces via getActiveFloatingTexts(). */
   private handleHeroHealed(event: HeroHealedEvent): void {
     this.floatingTexts.push({
@@ -637,6 +660,14 @@ export class GameManager {
    */
   update(deltaTime: number): void {
     if (this.isRunOver) {
+      return;
+    }
+    // Step 29's pause gate - checked before anything else physics/wave-
+    // related runs, so a paused tick advances nothing (heroes, enemies,
+    // projectiles, theme mechanics, wave timers) while still leaving
+    // GameRenderer free to keep drawing the frozen frame every animation
+    // frame from main.ts's own loop.
+    if (this.isPaused) {
       return;
     }
 

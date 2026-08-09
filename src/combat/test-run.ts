@@ -29,6 +29,7 @@ import { OfflineManager, MAX_OFFLINE_SECONDS } from './OfflineManager';
 import { load as loadSave, save as saveMeta, clearInMemorySnapshotForTesting, recordStageCleared, getHighestStageCleared } from './SaveManager';
 import { PrestigeManager, SPARK_BONUS_PER_POINT } from './PrestigeManager';
 import { AffixId, SHIELDED_SHIELD_RATIO } from './AffixManager';
+import { formatNumber } from './utils';
 
 // --- forceStartNextWave edge cases -----------------------------------
 //
@@ -1085,6 +1086,67 @@ console.log('=== 边界测试 14：Cloner 词缀 - 死亡分裂为两个减半�
   }
 }
 console.log('[PASS] Cloner 词缀边界测试通过：死亡后正确注册了两个减半克隆体，且克隆体自身不再携带 Cloner。\n');
+
+// --- Boundary test 15: number formatting (step 29) ------------------------
+//
+// Pure function test of utils.formatNumber - the K/M/B/T shorthand applied
+// to damage floating text and every HUD readout so late-run numbers don't
+// overlap the screen with long digit strings. Covers the spec's three
+// explicit cases: under the 10,000 threshold stays a plain integer, and at/
+// above it shortens to one decimal place with the appropriate suffix.
+console.log('=== 边界测试 15：数值格式化 - formatNumber 的 K/M 简写转换 ===');
+{
+  const cases: Array<[number, string]> = [
+    [1500, '1500'],
+    [15200, '15.2K'],
+    [1200000, '1.2M'],
+  ];
+  for (const [input, expected] of cases) {
+    const actual = formatNumber(input);
+    console.log(`  formatNumber(${input}) = "${actual}" (期望 "${expected}")`);
+    if (actual !== expected) {
+      throw new Error(`Expected formatNumber(${input}) to equal "${expected}", got "${actual}".`);
+    }
+  }
+}
+console.log('[PASS] 数值格式化边界测试通过：万以下原样显示，万及以上正确转换为 K/M 简写。\n');
+
+// --- Boundary test 16: pause freezes physics (step 29) ---------------------
+//
+// A single enemy added directly into a fresh GameManager's CombatEngine
+// (bypassing WaveManager entirely, same seam the Cloner test above already
+// uses) - proves GameManager.update() skips all physics/environment
+// settlement while isPaused, and resumes normal movement the instant it's
+// cleared again.
+console.log('=== 边界测试 16：暂停逻辑 - isPaused 时敌人不应移动，恢复后正常继续 ===');
+{
+  const gm = new GameManager(sampleLevelConfig, {}, { maxBaseHp: 100 });
+  const enemy = new EnemyFactory().create('goblin');
+  gm.combatEngine.addEnemy(enemy);
+  const xBeforePause = enemy.x;
+
+  gm.isPaused = true;
+  gm.update(0.1);
+  console.log(`  暂停时推进一帧: x=${enemy.x} (期望与暂停前相同 ${xBeforePause})`);
+  if (enemy.x !== xBeforePause) {
+    throw new Error(`Expected enemy.x to stay unchanged while isPaused: got ${enemy.x}, expected ${xBeforePause}.`);
+  }
+
+  // A single 0.1s tick right after spawn is the enemy's "engage" tick (its
+  // first update() call locks onto the path but doesn't yet advance
+  // position - see BattleEnemy's own spawn-then-move sequencing), so this
+  // resumes with a few ticks rather than just one to actually observe
+  // movement, not just the pause gate lifting.
+  gm.isPaused = false;
+  for (let i = 0; i < 5; i += 1) {
+    gm.update(0.1);
+  }
+  console.log(`  取消暂停后推进 5 帧: x=${enemy.x} (期望已偏离暂停前的 ${xBeforePause}，说明物理更新已恢复)`);
+  if (enemy.x === xBeforePause) {
+    throw new Error('Expected enemy.x to change once isPaused is cleared and update() resumes normal physics.');
+  }
+}
+console.log('[PASS] 暂停逻辑边界测试通过：isPaused 时物理更新被正确跳过，恢复后正常继续推进。\n');
 
 // A single melee hero's DPS (~4.3/s from blade slash's 4s cooldown) can't
 // out-damage a goblin (50hp) within the ~3.5s window one range circle

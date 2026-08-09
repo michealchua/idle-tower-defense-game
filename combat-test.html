@@ -123,10 +123,38 @@
         opacity: 0.4;
         cursor: not-allowed;
       }
+      /* Step 29: pause/settings button row - anchored above hero-panel
+         (which is pushed down to top: 56px below) so the two never
+         overlap. */
+      #top-right-controls {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        display: flex;
+        gap: 6px;
+        z-index: 5;
+      }
+      #top-right-controls button {
+        padding: 6px 10px;
+        font-size: 16px;
+        line-height: 1;
+        background: rgba(0, 0, 0, 0.6);
+        color: #eee;
+        border: 1px solid #666;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      #top-right-controls button:hover:not(:disabled) {
+        background: rgba(40, 40, 40, 0.85);
+      }
+      #top-right-controls button:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
       #hero-panel {
         display: none;
         position: absolute;
-        top: 12px;
+        top: 56px;
         right: 12px;
         width: 220px;
         padding: 12px 14px;
@@ -596,6 +624,107 @@
       #claim-all-button:hover {
         filter: brightness(1.1);
       }
+      /* Step 29: settings panel (BGM/SFX volume + hard reset) */
+      #settings-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.8);
+        align-items: center;
+        justify-content: center;
+        z-index: 20;
+      }
+      #settings-overlay.open {
+        display: flex;
+      }
+      #settings-panel {
+        width: 420px;
+        max-height: 85vh;
+        overflow-y: auto;
+        padding: 20px 24px;
+        background: #161616;
+        border: 1px solid #666;
+        border-radius: 10px;
+      }
+      #settings-panel .settings-title {
+        font-size: 18px;
+        font-weight: bold;
+        margin-bottom: 16px;
+      }
+      #settings-panel .settings-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 14px;
+      }
+      #settings-panel .settings-row label {
+        width: 70px;
+        font-size: 13px;
+      }
+      #settings-panel .settings-row input[type='range'] {
+        flex: 1;
+      }
+      #settings-panel .settings-row span {
+        width: 40px;
+        text-align: right;
+        font-size: 12px;
+        opacity: 0.8;
+      }
+      #settings-panel .settings-danger {
+        margin-top: 18px;
+        padding: 12px 14px;
+        border: 1px solid #ef4444;
+        border-radius: 8px;
+        background: rgba(239, 68, 68, 0.08);
+      }
+      #settings-panel .settings-danger-title {
+        font-weight: bold;
+        color: #ef4444;
+        margin-bottom: 6px;
+      }
+      #settings-panel .settings-danger-desc {
+        font-size: 12px;
+        opacity: 0.8;
+        margin-bottom: 10px;
+      }
+      #settings-panel .settings-danger input[type='text'] {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 6px 8px;
+        margin-bottom: 8px;
+        background: #0b0b0b;
+        color: #eee;
+        border: 1px solid #444;
+        border-radius: 4px;
+      }
+      #settings-panel .settings-danger button {
+        width: 100%;
+        padding: 8px 10px;
+        font-size: 13px;
+        font-weight: bold;
+        background: #ef4444;
+        color: #fff;
+        border: 1px solid #ef4444;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      #settings-panel .settings-danger button:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+        background: #262626;
+        border-color: #444;
+      }
+      #settings-panel #settings-close-button {
+        width: 100%;
+        margin-top: 16px;
+        padding: 8px 10px;
+        font-size: 13px;
+        background: #262626;
+        color: #eee;
+        border: 1px solid #444;
+        border-radius: 4px;
+        cursor: pointer;
+      }
       /* Step 27: prestige/rebirth ("转生仪式") */
       #ascension-button {
         padding: 8px 16px;
@@ -702,9 +831,16 @@
         <div>记忆碎片: <span id="hud-fragments">0</span></div>
         <div>永恒星火: <span id="hud-sparks">0</span></div>
       </div>
+      <div id="top-right-controls">
+        <button id="pause-button" title="暂停/继续">⏸️</button>
+        <button id="settings-button" title="设置">⚙️</button>
+      </div>
       <div id="hero-panel"></div>
       <div id="hud-hazard"></div>
       <div id="hud-backpack-anchor">🎒</div>
+    </div>
+    <div id="settings-overlay">
+      <div id="settings-panel"></div>
     </div>
     <div id="welcome-back-overlay">
       <div id="welcome-back-panel"></div>
