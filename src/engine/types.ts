@@ -327,6 +327,11 @@ export interface GameState {
   // script never refires (including after loading a save already past wave
   // 1). Persisted, unlike pendingStoryId below.
   hasSeenTutorialStory: boolean;
+  // BiomeIds (biomeConfig.ts) whose storyConfig.ts chapter-intro script has
+  // already played, ever - the biome cycle repeats every 10 chapters
+  // (getBiomeForChapter) but each biome's own story beat should only play
+  // once. See WaveSystem.advanceToNextWave.
+  seenChapterStoryIds: string[];
   // Ids of tutorialConfig.ts steps the player has already dismissed - each
   // fires once, forever, same "one-shot latch" contract as
   // hasSeenTutorialStory. See TutorialOverlay.tsx/tutorialConfig.

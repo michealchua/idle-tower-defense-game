@@ -5,6 +5,7 @@ import { enemyArchetypes } from '../../data/enemyArchetypes';
 import { effectLifetimes, hitStopConfig, screenShakeConfig } from '../../data/effectConfig';
 import { getTalentMultiplier, talentPointRewardConfig } from '../../data/talentConfig';
 import { getAscensionShopMultiplier } from '../../data/ascensionShopConfig';
+import { getBondEffects } from '../../data/bondConfig';
 import { diamondRewardConfig } from '../../data/diamondConfig';
 import { incrementDailyQuestProgress } from './DailyQuestSystem';
 import type { EnemyState, GameState, HeroState } from '../types';
@@ -102,10 +103,18 @@ export function applyDamageToHero(state: GameState, hero: HeroState, amount: num
 }
 
 export function handleDeath(state: GameState, target: EnemyState): void {
+  // special bond (bondConfig.ts) - "控制、辅助、特殊机制" (plan section 6.2)
+  // reads as economy utility rather than combat power, so it doesn't
+  // compete with warrior/guardian/mage/etc for the same stat.
+  const bondResourceGainMultiplier = getBondEffects(state.deployedHeroIds).resourceGainMultiplier;
   const goldGainMultiplier =
-    getTalentMultiplier(state.talentLevels, 'goldGain') * getAscensionShopMultiplier(state.ascensionShopLevels, 'goldGain');
+    getTalentMultiplier(state.talentLevels, 'goldGain') *
+    getAscensionShopMultiplier(state.ascensionShopLevels, 'goldGain') *
+    bondResourceGainMultiplier;
   const expGainMultiplier =
-    getTalentMultiplier(state.talentLevels, 'expGain') * getAscensionShopMultiplier(state.ascensionShopLevels, 'expGain');
+    getTalentMultiplier(state.talentLevels, 'expGain') *
+    getAscensionShopMultiplier(state.ascensionShopLevels, 'expGain') *
+    bondResourceGainMultiplier;
 
   state.gold += target.goldReward * goldGainMultiplier;
   // Parallel leveling - every deployed hero gets the full exp reward

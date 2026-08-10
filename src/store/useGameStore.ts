@@ -444,6 +444,7 @@ export const useGameStore = create<GameStore>((set) => ({
     gameState.dailyQuestClaimed = gameState.dailyQuestClaimed ?? Object.fromEntries(dailyQuestIds.map((id) => [id, false]));
     gameState.highestGlobalWaveReached = gameState.highestGlobalWaveReached ?? getGlobalWaveNumber(gameState.wave);
     gameState.totalBossKills = gameState.totalBossKills ?? 0;
+    gameState.seenChapterStoryIds = gameState.seenChapterStoryIds ?? [];
     // A save is never resumed mid-combat - heal the battlefield and
     // re-derive the current wave's shape (same as retrying a failed wave),
     // then clear the purely cosmetic/transient fields retryCurrentWave

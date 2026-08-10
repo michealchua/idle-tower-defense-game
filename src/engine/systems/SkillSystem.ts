@@ -16,6 +16,7 @@ import { getDeployedHeroes } from './HeroStatsSystem';
 import { getHeroDefinition } from '../../data/heroRosterConfig';
 import { enemyArchetypes } from '../../data/enemyArchetypes';
 import { getElementDamageMultiplier } from '../../data/elementConfig';
+import { getBondEffects } from '../../data/bondConfig';
 import type { EnemyState, GameState, HeroState } from '../types';
 
 // Skill damage respects the same hero-element-vs-enemy-element advantage as
@@ -109,8 +110,18 @@ function castAoeDamage(state: GameState, hero: HeroState, definition: SkillDefin
     lifetime: effectLifetimes.skillImpact,
   });
 
+  // mage bond (bondConfig.ts) - "元素法师可产生元素连锁" (plan section 14),
+  // read as "mage bond boosts skill damage" here rather than a literal chain
+  // mechanic - both existing skill effect types (aoeDamage/chainDamage)
+  // already hit multiple enemies per cast, which is the gameplay-relevant
+  // part of "连锁".
+  const skillDamageMultiplier = getBondEffects(state.deployedHeroIds).skillDamageMultiplier;
+
   for (const enemy of hitEnemies) {
-    const damageResult = calculateDamage(hero.attackDamage * definition.damageMultiplier * elementMultiplierFor(hero, enemy), 0);
+    const damageResult = calculateDamage(
+      hero.attackDamage * definition.damageMultiplier * elementMultiplierFor(hero, enemy) * skillDamageMultiplier,
+      0,
+    );
     applyDamage(state, enemy, damageResult);
   }
 
@@ -137,7 +148,10 @@ function castChainDamage(state: GameState, hero: HeroState, definition: SkillDef
       lifetime: effectLifetimes.lightningBolt,
     });
 
-    const damageResult = calculateDamage(hero.attackDamage * definition.damageMultiplier * elementMultiplierFor(hero, target), 0);
+    const damageResult = calculateDamage(
+      hero.attackDamage * definition.damageMultiplier * elementMultiplierFor(hero, target) * getBondEffects(state.deployedHeroIds).skillDamageMultiplier,
+      0,
+    );
     applyDamage(state, target, damageResult);
   }
 
@@ -160,7 +174,9 @@ function castHealAlly(state: GameState, hero: HeroState, definition: SkillDefini
     return false;
   }
 
-  const healAmount = hero.attackDamage * definition.damageMultiplier;
+  // support bond (bondConfig.ts) - "圣光阵营可强化治疗和护盾" (plan section
+  // 14).
+  const healAmount = hero.attackDamage * definition.damageMultiplier * getBondEffects(state.deployedHeroIds).healPowerMultiplier;
   for (const target of targets) {
     target.currentHp = Math.min(target.maxHp, target.currentHp + healAmount);
     spawnVisualEffect(state, {

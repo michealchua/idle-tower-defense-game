@@ -3,6 +3,7 @@ import { getSpawnPacing } from '../../data/spawnConfig';
 import { pickArchetypeForScore } from '../../data/enemySpawnTable';
 import { getDifficultyScore } from './DifficultySystem';
 import { mapConfig } from '../../data/mapConfig';
+import { getBiomeForChapter } from '../../data/biomeConfig';
 import { triggerScreenShake } from './EffectsSystem';
 import { screenShakeConfig } from '../../data/effectConfig';
 import type { EnemyArchetypeId } from '../../data/enemyArchetypes';
@@ -16,7 +17,7 @@ import type { GameState, Position } from '../types';
 // spawnPosition so a batch can fan out instead of stacking on one point.
 export function spawnEnemyNow(state: GameState, archetypeId?: EnemyArchetypeId, position?: Position): void {
   const difficultyScore = getDifficultyScore(state);
-  const resolvedArchetypeId = archetypeId ?? pickArchetypeForScore(difficultyScore);
+  const resolvedArchetypeId = archetypeId ?? pickArchetypeForScore(difficultyScore, getBiomeForChapter(state.wave.chapter).id);
 
   const enemy = createEnemy(resolvedArchetypeId, difficultyScore, state.ascensionLevel, state.nextEnemyInstanceId);
   if (position) {

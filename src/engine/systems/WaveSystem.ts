@@ -1,6 +1,8 @@
 import { getBossKindForWave, getBossTimeLimit, getNormalWaveEnemyCount, waveConfig } from '../../data/waveConfig';
 import { effectLifetimes } from '../../data/effectConfig';
 import { getDiamondChapterClearReward } from '../../data/diamondConfig';
+import { getBiomeForChapter } from '../../data/biomeConfig';
+import { storyScripts } from '../../data/storyConfig';
 import { spawnVisualEffect } from './EffectsSystem';
 import { incrementDailyQuestProgress } from './DailyQuestSystem';
 import type { GameState, WaveState } from '../types';
@@ -53,6 +55,7 @@ function resetBattlefieldForWave(state: GameState): void {
 
 export function advanceToNextWave(state: GameState): void {
   const wave = state.wave;
+  let enteredNewChapter = false;
   if (wave.waveInChapter >= waveConfig.wavesPerChapter) {
     // Milestone reward for clearing a whole chapter (its wave-10 boss just
     // died) - separate from the per-boss-kill reward in
@@ -60,6 +63,7 @@ export function advanceToNextWave(state: GameState): void {
     state.diamonds += getDiamondChapterClearReward(wave.chapter);
     wave.chapter += 1;
     wave.waveInChapter = 1;
+    enteredNewChapter = true;
   } else {
     wave.waveInChapter += 1;
   }
@@ -67,6 +71,21 @@ export function advanceToNextWave(state: GameState): void {
   resetBattlefieldForWave(state);
   incrementDailyQuestProgress(state, 'clearWaves');
   state.highestGlobalWaveReached = Math.max(state.highestGlobalWaveReached, getGlobalWaveNumber(wave));
+
+  // Plan section 21's "剧情以短对话→战斗→Boss→奖励→新地图为主" - the new
+  // chapter's biome gets a short story beat the first time it's ever
+  // entered (biomeConfig's 10-biome cycle repeats every 10 chapters, but
+  // each biome's own beat should only play once - see
+  // GameState.seenChapterStoryIds). forest has no storyScripts entry
+  // (chapter 1's intro is the tutorial script instead), so this silently
+  // no-ops the first time through the cycle.
+  if (enteredNewChapter) {
+    const biomeId = getBiomeForChapter(wave.chapter).id;
+    if (storyScripts[biomeId] && !state.seenChapterStoryIds.includes(biomeId)) {
+      state.seenChapterStoryIds.push(biomeId);
+      state.pendingStoryId = biomeId;
+    }
+  }
 
   spawnVisualEffect(state, {
     kind: 'waveClear',

@@ -9,7 +9,7 @@ import { getVisualTierForLevel } from '../../data/milestoneConfig';
 import { getTalentFlatBonus, getTalentMultiplier } from '../../data/talentConfig';
 import { getAscensionShopFlatBonus, getAscensionShopMultiplier } from '../../data/ascensionShopConfig';
 import { getCastleAttackMultiplier, getCastleCriticalChanceBonus } from '../../data/castleTypeConfig';
-import { getBondMultiplier } from '../../data/bondConfig';
+import { getBondEffects } from '../../data/bondConfig';
 import type { GameState, HeroState } from '../types';
 
 function clamp(value: number, min: number, max: number): number {
@@ -124,9 +124,10 @@ export function recomputeHeroStats(state: GameState): void {
   const castleAttackMultiplier = getCastleAttackMultiplier(state.castleType, state.castleLevel);
   const castleCritBonus = getCastleCriticalChanceBonus(state.castleType, state.castleLevel);
   // Bond (羁绊) synergy (bondConfig.ts) - only counts currently-deployed
-  // heroes, same "1 + sum" multiplier shape as the talent tree, applied
-  // alongside it below.
-  const bondMultiplier = getBondMultiplier(state.deployedHeroIds);
+  // heroes; unlike the talent tree, each bond feeds a different mechanic
+  // (attackDamage/maxHp/critChance/attackSpeed here, skill damage/heal power/
+  // pet damage/gold-exp gain elsewhere - see BondEffectId's doc comment).
+  const bondEffects = getBondEffects(state.deployedHeroIds);
   // "升华相对论" (ascensionConfig.ts) - the exponential factor that keeps
   // TTK constant across ascensions by scaling hero damage output and enemy
   // maxHp (see Enemy.createEnemy) by the same amount.
@@ -154,12 +155,13 @@ export function recomputeHeroStats(state: GameState): void {
       (equipmentBonus.maxHp ?? 0) +
       (petBonus.maxHp ?? 0);
 
-    const attackSpeed =
+    const attackSpeedBeforeBond =
       heroBaseConfig.attackSpeed * effectiveStatMultiplier.attackSpeed +
       levelSteps * heroLevelConfig.perLevel.attackSpeed +
       hero.upgrades.attackSpeed * heroUpgradeConfig.attackSpeed.valuePerLevel +
       (equipmentBonus.attackSpeed ?? 0) +
       (petBonus.attackSpeed ?? 0);
+    const attackSpeed = attackSpeedBeforeBond * bondEffects.attackSpeedMultiplier;
 
     const criticalChanceRaw =
       heroBaseConfig.criticalChance * effectiveStatMultiplier.criticalChance +
@@ -169,15 +171,20 @@ export function recomputeHeroStats(state: GameState): void {
     const criticalChanceMax = heroUpgradeConfig.criticalChance.maxValue;
     const criticalChanceBeforeTalent =
       criticalChanceMax === undefined ? criticalChanceRaw : Math.min(criticalChanceRaw, criticalChanceMax);
-    const critBonus = talentCritBonus + ascensionCritBonus + castleCritBonus;
+    const critBonus = talentCritBonus + ascensionCritBonus + castleCritBonus + bondEffects.criticalChanceBonus;
     const criticalChance =
       criticalChanceMax === undefined
         ? criticalChanceBeforeTalent + critBonus
         : Math.min(criticalChanceBeforeTalent + critBonus, criticalChanceMax);
 
     const finalAttackDamage =
-      attackDamage * talentAttackMultiplier * ascensionAttackMultiplier * castleAttackMultiplier * bondMultiplier * ascensionPowerMultiplier;
-    const finalMaxHp = maxHp * talentMaxHpMultiplier * ascensionMaxHpMultiplier * bondMultiplier;
+      attackDamage *
+      talentAttackMultiplier *
+      ascensionAttackMultiplier *
+      castleAttackMultiplier *
+      bondEffects.attackDamageMultiplier *
+      ascensionPowerMultiplier;
+    const finalMaxHp = maxHp * talentMaxHpMultiplier * ascensionMaxHpMultiplier * bondEffects.maxHpMultiplier;
 
     hero.attackDamage = finalAttackDamage;
     hero.maxHp = finalMaxHp;
@@ -204,6 +211,10 @@ export function recomputePetStats(state: GameState): void {
   const ascensionAttackMultiplier = getAscensionShopMultiplier(state.ascensionShopLevels, 'attackDamage');
   const castleAttackMultiplier = getCastleAttackMultiplier(state.castleType, state.castleLevel);
   const ascensionPowerMultiplier = getAscensionPowerMultiplier(state.ascensionLevel);
+  // summoner bond (bondConfig.ts) - "召唤军团可强化召唤机制" (plan section
+  // 14), applied here rather than HeroStatsSystem's hero loop since pets are
+  // what it actually boosts.
+  const bondPetDamageMultiplier = getBondEffects(state.deployedHeroIds).petDamageMultiplier;
 
   for (const pet of state.pets) {
     const template = getPetDefinition(pet.id);
@@ -212,6 +223,7 @@ export function recomputePetStats(state: GameState): void {
       talentAttackMultiplier *
       ascensionAttackMultiplier *
       castleAttackMultiplier *
+      bondPetDamageMultiplier *
       ascensionPowerMultiplier;
     pet.attackDamage = template.attackDamage * powerMultiplier;
     pet.attackSpeed = template.attackSpeed;

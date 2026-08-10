@@ -19,9 +19,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # electron-builder's unpack step (and @electron/rebuild before it)
+      # extracts/renames a lot of files in quick succession - Defender's
+      # real-time scanner on windows-latest runners intermittently wins the
+      # race and holds a lock, which surfaces as "EPERM: operation not
+      # permitted, rename ... win-unpacked.tmp -> win-unpacked" and fails the
+      # whole job. This runner is a throwaway VM destroyed after the job, so
+      # disabling its real-time protection has no effect on anything else.
+      - name: Disable Windows Defender real-time protection
+        shell: powershell
+        run: Set-MpPreference -DisableRealtimeMonitoring $true
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Install root dependencies
         run: npm ci

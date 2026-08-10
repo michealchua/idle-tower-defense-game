@@ -24,7 +24,11 @@ const STAT_LABEL_KEYS: Record<UpgradeableStat, string> = {
   criticalChance: 'hero.criticalChance',
 };
 
-const BULK_COUNTS = [1, 10, 100];
+// Plan section 24: "升级按钮 +1/+10/+100/+1000" / "资源不足10次时隐藏+10" -
+// +1 always renders (even disabled, it's the baseline action); +10/+100/
+// +1000 only render once affordable, so the row doesn't clutter with
+// buttons the player can't use yet (see the .filter below).
+const BULK_COUNTS = [1, 10, 100, 1000];
 
 function formatBonusValue(stat: UpgradeableStat, value: number): string {
   if (stat === 'criticalChance') {
@@ -62,6 +66,9 @@ function HeroUpgradeSection({ hero, gold }: { hero: HeroState; gold: number }) {
                 BULK_COUNTS.map((count) => {
                   const preview = previewHeroUpgradeBulk(hero, stat, count);
                   const canAfford = preview.levels > 0 && gold >= preview.cost;
+                  if (count > 1 && !canAfford) {
+                    return null;
+                  }
                   return (
                     <button
                       key={count}
@@ -81,6 +88,20 @@ function HeroUpgradeSection({ hero, gold }: { hero: HeroState; gold: number }) {
     </div>
   );
 }
+
+// Plan section 14's "羁绊不应只有+Attack" - each bond boosts a different
+// mechanic (see bondConfig.ts's BondEffectId), surfaced here as a tooltip so
+// the difference is actually visible, not just under-the-hood math.
+const BOND_EFFECT_LABEL_KEYS: Record<BondId, string> = {
+  warrior: 'bondEffect.warrior',
+  guardian: 'bondEffect.guardian',
+  mage: 'bondEffect.mage',
+  archer: 'bondEffect.archer',
+  assassin: 'bondEffect.assassin',
+  support: 'bondEffect.support',
+  summoner: 'bondEffect.summoner',
+  special: 'bondEffect.special',
+};
 
 const BOND_LABEL_KEYS: Record<BondId, string> = {
   warrior: 'bond.warrior',
@@ -445,7 +466,7 @@ function HeroDetail({
           <div className="stat-tile-label">{t('hero.attackDamage')}</div>
           <div className="stat-tile-value">{formatBigNumber(hero.attackDamage)}</div>
         </div>
-        <div className="stat-tile">
+        <div className="stat-tile" data-tooltip={t(BOND_EFFECT_LABEL_KEYS[definition.bondId])}>
           <div className="stat-tile-label">{t('hero.bond')}</div>
           <div className="stat-tile-value">
             {t(BOND_LABEL_KEYS[definition.bondId])} ({activeBondCounts[definition.bondId] ?? 0})

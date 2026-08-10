@@ -84,6 +84,7 @@ export function createInitialGameState(): GameState {
     reforgeDust: 0,
     lastLoginDate: null,
     hasSeenTutorialStory: false,
+    seenChapterStoryIds: [],
     completedTutorialStepIds: [],
     dailyQuestDate: null,
     dailyQuestProgress: createInitialDailyQuestProgress(),
