@@ -30,6 +30,37 @@ import { PrestigeManager, SPARK_BONUS_PER_POINT } from './PrestigeManager';
 import { formatNumber } from './utils';
 import { TutorialManager, TutorialStepId, type TutorialTargetKey } from './TutorialManager';
 
+/**
+ * Registered before literally anything else in this module runs (even
+ * loadSave() below) so that a thrown error *anywhere* in this file's own
+ * top-level execution - which otherwise silently aborts every later
+ * `const`/function call in the module, leaving a blank canvas and a frozen
+ * "-"/"0" HUD with zero indication anything went wrong - shows up as a
+ * visible on-page banner instead. This is exactly the failure mode a stale
+ * cached copy of the page (old HTML markup paired with a newer script, or
+ * vice versa) can hit, and previously had no way to diagnose short of
+ * opening devtools.
+ */
+function showFatalErrorBanner(message: string): void {
+  let banner = document.getElementById('fatal-error-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'fatal-error-banner';
+    banner.style.cssText =
+      'position:fixed;inset:0 0 auto 0;z-index:99999;background:#7f1d1d;color:#fff;padding:12px 16px;' +
+      'font:13px/1.5 sans-serif;white-space:pre-wrap;max-height:40vh;overflow-y:auto;';
+    document.body.appendChild(banner);
+  }
+  banner.textContent = `${banner.textContent ? `${banner.textContent}\n` : '⚠️ 游戏加载出错，请尝试刷新页面 (Ctrl+R)。详情：\n'}${message}`;
+}
+
+window.addEventListener('error', (event) => {
+  showFatalErrorBanner(event.message);
+});
+window.addEventListener('unhandledrejection', (event) => {
+  showFatalErrorBanner(String(event.reason));
+});
+
 // Step 24: "在游戏初始化时，最优先调用 SaveManager.load()" - the very first
 // thing this module does, before GameManager is even constructed, so every
 // later read of talent levels/Memory Fragments/highestStageCleared already
@@ -233,6 +264,20 @@ const gameScaleRoot = document.getElementById('game-scale-root') as HTMLDivEleme
  * loot), not just when the window itself resizes.
  */
 function installResponsiveGameScaling(): void {
+  // Defensive, not just decorative: this runs at module top level, before
+  // heroCatalog's build buttons, InputManager, GameRenderer, and the
+  // requestAnimationFrame loop are ever set up below - if #game-scale-root
+  // were ever missing (a mismatched build where index.html predates this
+  // wrapper but bundles a newer main.ts, or any other packaging hiccup),
+  // throwing here would silently abort every one of those, leaving a blank
+  // canvas and a frozen HUD with no error shown anywhere. Skipping just the
+  // responsive-scaling feature instead keeps the rest of the game fully
+  // playable at its fixed native size.
+  if (!gameScaleRoot) {
+    console.warn('installResponsiveGameScaling: #game-scale-root not found in the DOM - skipping responsive scaling.');
+    return;
+  }
+
   let naturalWidth = 0;
   let naturalHeight = 0;
 
