@@ -2,6 +2,7 @@ import { weightedPick } from '../../data/scaling';
 import { gachaPullConfig, gachaRarityConfig, type GachaRarity } from '../../data/gachaConfig';
 import { diamondExchangeConfig, dailyLoginRewardConfig } from '../../data/diamondConfig';
 import { gachaPityConfig, type PityPoolId } from '../../data/pityConfig';
+import { incrementDailyQuestProgress } from './DailyQuestSystem';
 import { panelUnlockWave } from '../../data/unlockConditionConfig';
 import { heroRosterConfig } from '../../data/heroRosterConfig';
 import { petRosterConfig } from '../../data/petRosterConfig';
@@ -62,6 +63,7 @@ function pullOne<T extends { id: string; rarity: GachaRarity; unlockConditions?:
   const definition = pickRosterEntryByRarity(roster, weightField, forcedRarities);
 
   state.pityCounters[pityPoolId] = rule.rarities.includes(definition.rarity) ? 0 : state.pityCounters[pityPoolId] + 1;
+  incrementDailyQuestProgress(state, 'pullGacha');
 
   const isNewUnlock = unlock(state, definition.id);
   if (!isNewUnlock) {

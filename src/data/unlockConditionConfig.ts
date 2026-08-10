@@ -38,7 +38,7 @@ export type UnlockCondition =
 //                 "所见即所得", see AscensionSystem.canAscend). Panels not
 //                 listed here (talent/ascensionShop/codex) are ungated - out
 //                 of scope for this pass.
-export type PanelId = 'hero' | 'equipment' | 'gacha' | 'pet' | 'castle' | 'ascension' | 'talent' | 'ascensionShop' | 'codex';
+export type PanelId = 'hero' | 'equipment' | 'gacha' | 'pet' | 'castle' | 'ascension' | 'talent' | 'ascensionShop' | 'codex' | 'records';
 
 export const panelUnlockWave: Partial<Record<PanelId, number>> = {
   equipment: 11,

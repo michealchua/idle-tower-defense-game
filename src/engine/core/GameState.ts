@@ -6,6 +6,7 @@ import { layoutHeroPositions } from '../../data/mapConfig';
 import { talentConfig, type TalentId } from '../../data/talentConfig';
 import { ascensionShopConfig, type AscensionShopId } from '../../data/ascensionShopConfig';
 import { gachaPityConfig, type PityPoolId } from '../../data/pityConfig';
+import { dailyQuestIds, type DailyQuestId } from '../../data/dailyQuestConfig';
 import { defaultCastleTypeId } from '../../data/castleTypeConfig';
 import { recomputeHeroStats } from '../systems/HeroStatsSystem';
 import { createInitialWaveState } from '../systems/WaveSystem';
@@ -21,6 +22,14 @@ function createInitialAscensionShopLevels(): Record<AscensionShopId, number> {
 
 function createInitialPityCounters(): Record<PityPoolId, number> {
   return Object.fromEntries(Object.keys(gachaPityConfig).map((id) => [id, 0])) as Record<PityPoolId, number>;
+}
+
+function createInitialDailyQuestProgress(): Record<DailyQuestId, number> {
+  return Object.fromEntries(dailyQuestIds.map((id) => [id, 0])) as Record<DailyQuestId, number>;
+}
+
+function createInitialDailyQuestClaimed(): Record<DailyQuestId, boolean> {
+  return Object.fromEntries(dailyQuestIds.map((id) => [id, false])) as Record<DailyQuestId, boolean>;
 }
 
 // Pre-seeds every roster entry (locked or not) at 0 so reads never need a
@@ -76,6 +85,11 @@ export function createInitialGameState(): GameState {
     lastLoginDate: null,
     hasSeenTutorialStory: false,
     completedTutorialStepIds: [],
+    dailyQuestDate: null,
+    dailyQuestProgress: createInitialDailyQuestProgress(),
+    dailyQuestClaimed: createInitialDailyQuestClaimed(),
+    highestGlobalWaveReached: 1,
+    totalBossKills: 0,
     pendingStoryId: null,
   };
 

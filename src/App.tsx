@@ -13,6 +13,7 @@ import CodexPanel from './components/CodexPanel';
 import CastlePanel from './components/CastlePanel';
 import AscensionPanel from './components/AscensionPanel';
 import AscensionShopPanel from './components/AscensionShopPanel';
+import RecordsPanel from './components/RecordsPanel';
 import { getBiomeForChapter } from './data/biomeConfig';
 import { formatBigNumber } from './data/scaling';
 import { isPanelUnlocked, type PanelId } from './data/unlockConditionConfig';
@@ -36,6 +37,7 @@ const GROWTH_TABS: TabDef[] = [
   { id: 'ascension', labelKey: 'ascension.title', icon: '🌟' },
   { id: 'ascensionShop', labelKey: 'ascensionShop.title', icon: '💎' },
   { id: 'codex', labelKey: 'codex.title', icon: '📖' },
+  { id: 'records', labelKey: 'records.title', icon: '🏆' },
 ];
 
 const CORE_TABS: TabDef[] = [
@@ -133,6 +135,8 @@ function App() {
         return <AscensionPanel />;
       case 'ascensionShop':
         return <AscensionShopPanel />;
+      case 'records':
+        return <RecordsPanel />;
     }
   }
 

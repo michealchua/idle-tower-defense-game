@@ -23,6 +23,22 @@ const zhCN = {
     saveButton: '存档',
     saved: '已保存',
   },
+  records: {
+    title: '记录',
+    statsTitle: '生涯记录',
+    highestWave: '最高波次',
+    totalBossKills: '击杀 Boss 总数',
+    dailyQuestTitle: '每日活动',
+    dailyQuestHint: '每天完成任务可领取钻石奖励,次日重置',
+    claim: '领取',
+    claimed: '已领取',
+    diamondBalance: '当前钻石',
+  },
+  dailyQuest: {
+    killEnemies: '击败 50 只敌人',
+    clearWaves: '通关 3 波',
+    pullGacha: '扭蛋 5 次',
+  },
   tutorialStep: {
     dismiss: '知道了',
     openHeroPanel: '点击这里查看你的英雄——属性、技能、升级和分支进化都在这里',

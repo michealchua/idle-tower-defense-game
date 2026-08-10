@@ -6,6 +6,7 @@ import { effectLifetimes, hitStopConfig, screenShakeConfig } from '../../data/ef
 import { getTalentMultiplier, talentPointRewardConfig } from '../../data/talentConfig';
 import { getAscensionShopMultiplier } from '../../data/ascensionShopConfig';
 import { diamondRewardConfig } from '../../data/diamondConfig';
+import { incrementDailyQuestProgress } from './DailyQuestSystem';
 import type { EnemyState, GameState, HeroState } from '../types';
 
 export interface DamageResult {
@@ -116,6 +117,7 @@ export function handleDeath(state: GameState, target: EnemyState): void {
     hero.exp += target.expReward * expGainMultiplier;
   }
   rollEquipmentDrop(state);
+  incrementDailyQuestProgress(state, 'killEnemies');
 
   // Talent points have no passive/idle income (see talentConfig.ts) - the
   // only source is killing the current wave's miniboss/boss, identified by
@@ -124,6 +126,7 @@ export function handleDeath(state: GameState, target: EnemyState): void {
   if (state.wave.isBossWave && state.wave.bossKind && target.archetypeId === state.wave.bossKind) {
     state.skillPoints += talentPointRewardConfig[state.wave.bossKind];
     state.diamonds += diamondRewardConfig[state.wave.bossKind];
+    state.totalBossKills += 1;
     triggerScreenShake(state, screenShakeConfig.bossImpactIntensity);
     triggerHitStop(state, hitStopConfig.bossKillSeconds);
   }

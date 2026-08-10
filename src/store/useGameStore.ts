@@ -52,6 +52,8 @@ import {
   type GachaPullResult,
 } from '../engine/systems/GachaSystem';
 import { starUpHero as starUpHeroInEngine, starUpPet as starUpPetInEngine } from '../engine/systems/StarUpSystem';
+import { claimDailyQuest as claimDailyQuestInEngine } from '../engine/systems/DailyQuestSystem';
+import { dailyQuestIds, type DailyQuestId } from '../data/dailyQuestConfig';
 import {
   unlockHeroByCondition as unlockHeroByConditionInEngine,
   unlockPetByCondition as unlockPetByConditionInEngine,
@@ -122,6 +124,10 @@ function snapshotGameState(state: GameState) {
     pendingStoryId: state.pendingStoryId,
     hasSeenTutorialStory: state.hasSeenTutorialStory,
     completedTutorialStepIds: [...state.completedTutorialStepIds],
+    dailyQuestProgress: { ...state.dailyQuestProgress },
+    dailyQuestClaimed: { ...state.dailyQuestClaimed },
+    highestGlobalWaveReached: state.highestGlobalWaveReached,
+    totalBossKills: state.totalBossKills,
   };
 }
 
@@ -172,6 +178,11 @@ interface GameStore {
   hasSeenTutorialStory: boolean;
   completedTutorialStepIds: string[];
   completeTutorialStep: (stepId: string) => void;
+  dailyQuestProgress: Record<DailyQuestId, number>;
+  dailyQuestClaimed: Record<DailyQuestId, boolean>;
+  highestGlobalWaveReached: number;
+  totalBossKills: number;
+  claimDailyQuest: (id: DailyQuestId) => void;
   // Which save slot the current session is tied to - null until the player
   // loads or starts a new game from TitleScreen. Drives autosave (see
   // ensureAutosaveStarted below) and the in-HUD manual save button.
@@ -407,6 +418,11 @@ export const useGameStore = create<GameStore>((set) => ({
     gameState.completedTutorialStepIds = [...gameState.completedTutorialStepIds, stepId];
     set({ completedTutorialStepIds: [...gameState.completedTutorialStepIds] });
   },
+  claimDailyQuest: (id) => {
+    if (claimDailyQuestInEngine(gameState, id)) {
+      set(snapshotGameState(gameState));
+    }
+  },
   activeSlot: null,
   saveGame: (slot) => {
     saveGameToStorage(slot, gameState);
@@ -422,6 +438,12 @@ export const useGameStore = create<GameStore>((set) => ({
     // field at all - default it so tutorialConfig.getActiveTutorialStep's
     // .includes() call never sees undefined.
     gameState.completedTutorialStepIds = gameState.completedTutorialStepIds ?? [];
+    // Same migration guard, for saves written before the daily-quest/records
+    // fields existed.
+    gameState.dailyQuestProgress = gameState.dailyQuestProgress ?? Object.fromEntries(dailyQuestIds.map((id) => [id, 0]));
+    gameState.dailyQuestClaimed = gameState.dailyQuestClaimed ?? Object.fromEntries(dailyQuestIds.map((id) => [id, false]));
+    gameState.highestGlobalWaveReached = gameState.highestGlobalWaveReached ?? getGlobalWaveNumber(gameState.wave);
+    gameState.totalBossKills = gameState.totalBossKills ?? 0;
     // A save is never resumed mid-combat - heal the battlefield and
     // re-derive the current wave's shape (same as retrying a failed wave),
     // then clear the purely cosmetic/transient fields retryCurrentWave

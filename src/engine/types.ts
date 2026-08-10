@@ -5,6 +5,7 @@ import type { BossKind } from '../data/waveConfig';
 import type { AscensionShopId } from '../data/ascensionShopConfig';
 import type { PityPoolId } from '../data/pityConfig';
 import type { CastleTypeId } from '../data/castleTypeConfig';
+import type { DailyQuestId } from '../data/dailyQuestConfig';
 
 export interface Position {
   x: number;
@@ -331,6 +332,19 @@ export interface GameState {
   // hasSeenTutorialStory. See TutorialOverlay.tsx/tutorialConfig.
   // getActiveTutorialStep.
   completedTutorialStepIds: string[];
+  // Plan section 28's local "活动"/records equivalent (no backend to drive a
+  // real leaderboard or live-service event calendar) - see
+  // DailyQuestSystem.ts for reset/progress/claim, RecordsPanel.tsx for the
+  // UI. dailyQuestDate mirrors lastLoginDate's "ISO date, local, null means
+  // never" contract.
+  dailyQuestDate: string | null;
+  dailyQuestProgress: Record<DailyQuestId, number>;
+  dailyQuestClaimed: Record<DailyQuestId, boolean>;
+  // Lifetime personal-best records, never reset by ascension (same category
+  // as goldSpentTotal) - the local stand-in for a "排行榜" this offline game
+  // has no backend to actually serve. See RecordsPanel.tsx.
+  highestGlobalWaveReached: number;
+  totalBossKills: number;
   // Which storyConfig.ts script StoryDialog should currently display, or
   // null when no dialog is active. Transient UI-trigger state (not
   // meaningful to persist mid-dialog), reset to null on load - see

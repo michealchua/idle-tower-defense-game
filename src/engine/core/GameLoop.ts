@@ -8,6 +8,7 @@ import { tickEffects, tickScreenShake } from '../systems/EffectsSystem';
 import { tickWaveProgress, tickTutorialStoryTrigger } from '../systems/WaveSystem';
 import { tickCastleIncome } from '../systems/CastleSystem';
 import { tickGachaWelcomeBonus, tickDailyLoginReward } from '../systems/GachaSystem';
+import { tickDailyQuestReset } from '../systems/DailyQuestSystem';
 import type { GameState } from '../types';
 
 const FIXED_TIMESTEP_SECONDS = 0.1;
@@ -77,6 +78,7 @@ export class GameLoop {
         tickCastleIncome(this.state, FIXED_TIMESTEP_SECONDS);
         tickGachaWelcomeBonus(this.state);
         tickDailyLoginReward(this.state);
+        tickDailyQuestReset(this.state);
       }
       tickEffects(this.state, FIXED_TIMESTEP_SECONDS);
       tickScreenShake(this.state, FIXED_TIMESTEP_SECONDS);

@@ -2,6 +2,7 @@ import { getBossKindForWave, getBossTimeLimit, getNormalWaveEnemyCount, waveConf
 import { effectLifetimes } from '../../data/effectConfig';
 import { getDiamondChapterClearReward } from '../../data/diamondConfig';
 import { spawnVisualEffect } from './EffectsSystem';
+import { incrementDailyQuestProgress } from './DailyQuestSystem';
 import type { GameState, WaveState } from '../types';
 
 // Pure - derives a wave's "shape" purely from chapter/waveInChapter. Shared
@@ -64,6 +65,8 @@ export function advanceToNextWave(state: GameState): void {
   }
   configureWaveShape(wave);
   resetBattlefieldForWave(state);
+  incrementDailyQuestProgress(state, 'clearWaves');
+  state.highestGlobalWaveReached = Math.max(state.highestGlobalWaveReached, getGlobalWaveNumber(wave));
 
   spawnVisualEffect(state, {
     kind: 'waveClear',
