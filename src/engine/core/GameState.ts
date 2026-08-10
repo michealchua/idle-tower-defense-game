@@ -75,6 +75,7 @@ export function createInitialGameState(): GameState {
     reforgeDust: 0,
     lastLoginDate: null,
     hasSeenTutorialStory: false,
+    completedTutorialStepIds: [],
     pendingStoryId: null,
   };
 

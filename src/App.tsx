@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import BattleScreen from './components/BattleScreen';
 import TitleScreen from './components/TitleScreen';
 import StoryDialog from './components/StoryDialog';
+import TutorialOverlay from './components/TutorialOverlay';
 import DebugPanel from './components/DebugPanel';
 import HeroPanel from './components/HeroPanel';
 import EquipmentPanel from './components/EquipmentPanel';
@@ -15,6 +16,7 @@ import AscensionShopPanel from './components/AscensionShopPanel';
 import { getBiomeForChapter } from './data/biomeConfig';
 import { formatBigNumber } from './data/scaling';
 import { isPanelUnlocked, type PanelId } from './data/unlockConditionConfig';
+import { getActiveTutorialStep } from './data/tutorialConfig';
 import { getGlobalWaveNumber } from './engine/systems/WaveSystem';
 import { t } from './locales/i18n';
 import { audioManager } from './audio/AudioManager';
@@ -68,6 +70,8 @@ function App() {
   const difficultyScore = useGameStore((state) => state.difficultyScore);
   const castleLevel = useGameStore((state) => state.castleLevel);
   const wave = useGameStore((state) => state.wave);
+  const activeTutorialStep = useGameStore((state) => getActiveTutorialStep(state));
+  const completeTutorialStep = useGameStore((state) => state.completeTutorialStep);
   const biome = getBiomeForChapter(wave.chapter);
   // "剥洋葱" pacing (unlockConditionConfig.panelUnlockWave) - only render tab
   // buttons for panels the run has actually reached, instead of exposing
@@ -84,6 +88,17 @@ function App() {
     window.addEventListener('pointerdown', unlock, { once: true });
     return () => window.removeEventListener('pointerdown', unlock);
   }, []);
+
+  // Opening the exact panel a tutorial step is pointing at counts as having
+  // acted on it - dismisses the bubble the same as its own "知道了" button,
+  // so the player isn't left with a stale spotlight ring around a nav
+  // button they already clicked.
+  function handleTabClick(tabId: PanelId): void {
+    setActivePanel(tabId);
+    if (activeTutorialStep?.targetSelector === `nav-${tabId}`) {
+      completeTutorialStep(activeTutorialStep.id);
+    }
+  }
 
   function handleSaveClick(): void {
     if (activeSlot === null) {
@@ -172,7 +187,7 @@ function App() {
         <div className="hud-corner bottom-left">
           <div className="hud-actions">
             {visibleGrowthTabs.map((tab) => (
-              <button key={tab.id} className="hud-btn" onClick={() => setActivePanel(tab.id)}>
+              <button key={tab.id} className="hud-btn" data-tutorial={`nav-${tab.id}`} onClick={() => handleTabClick(tab.id)}>
                 <span className="hud-btn-icon">{tab.icon}</span>
                 <span>{t(tab.labelKey)}</span>
               </button>
@@ -183,7 +198,7 @@ function App() {
         <div className="hud-corner bottom-right">
           <div className="hud-actions">
             {visibleCoreTabs.map((tab) => (
-              <button key={tab.id} className="hud-btn" onClick={() => setActivePanel(tab.id)}>
+              <button key={tab.id} className="hud-btn" data-tutorial={`nav-${tab.id}`} onClick={() => handleTabClick(tab.id)}>
                 <span className="hud-btn-icon">{tab.icon}</span>
                 <span>{t(tab.labelKey)}</span>
               </button>
@@ -209,6 +224,7 @@ function App() {
       )}
 
       <StoryDialog />
+      <TutorialOverlay />
 
       <DebugPanel />
     </div>

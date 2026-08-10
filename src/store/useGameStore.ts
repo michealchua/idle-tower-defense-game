@@ -120,6 +120,8 @@ function snapshotGameState(state: GameState) {
     reforgeDust: state.reforgeDust,
     lastLoginDate: state.lastLoginDate,
     pendingStoryId: state.pendingStoryId,
+    hasSeenTutorialStory: state.hasSeenTutorialStory,
+    completedTutorialStepIds: [...state.completedTutorialStepIds],
   };
 }
 
@@ -167,6 +169,9 @@ interface GameStore {
   lastLoginDate: string | null;
   pendingStoryId: string | null;
   dismissStory: () => void;
+  hasSeenTutorialStory: boolean;
+  completedTutorialStepIds: string[];
+  completeTutorialStep: (stepId: string) => void;
   // Which save slot the current session is tied to - null until the player
   // loads or starts a new game from TitleScreen. Drives autosave (see
   // ensureAutosaveStarted below) and the in-HUD manual save button.
@@ -395,6 +400,13 @@ export const useGameStore = create<GameStore>((set) => ({
     gameState.pendingStoryId = null;
     set({ pendingStoryId: null });
   },
+  completeTutorialStep: (stepId) => {
+    if (gameState.completedTutorialStepIds.includes(stepId)) {
+      return;
+    }
+    gameState.completedTutorialStepIds = [...gameState.completedTutorialStepIds, stepId];
+    set({ completedTutorialStepIds: [...gameState.completedTutorialStepIds] });
+  },
   activeSlot: null,
   saveGame: (slot) => {
     saveGameToStorage(slot, gameState);
@@ -406,6 +418,10 @@ export const useGameStore = create<GameStore>((set) => ({
       return false;
     }
     Object.assign(gameState, loaded);
+    // Saves written before completedTutorialStepIds existed won't have the
+    // field at all - default it so tutorialConfig.getActiveTutorialStep's
+    // .includes() call never sees undefined.
+    gameState.completedTutorialStepIds = gameState.completedTutorialStepIds ?? [];
     // A save is never resumed mid-combat - heal the battlefield and
     // re-derive the current wave's shape (same as retrying a failed wave),
     // then clear the purely cosmetic/transient fields retryCurrentWave

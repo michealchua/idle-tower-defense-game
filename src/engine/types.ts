@@ -326,6 +326,11 @@ export interface GameState {
   // script never refires (including after loading a save already past wave
   // 1). Persisted, unlike pendingStoryId below.
   hasSeenTutorialStory: boolean;
+  // Ids of tutorialConfig.ts steps the player has already dismissed - each
+  // fires once, forever, same "one-shot latch" contract as
+  // hasSeenTutorialStory. See TutorialOverlay.tsx/tutorialConfig.
+  // getActiveTutorialStep.
+  completedTutorialStepIds: string[];
   // Which storyConfig.ts script StoryDialog should currently display, or
   // null when no dialog is active. Transient UI-trigger state (not
   // meaningful to persist mid-dialog), reset to null on load - see

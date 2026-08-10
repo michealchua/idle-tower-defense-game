@@ -5,9 +5,16 @@ import { getDeployedHeroes } from './HeroStatsSystem';
 import { effectLifetimes } from '../../data/effectConfig';
 import { enemyHeroAttackIntervalSeconds } from '../../data/enemyConfig';
 import { heroBaseConfig } from '../../data/heroConfig';
+import { getHeroDefinition } from '../../data/heroRosterConfig';
+import { enemyArchetypes } from '../../data/enemyArchetypes';
+import { getElementDamageMultiplier } from '../../data/elementConfig';
 import type { GameState, Position } from '../types';
 
 interface Attacker {
+  // Only heroes ever reach tickAttackerCombat (see tickCombat below - pets
+  // have no attack stats) - id resolves heroRosterConfig's element for the
+  // elementConfig.ts advantage multiplier.
+  id: string;
   position: Position;
   attackRange: number;
   attackDamage: number;
@@ -36,7 +43,8 @@ function tickAttackerCombat(state: GameState, attacker: Attacker, deltaSeconds: 
     return;
   }
 
-  const damageResult = calculateDamage(attacker.attackDamage, attacker.criticalChance ?? 0);
+  const elementMultiplier = getElementDamageMultiplier(getHeroDefinition(attacker.id).element, enemyArchetypes[target.archetypeId].element);
+  const damageResult = calculateDamage(attacker.attackDamage * elementMultiplier, attacker.criticalChance ?? 0);
   attacker.attackCooldownRemaining = 1 / attacker.attackSpeed;
 
   spawnVisualEffect(state, {

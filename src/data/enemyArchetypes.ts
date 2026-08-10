@@ -1,3 +1,5 @@
+import type { ElementId } from './elementConfig';
+
 export type EnemyArchetypeId =
   | 'normal'
   | 'fast'
@@ -48,6 +50,9 @@ export interface SummonAbility {
 
 export interface EnemyArchetype {
   id: EnemyArchetypeId;
+  // See elementConfig.ts - what a hero's element multiplier is computed
+  // against when it hits this archetype.
+  element: ElementId;
   hpMultiplier: number;
   speedMultiplier: number;
   damageToBaseMultiplier: number;
@@ -75,6 +80,7 @@ export interface EnemyArchetype {
 export const enemyArchetypes: Record<EnemyArchetypeId, EnemyArchetype> = {
   normal: {
     id: 'normal',
+    element: 'earth',
     hpMultiplier: 1,
     speedMultiplier: 1,
     damageToBaseMultiplier: 1,
@@ -84,6 +90,7 @@ export const enemyArchetypes: Record<EnemyArchetypeId, EnemyArchetype> = {
   },
   fast: {
     id: 'fast',
+    element: 'wind',
     hpMultiplier: 0.6,
     speedMultiplier: 2,
     damageToBaseMultiplier: 0.8,
@@ -93,6 +100,7 @@ export const enemyArchetypes: Record<EnemyArchetypeId, EnemyArchetype> = {
   },
   tank: {
     id: 'tank',
+    element: 'earth',
     hpMultiplier: 4,
     speedMultiplier: 0.5,
     damageToBaseMultiplier: 1.5,
@@ -102,6 +110,7 @@ export const enemyArchetypes: Record<EnemyArchetypeId, EnemyArchetype> = {
   },
   elite: {
     id: 'elite',
+    element: 'fire',
     hpMultiplier: 2.5,
     speedMultiplier: 1.1,
     damageToBaseMultiplier: 1.3,
@@ -111,6 +120,7 @@ export const enemyArchetypes: Record<EnemyArchetypeId, EnemyArchetype> = {
   },
   swarm: {
     id: 'swarm',
+    element: 'wind',
     hpMultiplier: 0.3,
     speedMultiplier: 1.7,
     damageToBaseMultiplier: 0.5,
@@ -120,6 +130,7 @@ export const enemyArchetypes: Record<EnemyArchetypeId, EnemyArchetype> = {
   },
   brute: {
     id: 'brute',
+    element: 'earth',
     hpMultiplier: 2,
     speedMultiplier: 0.8,
     damageToBaseMultiplier: 1.2,
@@ -131,6 +142,7 @@ export const enemyArchetypes: Record<EnemyArchetypeId, EnemyArchetype> = {
   // archetype, no new behavior needed.
   giant: {
     id: 'giant',
+    element: 'earth',
     hpMultiplier: 5,
     speedMultiplier: 0.4,
     damageToBaseMultiplier: 2,
@@ -143,6 +155,7 @@ export const enemyArchetypes: Record<EnemyArchetypeId, EnemyArchetype> = {
   // Healer topping it back up visibly calms it down again.
   berserker: {
     id: 'berserker',
+    element: 'fire',
     hpMultiplier: 1.2,
     speedMultiplier: 0.9,
     damageToBaseMultiplier: 1.1,
@@ -156,6 +169,7 @@ export const enemyArchetypes: Record<EnemyArchetypeId, EnemyArchetype> = {
   // precedent speedMultiplier already sets - tune later.
   healer: {
     id: 'healer',
+    element: 'light',
     hpMultiplier: 1,
     speedMultiplier: 0.9,
     damageToBaseMultiplier: 0.8,
@@ -168,6 +182,7 @@ export const enemyArchetypes: Record<EnemyArchetypeId, EnemyArchetype> = {
   // shieldActive before touching currentHp.
   shield: {
     id: 'shield',
+    element: 'water',
     hpMultiplier: 1.3,
     speedMultiplier: 0.9,
     damageToBaseMultiplier: 1,
@@ -182,6 +197,7 @@ export const enemyArchetypes: Record<EnemyArchetypeId, EnemyArchetype> = {
   // slow rather than fast, since the revive already buys it a second wind.
   zombie: {
     id: 'zombie',
+    element: 'dark',
     hpMultiplier: 1.6,
     speedMultiplier: 0.7,
     damageToBaseMultiplier: 1.2,
@@ -196,6 +212,7 @@ export const enemyArchetypes: Record<EnemyArchetypeId, EnemyArchetype> = {
   // the minions it keeps adding, not from itself.
   witch: {
     id: 'witch',
+    element: 'dark',
     hpMultiplier: 0.8,
     speedMultiplier: 0.9,
     damageToBaseMultiplier: 0.6,
@@ -210,6 +227,7 @@ export const enemyArchetypes: Record<EnemyArchetypeId, EnemyArchetype> = {
   // beyond raw HP.
   miniboss: {
     id: 'miniboss',
+    element: 'fire',
     hpMultiplier: 8,
     speedMultiplier: 0.5,
     damageToBaseMultiplier: 2.5,
@@ -229,6 +247,7 @@ export const enemyArchetypes: Record<EnemyArchetypeId, EnemyArchetype> = {
   // because anything reads it for boss).
   boss: {
     id: 'boss',
+    element: 'dark',
     hpMultiplier: 20,
     speedMultiplier: 0.45,
     damageToBaseMultiplier: 4,

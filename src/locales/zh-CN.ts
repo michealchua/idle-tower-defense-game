@@ -23,6 +23,16 @@ const zhCN = {
     saveButton: '存档',
     saved: '已保存',
   },
+  tutorialStep: {
+    dismiss: '知道了',
+    openHeroPanel: '点击这里查看你的英雄——属性、技能、升级和分支进化都在这里',
+    firstGacha: '用金币或钻石抽取更多英雄,组建你的最强战队吧',
+    firstEquipment: '英雄掉落的装备会进入背包,记得来这里给他们穿戴上',
+    bossPrep: 'Boss 即将出现!记得先调整阵容和装备再迎战',
+    evolutionReady: '有英雄等级已满足分支进化条件,快去英雄面板选择一条进化路线吧',
+    petUnlocked: '宠物系统解锁了!抽取宠物能为全队提供额外加成',
+    castleUnlocked: '城堡解锁了!升级城堡能获得全队增益',
+  },
   story: {
     continueHint: '点击继续 ▶',
     steward: '城堡管家',
@@ -95,6 +105,14 @@ const zhCN = {
     assassin: '刺客',
     priest: '牧师',
     special: '特殊职业',
+  },
+  element: {
+    fire: '火',
+    water: '水',
+    earth: '土',
+    wind: '风',
+    light: '光',
+    dark: '暗',
   },
   evolutionBranch: {
     warriorBerserker: '狂战士',

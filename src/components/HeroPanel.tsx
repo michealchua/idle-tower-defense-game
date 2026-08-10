@@ -5,6 +5,7 @@ import { getMaxDeployedHeroes } from '../data/castleConfig';
 import { heroEvolutionConfig, heroUpgradeConfig, type HeroClass, type UpgradeableStat } from '../data/heroConfig';
 import { MAX_STAR_LEVEL, gachaRarityConfig, getStarUpCost, type GachaRarity } from '../data/gachaConfig';
 import { getActiveBondCounts, type BondId } from '../data/bondConfig';
+import type { ElementId } from '../data/elementConfig';
 import { isHeroUpgradeMaxed, previewHeroUpgradeBulk } from '../engine/systems/UpgradeSystem';
 import { canEvolveHero, getEffectiveHeroClass } from '../engine/systems/HeroSystem';
 import { formatBigNumber } from '../data/scaling';
@@ -128,6 +129,24 @@ const CLASS_ICON: Record<HeroClass, string> = {
   assassin: '🗡️',
   priest: '💉',
   special: '🌀',
+};
+
+export const ELEMENT_LABEL_KEYS: Record<ElementId, string> = {
+  fire: 'element.fire',
+  water: 'element.water',
+  earth: 'element.earth',
+  wind: 'element.wind',
+  light: 'element.light',
+  dark: 'element.dark',
+};
+
+export const ELEMENT_ICON: Record<ElementId, string> = {
+  fire: '🔥',
+  water: '💧',
+  earth: '🪨',
+  wind: '🌪️',
+  light: '☀️',
+  dark: '🌑',
 };
 
 const RARITY_LABEL_KEYS: Record<GachaRarity, string> = {
@@ -403,6 +422,8 @@ function HeroDetail({
       </div>
       <div className="item-detail">
         {CLASS_ICON[effectiveClass]} {t(CLASS_LABEL_KEYS[effectiveClass])}
+        {' · '}
+        {ELEMENT_ICON[definition.element]} {t(ELEMENT_LABEL_KEYS[definition.element])}
         <span className="text-faint"> · {heroLabel(definition)}</span>
       </div>
 
@@ -597,7 +618,8 @@ function HeroPanel({ gameScreenRef }: { gameScreenRef: RefObject<HTMLDivElement>
                     <div className={`mini-card-name ${RARITY_CLASS[definition.rarity]}`}>
                       <span>
                         {BOND_ICON[definition.bondId]}
-                        {CLASS_ICON[getEffectiveHeroClass(hero)]} {hero.name}
+                        {CLASS_ICON[getEffectiveHeroClass(hero)]}
+                        {ELEMENT_ICON[definition.element]} {hero.name}
                         {hero.evolutionBranchId ? ' ✨' : ''}
                       </span>
                       <span className={`status-dot${isDeployed ? ' on' : ''}`} title={isDeployed ? t('squad.deployed') : t('squad.benched')} />

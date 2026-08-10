@@ -692,6 +692,76 @@ select {
   text-align: center;
 }
 
+/* TutorialOverlay - plan section 20's "实际操作引导". Deliberately no
+   full-screen blocker (unlike StoryDialog, which pauses gameplay): only the
+   ring/bubble themselves render, both non-interactive except the dismiss
+   button, so the real spotlighted nav button underneath stays directly
+   clickable the whole time. */
+.tutorial-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  pointer-events: none;
+}
+
+.tutorial-ring {
+  position: fixed;
+  border: 2px solid var(--accent-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 0 0 4px rgba(122, 162, 255, 0.25), 0 0 18px rgba(122, 162, 255, 0.55);
+  animation: tutorial-ring-pulse 1.6s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes tutorial-ring-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 4px rgba(122, 162, 255, 0.25), 0 0 18px rgba(122, 162, 255, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 7px rgba(122, 162, 255, 0.15), 0 0 26px rgba(122, 162, 255, 0.75);
+  }
+}
+
+.tutorial-bubble {
+  position: fixed;
+  transform: translateX(-50%);
+  width: 260px;
+  max-width: calc(100vw - 32px);
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--accent-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  pointer-events: auto;
+}
+
+.tutorial-bubble-above {
+  transform: translate(-50%, -100%);
+}
+
+.tutorial-bubble-message {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.tutorial-bubble-dismiss {
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.tutorial-bubble-dismiss:hover {
+  background: var(--accent-strong);
+}
+
 /* GachaPanel's "概率详情" toggle/list - plan section 17's "显示概率明细".
    Plain text button (not .btn) so it reads as a disclosure affordance
    tucked under the pity bar, not another primary action competing with the

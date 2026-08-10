@@ -3,6 +3,7 @@ import { heroClasses } from './heroConfig';
 import type { GachaRarity } from './gachaConfig';
 import type { UnlockCondition } from './unlockConditionConfig';
 import { bondIds, type BondId } from './bondConfig';
+import { elementIds, type ElementId } from './elementConfig';
 
 export interface HeroSkillUnlock {
   level: number;
@@ -46,6 +47,11 @@ export interface HeroDefinition {
   // Archetype tag (heroConfig.ts's HeroClass) - independent axis from
   // bondId, drives which two evolutionBranches this hero can pick from.
   class: HeroClass;
+  // Third independent axis (elementConfig.ts) - drives a damage multiplier
+  // against whichever enemy archetype/boss this hero is currently hitting
+  // (see CombatSystem.tickAttackerCombat/SkillSystem), never a stat roll or
+  // evolution-branch gate the way bondId/class are.
+  element: ElementId;
   // The two 分支进化 options available once this hero reaches
   // heroEvolutionConfig.unlockLevel - see HeroSystem.evolveHero.
   evolutionBranches: HeroEvolutionBranch[];
@@ -325,6 +331,7 @@ function generateHeroRoster(): HeroDefinition[] {
         statMultiplier: buildStatMultiplier(tier.powerMultiplier, role),
         bondId: bondIds[globalIndex % bondIds.length],
         class: heroClass,
+        element: elementIds[globalIndex % elementIds.length],
         evolutionBranches: heroClassEvolutionBranches[heroClass],
         skillUnlocks: buildSkillUnlocks(globalIndex, tier.skillCount),
         unlockConditions: unlockConditionOverrides[id],
