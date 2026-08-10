@@ -1,5 +1,18 @@
 const { app, BrowserWindow } = require('electron');
-const { gameUrl } = require('./gameUrl.cjs');
+const path = require('path');
+const { autoUpdater } = require('electron-updater');
+const { devUrl } = require('./gameUrl.cjs');
+
+// Packaged builds bundle the game as static files (electron-builder's
+// extraResources config copies dist/ to resources/dist/ - see package.json's
+// "build" key) so the app runs fully offline; only `electron:dev` loads a
+// live dev-server URL instead (see gameUrl.cjs).
+function resolveIndexPath() {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, 'dist', 'index.html');
+  }
+  return path.join(__dirname, '..', 'dist', 'index.html');
+}
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -24,15 +37,17 @@ function createWindow() {
     // something the installer step already handles correctly.
   });
 
-  win.loadURL(gameUrl);
+  if (devUrl) {
+    win.loadURL(devUrl);
+  } else {
+    win.loadFile(resolveIndexPath());
+  }
 
   // autoHideMenuBar removes the normal View > Reload menu item entirely, so
   // without this there'd be no way to recover a stuck/stale page short of
   // fully quitting and relaunching the app. reloadIgnoringCache() (not
   // reload()) so this also recovers from a stale *cached* copy of the page,
-  // not just a JS-level hang - the packaged app always loads gameUrl fresh
-  // over the network (see gameUrl.cjs's own doc comment on why), so there's
-  // never a reason to prefer a cached response here.
+  // not just a JS-level hang.
   win.webContents.on('before-input-event', (event, input) => {
     if (input.type !== 'keyDown') {
       return;
@@ -47,6 +62,16 @@ function createWindow() {
 
 app.whenReady().then(() => {
   createWindow();
+
+  if (app.isPackaged) {
+    // Checks GitHub Releases (see package.json's build.publish) for a newer
+    // version, downloads it in the background, and installs it on the next
+    // app restart. Not run in dev builds - there is no publish feed to
+    // check, and app.isPackaged is false there anyway.
+    autoUpdater.checkForUpdatesAndNotify().catch((err) => {
+      console.error('Auto-update check failed:', err);
+    });
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

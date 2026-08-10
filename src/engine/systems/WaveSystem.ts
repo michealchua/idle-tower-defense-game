@@ -102,7 +102,7 @@ export function tickWaveProgress(state: GameState, deltaSeconds: number): void {
     }
 
     if (wave.timeRemaining === 0 && state.base.currentHp > 0) {
-      advanceToNextWave(state);
+      retryCurrentWave(state);
     }
     return;
   }

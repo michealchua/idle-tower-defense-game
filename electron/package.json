@@ -1,8 +1,10 @@
 {
   "name": "tatakai-shell",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "private": true,
   "main": "main.cjs",
-  "dependencies": {},
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  },
   "packageManager": "traversal@1.0.0"
 }
