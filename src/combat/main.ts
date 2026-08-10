@@ -23,7 +23,7 @@ import {
 } from './Equipment';
 import { talentManager } from './TalentManager';
 import { addMemoryFragments, getMemoryFragments } from './MetaProgression';
-import { load as loadSave, getLastSaveTime, getHighestStageCleared, recordSaveNow } from './SaveManager';
+import { load as loadSave, getLastSaveTime, getHighestStageCleared, recordSaveNow, save as saveMeta } from './SaveManager';
 import { OfflineManager, type OfflineRewards } from './OfflineManager';
 import { ParticleManager, ParticleType, type ParticleArrivedEvent } from './ParticleManager';
 import { PrestigeManager, SPARK_BONUS_PER_POINT } from './PrestigeManager';
@@ -1417,7 +1417,14 @@ function showWelcomeBackPanel(rewards: OfflineRewards): void {
     welcomeBackOverlay.classList.remove('open');
     popPauseForOverlay();
     triggerLootBurst(CANVAS_CENTER_X, CANVAS_CENTER_Y, rewards.gold, rewards.memoryFragments, rewards.equipment);
+    // recordSaveNow() only updates the in-memory snapshot - without an
+    // immediate save() here, lastSaveTime never actually reaches storage
+    // until some later checkpoint (elite/boss kill, wave end, etc.), so a
+    // player who quits right after claiming could reopen the game with the
+    // same stale lastSaveTime still on disk and re-claim the same offline
+    // reward window again.
     recordSaveNow();
+    saveMeta();
     beginRun();
   });
 
@@ -1441,7 +1448,10 @@ function showWelcomeBackIfNeeded(): void {
 // without this, lastSaveTime would only ever move forward via a claimed
 // Welcome Back panel, so a session that's never away long enough to trigger
 // one would never advance the offline clock at all.
-window.addEventListener('beforeunload', () => recordSaveNow());
+window.addEventListener('beforeunload', () => {
+  recordSaveNow();
+  saveMeta();
+});
 
 // --- Step 32: the module's full boot sequence, in the exact required order -
 // 1. SaveManager.load() - the very first line of this module (see the top

@@ -197,7 +197,14 @@ export class WaveManager {
         // affix roll uses the same "wave N" convention SaveManager.
         // recordStageCleared/PrestigeManager already do.
         this.combatEngine.addEnemy(this.enemyFactory.create(next.enemyType, this.currentWaveIndex + 1));
-        this.spawnTimer += next.interval;
+        // The wait before the *next* queued entry spawns uses that entry's
+        // own interval (same convention beginSpawning's initial spawnTimer
+        // assignment already follows), not the interval of the entry that
+        // just spawned - otherwise the first enemy of a new spawn group
+        // inherits the previous group's cadence for one spawn (e.g. a wave
+        // authored with a deliberate pause before a boss group would have
+        // that pause silently skipped).
+        this.spawnTimer += this.spawnQueue[0]?.interval ?? 0;
       }
     }
 

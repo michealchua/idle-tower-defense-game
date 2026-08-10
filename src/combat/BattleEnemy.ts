@@ -302,7 +302,9 @@ export class BattleEnemy {
    */
   takeAttackDamage(amount: number): void {
     this.absorbAndApplyDamage(amount);
-    this.tryTeleport();
+    if (this.isAlive) {
+      this.tryTeleport();
+    }
   }
 
   private tryTeleport(): void {

@@ -39,7 +39,11 @@ const TUTORIAL_STEPS: Record<TutorialStepId, TutorialStepDefinition> = {
     id: TutorialStepId.UpgradeHero,
     flag: 'hasUpgradedHero',
     message: '金币已经足够了！点击场上的英雄，将其升级以变得更强吧。',
-    targets: ['placed-hero'],
+    // Also spotlights hero-panel (the top-right panel that opens once the
+    // hero is selected) - the step's actual completion action is clicking
+    // that panel's "升级" button, not the hero sprite itself, so the hole
+    // has to cover both or the button stays unreachable behind the blocker.
+    targets: ['placed-hero', 'hero-equipment-panel'],
   },
   [TutorialStepId.EquipItem]: {
     id: TutorialStepId.EquipItem,
