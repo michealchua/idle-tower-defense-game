@@ -25,6 +25,24 @@ function createWindow() {
   });
 
   win.loadURL(gameUrl);
+
+  // autoHideMenuBar removes the normal View > Reload menu item entirely, so
+  // without this there'd be no way to recover a stuck/stale page short of
+  // fully quitting and relaunching the app. reloadIgnoringCache() (not
+  // reload()) so this also recovers from a stale *cached* copy of the page,
+  // not just a JS-level hang - the packaged app always loads gameUrl fresh
+  // over the network (see gameUrl.cjs's own doc comment on why), so there's
+  // never a reason to prefer a cached response here.
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown') {
+      return;
+    }
+    const isReloadShortcut = (input.control || input.meta) && input.key.toLowerCase() === 'r';
+    if (isReloadShortcut || input.key === 'F5') {
+      win.webContents.reloadIgnoringCache();
+      event.preventDefault();
+    }
+  });
 }
 
 app.whenReady().then(() => {

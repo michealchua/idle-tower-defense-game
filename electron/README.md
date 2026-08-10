@@ -136,6 +136,13 @@ new BrowserWindow({
 });
 ```
 
+`autoHideMenuBar` also removes the normal View > Reload menu item, so
+`main.cjs` separately wires **Ctrl+R / Cmd+R / F5** to force-reload the
+window (bypassing any HTTP cache) - the only way to recover a stuck or
+stale page without fully quitting and relaunching the app, since the
+packaged app always loads `gameUrl` fresh over the network rather than
+bundling anything locally (see the URL-loading section above).
+
 `width`/`height` are sized to comfortably fit `index.html`'s fixed 960px-wide
 layout (canvas + HUD + build panel + inventory panel stacked underneath) with
 some breathing room; `minWidth`/`minHeight` stop the window from being
