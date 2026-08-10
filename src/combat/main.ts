@@ -810,31 +810,27 @@ function evaluateTutorialTriggers(): void {
  * of its own: its "rect" is computed from the first placed hero's world x/y
  * (BattleHero.x/y are canvas-local pixel coordinates) mapped through the
  * canvas's own client rect and CSS scale factor, same math InputManager.
- * toWorldPosition already uses in reverse. Its returned `element` is the
- * canvas itself (there's nothing else to bump z-index on) - clicking
- * anywhere on the canvas during this step is a looser gate than "only the
- * hero", but InputManager's own hit-testing already only resolves an actual
- * hero-upgrade action from a click that lands on one.
+ * toWorldPosition already uses in reverse.
  */
-function resolveTutorialTargets(targets: TutorialTargetKey[]): { element: HTMLElement; rect: DOMRect }[] {
-  const resolved: { element: HTMLElement; rect: DOMRect }[] = [];
+function resolveTutorialTargets(targets: TutorialTargetKey[]): DOMRect[] {
+  const resolved: DOMRect[] = [];
 
   for (const target of targets) {
     if (target === 'build-panel') {
-      resolved.push({ element: buildPanel, rect: buildPanel.getBoundingClientRect() });
+      resolved.push(buildPanel.getBoundingClientRect());
     } else if (target === 'inventory-panel') {
       const panel = document.getElementById('inventory-panel') as HTMLDivElement;
-      resolved.push({ element: panel, rect: panel.getBoundingClientRect() });
+      resolved.push(panel.getBoundingClientRect());
     } else if (target === 'hero-equipment-panel') {
       // Only spotlighted once a hero's actually selected (heroPanel is
       // display:none otherwise) - the equip step's message still makes
       // sense with just the inventory-panel hole showing until the player
       // selects one.
       if (heroPanel.style.display !== 'none') {
-        resolved.push({ element: heroPanel, rect: heroPanel.getBoundingClientRect() });
+        resolved.push(heroPanel.getBoundingClientRect());
       }
     } else if (target === 'ascension-button') {
-      resolved.push({ element: ascensionButton, rect: ascensionButton.getBoundingClientRect() });
+      resolved.push(ascensionButton.getBoundingClientRect());
     } else if (target === 'placed-hero') {
       const hero = gameManager.combatEngine.getHeroes()[0];
       if (hero) {
@@ -842,15 +838,14 @@ function resolveTutorialTargets(targets: TutorialTargetKey[]): { element: HTMLEl
         const scaleX = canvasRect.width / canvas.width;
         const scaleY = canvasRect.height / canvas.height;
         const heroSize = CELL_SIZE * 0.85;
-        resolved.push({
-          element: canvas,
-          rect: new DOMRect(
+        resolved.push(
+          new DOMRect(
             canvasRect.left + (hero.x - heroSize / 2) * scaleX,
             canvasRect.top + (hero.y - heroSize / 2) * scaleY,
             heroSize * scaleX,
             heroSize * scaleY,
           ),
-        });
+        );
       }
     }
   }
@@ -858,30 +853,80 @@ function resolveTutorialTargets(targets: TutorialTargetKey[]): { element: HTMLEl
   return resolved;
 }
 
-/** Every real DOM element currently wearing `.tutorial-highlighted-target` (the CSS class that bumps it above the click-blocker) - tracked so the next render can strip it back off before deciding what needs it this frame, rather than the class silently accumulating on stale elements. */
-let tutorialHighlightedElements: HTMLElement[] = [];
+/** Plain axis-aligned rect in viewport pixels - what computeBlockerPieces works in, since DOMRect itself is read-only and inconvenient to slice up. */
+interface PixelRect {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+/**
+ * Splits `region` into up to 4 sub-rectangles covering everything in it
+ * *except* whatever part overlaps `hole` (a classic rectangle-subtraction:
+ * top strip, bottom strip, and left/right strips spanning just the middle
+ * band) - returns `[region]` unchanged if there's no actual overlap.
+ */
+function subtractRect(region: PixelRect, hole: PixelRect): PixelRect[] {
+  const ix1 = Math.max(region.left, hole.left);
+  const iy1 = Math.max(region.top, hole.top);
+  const ix2 = Math.min(region.right, hole.right);
+  const iy2 = Math.min(region.bottom, hole.bottom);
+  if (ix1 >= ix2 || iy1 >= iy2) {
+    return [region];
+  }
+
+  const pieces: PixelRect[] = [];
+  if (region.top < iy1) {
+    pieces.push({ left: region.left, top: region.top, right: region.right, bottom: iy1 });
+  }
+  if (iy2 < region.bottom) {
+    pieces.push({ left: region.left, top: iy2, right: region.right, bottom: region.bottom });
+  }
+  if (region.left < ix1) {
+    pieces.push({ left: region.left, top: iy1, right: ix1, bottom: iy2 });
+  }
+  if (ix2 < region.right) {
+    pieces.push({ left: ix2, top: iy1, right: region.right, bottom: iy2 });
+  }
+  return pieces;
+}
+
+/**
+ * Step 33: the viewport-minus-every-hole region, as a set of rectangles -
+ * one .tutorial-blocker div gets rendered per piece instead of one single
+ * full-screen blocker, so the hole areas themselves are simply never
+ * covered by anything that would intercept a click there. Works by
+ * iteratively subtracting each hole from the whole running set of pieces
+ * (starting from just the full viewport), so it stays correct however many
+ * holes there are or however they're arranged relative to each other -
+ * see subtractRect's own doc comment for why a single "bump the real
+ * element's z-index above the blocker" trick isn't reliable here anymore.
+ */
+function computeBlockerPieces(holes: PixelRect[]): PixelRect[] {
+  let pieces: PixelRect[] = [{ left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight }];
+  for (const hole of holes) {
+    pieces = pieces.flatMap((piece) => subtractRect(piece, hole));
+  }
+  return pieces;
+}
 
 /**
  * Rebuilds #tutorial-layer from scratch every call (same "cheap enough to
  * fully rebuild, never diffed" convention every other refresh* function in
- * this file already follows) - a full-screen click-blocker (step 30's
- * "拦截所有与当前引导步骤无关的点击事件"), one CSS box-shadow "hole" per
- * resolved target rect (the spotlight - box-shadow's 9999px spread darkens
- * everything *outside* its own box, which reads as a cutout without any
- * canvas globalCompositeOperation/mix-blend-mode trickery), and a dialog
- * bubble with the step's message plus a "知道了" dismiss button - the
- * safety valve that keeps a step whose real target happens to be disabled
- * (e.g. Ascension before eligibility) from ever soft-locking the game, per
- * the spec's own "防止玩家误触导致引导流程卡死" concern. Each target's real
- * DOM element gets `.tutorial-highlighted-target` (position:relative +
- * z-index above the blocker in CSS) so it - and only it - stays genuinely
- * clickable through the overlay.
+ * this file already follows) - a set of click-blocking rects tiling every-
+ * thing except the highlighted target area(s) (step 30's "拦截所有与当前
+ * 引导步骤无关的点击事件", step 33's computeBlockerPieces - see its own doc
+ * comment for why this isn't a single full-screen blocker + z-index bump
+ * anymore), one glowing-border "hole" outline per resolved target rect
+ * (purely decorative now - the blocker pieces are what actually do the
+ * darkening), and a dialog bubble with the step's message plus a "知道了"
+ * dismiss button - the safety valve that keeps a step whose real target
+ * happens to be disabled (e.g. Ascension before eligibility) from ever
+ * soft-locking the game, per the spec's own "防止玩家误触导致引导流程卡死"
+ * concern.
  */
 function renderTutorialOverlay(): void {
-  for (const element of tutorialHighlightedElements) {
-    element.classList.remove('tutorial-highlighted-target');
-  }
-  tutorialHighlightedElements = [];
   tutorialLayer.innerHTML = '';
 
   const step = tutorialManager.activeStep;
@@ -889,21 +934,32 @@ function renderTutorialOverlay(): void {
     return;
   }
 
-  const blocker = document.createElement('div');
-  blocker.className = 'tutorial-blocker';
-  tutorialLayer.appendChild(blocker);
+  const targetRects = resolveTutorialTargets(step.targets);
+  const holes: PixelRect[] = targetRects.map((rect) => ({
+    left: rect.left - 6,
+    top: rect.top - 6,
+    right: rect.right + 6,
+    bottom: rect.bottom + 6,
+  }));
 
-  for (const { element, rect } of resolveTutorialTargets(step.targets)) {
-    const hole = document.createElement('div');
-    hole.className = 'tutorial-hole';
-    hole.style.left = `${rect.left - 6}px`;
-    hole.style.top = `${rect.top - 6}px`;
-    hole.style.width = `${rect.width + 12}px`;
-    hole.style.height = `${rect.height + 12}px`;
-    tutorialLayer.appendChild(hole);
+  for (const piece of computeBlockerPieces(holes)) {
+    const blocker = document.createElement('div');
+    blocker.className = 'tutorial-blocker';
+    blocker.style.left = `${piece.left}px`;
+    blocker.style.top = `${piece.top}px`;
+    blocker.style.width = `${Math.max(0, piece.right - piece.left)}px`;
+    blocker.style.height = `${Math.max(0, piece.bottom - piece.top)}px`;
+    tutorialLayer.appendChild(blocker);
+  }
 
-    element.classList.add('tutorial-highlighted-target');
-    tutorialHighlightedElements.push(element);
+  for (const hole of holes) {
+    const holeEl = document.createElement('div');
+    holeEl.className = 'tutorial-hole';
+    holeEl.style.left = `${hole.left}px`;
+    holeEl.style.top = `${hole.top}px`;
+    holeEl.style.width = `${hole.right - hole.left}px`;
+    holeEl.style.height = `${hole.bottom - hole.top}px`;
+    tutorialLayer.appendChild(holeEl);
   }
 
   const dialog = document.createElement('div');

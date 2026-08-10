@@ -745,7 +745,21 @@
         border-radius: 4px;
         cursor: pointer;
       }
-      /* Step 30: progressive tutorial - spotlight overlay + dialog */
+      /* Step 30/33: progressive tutorial - spotlight overlay + dialog.
+         Step 33 note: this used to bump the real highlighted DOM element's
+         z-index above a single full-screen .tutorial-blocker so it stayed
+         clickable "through" the overlay - that stopped working the instant
+         #game-scale-root (an ancestor of every real target) got a CSS
+         `transform` for responsive scaling, since a transform always
+         creates a new stacking context and no z-index inside one can ever
+         out-rank an element outside it, no matter the number. Fixed by
+         flipping the approach entirely: main.ts now computes the exact
+         viewport-space rectangles *around* each hole (see
+         computeBlockerPieces) and renders one small .tutorial-blocker div
+         per piece instead of one big one - the hole itself is simply never
+         covered by any blocking element, so whatever's really there
+         (wherever it visually ends up, transformed ancestor or not) stays
+         genuinely clickable with no z-index trick needed at all. */
       #tutorial-layer {
         position: fixed;
         inset: 0;
@@ -754,7 +768,7 @@
       }
       .tutorial-blocker {
         position: fixed;
-        inset: 0;
+        background: rgba(0, 0, 0, 0.78);
         pointer-events: auto;
       }
       .tutorial-hole {
@@ -762,17 +776,7 @@
         pointer-events: none;
         border-radius: 10px;
         border: 3px solid #facc15;
-        box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.78);
         transition: all 0.2s ease;
-      }
-      /* Bumped above .tutorial-blocker (z-index 100, inherited from
-         #tutorial-layer's stacking context) so the real target element
-         stays genuinely clickable through the overlay - !important since
-         this needs to win over whatever static/position each target
-         element already has (button, div, canvas alike). */
-      .tutorial-highlighted-target {
-        position: relative !important;
-        z-index: 101 !important;
       }
       .tutorial-dialog {
         position: fixed;
