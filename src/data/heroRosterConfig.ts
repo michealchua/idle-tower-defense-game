@@ -130,6 +130,70 @@ const heroClassEvolutionBranches: Record<HeroClass, HeroEvolutionBranch[]> = {
       skillUnlock: { skillId: 'skill-novaBlast' },
     },
   ],
+  archer: [
+    {
+      id: 'archer-windrunner',
+      nameKey: 'evolutionBranch.archerWindrunner',
+      resultClass: 'archer',
+      statMultiplier: { attackDamage: 1.1, maxHp: 0.8, attackSpeed: 1.6, criticalChance: 1.4 },
+      skillUnlock: { skillId: 'skill-arrowRain' },
+    },
+    {
+      id: 'archer-deadeye',
+      nameKey: 'evolutionBranch.archerDeadeye',
+      resultClass: 'archer',
+      statMultiplier: { attackDamage: 1.6, maxHp: 0.85, attackSpeed: 0.9, criticalChance: 1.7 },
+      skillUnlock: { skillId: 'skill-lightning' },
+    },
+  ],
+  assassin: [
+    {
+      id: 'assassin-shadowfang',
+      nameKey: 'evolutionBranch.assassinShadowfang',
+      resultClass: 'assassin',
+      statMultiplier: { attackDamage: 1.3, maxHp: 0.75, attackSpeed: 1.5, criticalChance: 1.6 },
+      skillUnlock: { skillId: 'skill-chainBlade' },
+    },
+    {
+      id: 'assassin-executioner',
+      nameKey: 'evolutionBranch.assassinExecutioner',
+      resultClass: 'assassin',
+      statMultiplier: { attackDamage: 2.0, maxHp: 0.7, attackSpeed: 1.0, criticalChance: 1.5 },
+      skillUnlock: { skillId: 'skill-thornWhip' },
+    },
+  ],
+  priest: [
+    {
+      id: 'priest-lightweaver',
+      nameKey: 'evolutionBranch.priestLightweaver',
+      resultClass: 'priest',
+      statMultiplier: { attackDamage: 0.9, maxHp: 1.5, attackSpeed: 1.0, criticalChance: 1.0 },
+      skillUnlock: { skillId: 'skill-healingLight' },
+    },
+    {
+      id: 'priest-oracle',
+      nameKey: 'evolutionBranch.priestOracle',
+      resultClass: 'priest',
+      statMultiplier: { attackDamage: 0.8, maxHp: 1.7, attackSpeed: 1.1, criticalChance: 0.9 },
+      skillUnlock: { skillId: 'skill-natureBlessing' },
+    },
+  ],
+  special: [
+    {
+      id: 'special-warden',
+      nameKey: 'evolutionBranch.specialWarden',
+      resultClass: 'special',
+      statMultiplier: { attackDamage: 1.0, maxHp: 2.0, attackSpeed: 0.9, criticalChance: 1.0 },
+      skillUnlock: { skillId: 'skill-flameNova' },
+    },
+    {
+      id: 'special-arbiter',
+      nameKey: 'evolutionBranch.specialArbiter',
+      resultClass: 'special',
+      statMultiplier: { attackDamage: 1.4, maxHp: 1.3, attackSpeed: 1.1, criticalChance: 1.2 },
+      skillUnlock: { skillId: 'skill-phoenixGrace' },
+    },
+  ],
 };
 
 interface RoleProfile {

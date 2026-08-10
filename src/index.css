@@ -984,6 +984,68 @@ select {
   overflow: hidden;
 }
 
+/* Slow ken-burns pan/zoom on the title's biome art (plan section 18's
+   "Pixel 动态背景") - reuses forest.jpg (already shipped for chapter 1)
+   instead of a dedicated title asset, darkened so the logo/text stay
+   legible over it without a separate scrim element. */
+.title-background {
+  position: absolute;
+  inset: -6%;
+  background-image: linear-gradient(180deg, rgba(6, 10, 20, 0.55), rgba(6, 10, 20, 0.85)), url('/backgrounds/forest.jpg');
+  background-size: cover;
+  background-position: center;
+  image-rendering: pixelated;
+  animation: title-bg-pan 26s ease-in-out infinite alternate;
+  z-index: 0;
+}
+
+@keyframes title-bg-pan {
+  0% {
+    transform: scale(1.06) translate(0, 0);
+  }
+  100% {
+    transform: scale(1.14) translate(-1.5%, -1.5%);
+  }
+}
+
+.title-hero-idle {
+  position: absolute;
+  bottom: 8%;
+  width: 96px;
+  height: 96px;
+  image-rendering: pixelated;
+  animation: title-hero-bob 2.4s ease-in-out infinite;
+  filter: drop-shadow(0 0 18px rgba(91, 140, 255, 0.5));
+  z-index: 1;
+}
+
+@keyframes title-hero-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+.title-narration {
+  position: relative;
+  z-index: 1;
+  max-width: min(520px, 86vw);
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+}
+
+.title-logo,
+.title-press-start {
+  position: relative;
+  z-index: 1;
+}
+
 .title-logo {
   display: flex;
   flex-direction: column;

@@ -54,9 +54,21 @@ export function getExpToNextLevel(level: number): number {
 // bondId (bondConfig.ts): bond drives squad-composition synergy bonuses,
 // class drives branch evolution (see heroEvolutionConfig/HeroDefinition.
 // evolutionBranches below) and is purely flavor/UI otherwise.
-export type HeroClass = 'warrior' | 'mage' | 'paladin' | 'summoner';
+export type HeroClass = 'warrior' | 'mage' | 'paladin' | 'summoner' | 'archer' | 'assassin' | 'priest' | 'special';
 
-export const heroClasses: HeroClass[] = ['warrior', 'mage', 'paladin', 'summoner'];
+// 8 classes matching the plan's 战士/法师/圣骑士/召唤师/弓箭手/刺客/牧师/特殊职业 spread -
+// generateHeroRoster (heroRosterConfig.ts) cycles this array by globalIndex, so
+// the roster stays evenly distributed across all 8 as long as this list is.
+export const heroClasses: HeroClass[] = [
+  'warrior',
+  'mage',
+  'paladin',
+  'summoner',
+  'archer',
+  'assassin',
+  'priest',
+  'special',
+];
 
 // 分支进化 - gacha pulls only ever produce a hero's base form (see
 // heroRosterConfig.ts's generator); once a hero reaches this level it can

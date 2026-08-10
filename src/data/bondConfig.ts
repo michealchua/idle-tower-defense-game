@@ -3,9 +3,18 @@ import { getHeroDefinition } from './heroRosterConfig';
 // Class/theme tag each hero carries (heroRosterConfig.ts assigns one per
 // hero) - fielding several heroes sharing a bond grants a team-wide
 // percentage bonus, same "1 + sum" multiplier shape as talentConfig.ts.
-export type BondId = 'warrior' | 'mage' | 'archer' | 'guardian' | 'support' | 'assassin';
+export type BondId = 'warrior' | 'mage' | 'archer' | 'guardian' | 'support' | 'assassin' | 'summoner' | 'special';
 
-export const bondIds: BondId[] = ['warrior', 'mage', 'archer', 'guardian', 'support', 'assassin'];
+export const bondIds: BondId[] = [
+  'warrior',
+  'mage',
+  'archer',
+  'guardian',
+  'support',
+  'assassin',
+  'summoner',
+  'special',
+];
 
 export interface BondThreshold {
   count: number;
@@ -35,6 +44,8 @@ export const bondConfig: Record<BondId, BondDefinition> = {
   guardian: { thresholds: sharedThresholds },
   support: { thresholds: sharedThresholds },
   assassin: { thresholds: sharedThresholds },
+  summoner: { thresholds: sharedThresholds },
+  special: { thresholds: sharedThresholds },
 };
 
 function countDeployedByBond(deployedHeroIds: string[]): Partial<Record<BondId, number>> {

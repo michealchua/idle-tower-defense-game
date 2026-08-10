@@ -88,6 +88,8 @@ const BOND_LABEL_KEYS: Record<BondId, string> = {
   guardian: 'bond.guardian',
   support: 'bond.support',
   assassin: 'bond.assassin',
+  summoner: 'bond.summoner',
+  special: 'bond.special',
 };
 
 // Quick-scan glyph per bond archetype - lets the compact roster row read at
@@ -99,6 +101,8 @@ const BOND_ICON: Record<BondId, string> = {
   guardian: '🛡️',
   support: '✨',
   assassin: '🗡️',
+  summoner: '👻',
+  special: '🌟',
 };
 
 const CLASS_LABEL_KEYS: Record<HeroClass, string> = {
@@ -106,6 +110,10 @@ const CLASS_LABEL_KEYS: Record<HeroClass, string> = {
   mage: 'class.mage',
   paladin: 'class.paladin',
   summoner: 'class.summoner',
+  archer: 'class.archer',
+  assassin: 'class.assassin',
+  priest: 'class.priest',
+  special: 'class.special',
 };
 
 // Distinct from BOND_ICON above - class and bond are independent axes (see
@@ -116,6 +124,10 @@ const CLASS_ICON: Record<HeroClass, string> = {
   mage: '🔥',
   paladin: '🛐',
   summoner: '👻',
+  archer: '🏹',
+  assassin: '🗡️',
+  priest: '💉',
+  special: '🌀',
 };
 
 const RARITY_LABEL_KEYS: Record<GachaRarity, string> = {
