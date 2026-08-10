@@ -11,7 +11,7 @@ either the bundled build or (in dev) a live dev-server URL, and wires up
 
 ```
 project root/
-  index.html          <- the actual game (Canvas engine, src/combat/main.ts)
+  index.html          <- the actual game (React app, src/main.tsx)
   package.json         <- "build" block = electron-builder config (this file's subject)
   dist/                 <- `npm run build`'s output; bundled into the packaged
                             app via `extraResources` (see below) - not committed
@@ -171,12 +171,13 @@ window (bypassing any HTTP cache) - handy if the renderer gets into a stuck
 state, though since the packaged app loads local files there's no stale
 network cache to fight, unlike the old URL-loading design.
 
-`width`/`height` are sized to comfortably fit `index.html`'s fixed 960px-wide
-layout (canvas + HUD + build panel + inventory panel stacked underneath) with
-some breathing room; `minWidth`/`minHeight` stop the window from being
-resized small enough to clip that layout. If you change the game's canvas
-size or add more UI below it, revisit these numbers together with
-`index.html`'s CSS.
+The game itself (`src/index.css`'s `.battle-layer`/`.hud-layer`) is a
+full-viewport responsive layout, not a fixed pixel size - `BattleScreen.tsx`'s
+canvas rescales to whatever space it's given via `ResizeObserver`, and HUD
+widgets/modals float in corners rather than reserving a fixed strip. `width`/
+`height`/`minWidth`/`minHeight` above are just a reasonable default window
+size and a floor that keeps corner HUD widgets from overlapping each other,
+not a hard requirement the way the old fixed-DOM layout used to be.
 
 ## Building the Windows installer
 
