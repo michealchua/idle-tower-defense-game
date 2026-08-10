@@ -9,7 +9,8 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "electron:dev": "electron electron/main.cjs http://localhost:4728",
-    "electron:build": "electron-builder"
+    "electron:build": "electron-builder",
+    "build:win": "npm run build && electron-builder --win"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -30,10 +31,20 @@
     "productName": "tataKAI",
     "directories": {
       "app": "electron",
-      "output": "release"
+      "output": "release",
+      "buildResources": "build"
     },
+    "icon": "build/icon.png",
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "tataKAI"
     }
   },
   "allowScripts": {

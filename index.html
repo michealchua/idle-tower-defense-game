@@ -3,10 +3,934 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="/icon.svg" />
     <title>tataKAI</title>
+    <style>
+      body {
+        margin: 0;
+        background: #0b0b0b;
+        color: #eee;
+        font-family: sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 32px 0;
+      }
+      #game-container {
+        position: relative;
+        width: 960px;
+      }
+      #game-canvas {
+        display: block;
+        width: 960px;
+        height: 540px;
+        background: #000;
+        border: 2px solid #333;
+      }
+      #hud {
+        position: absolute;
+        top: 12px;
+        left: 12px;
+        padding: 8px 14px;
+        background: rgba(0, 0, 0, 0.6);
+        border-radius: 6px;
+        font-size: 14px;
+        line-height: 1.7;
+        pointer-events: none;
+      }
+      #hud-message {
+        min-height: 1.4em;
+        color: #ffd54f;
+        font-weight: bold;
+      }
+      #hud-hazard {
+        position: absolute;
+        top: 12px;
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 6px 14px;
+        background: rgba(0, 0, 0, 0.6);
+        border: 1px solid #666;
+        border-radius: 6px;
+        font-size: 13px;
+        white-space: nowrap;
+        pointer-events: none;
+      }
+      /* Step 26: visual anchor a loot-burst's Equipment particles fly
+         toward ("装备飞向右侧背包区域") - this canvas layout has no
+         separate overlaid inventory panel, so this small icon stands in
+         for one. */
+      #hud-backpack-anchor {
+        position: absolute;
+        top: 50%;
+        right: 12px;
+        transform: translateY(-50%);
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: rgba(0, 0, 0, 0.55);
+        border: 1px solid #60a5fa;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 22px;
+        pointer-events: none;
+      }
+      /* Step 26: brief pulse on a HUD number the instant a particle of its
+         type arrives ("让对应的 HUD 数值...跳动增加") - toggled by
+         bumpHudElement() in main.ts, which removes+re-adds the class so it
+         can restart mid-animation if particles land in quick succession. */
+      .hud-bump {
+        display: inline-block;
+        animation: hud-bump-pulse 0.3s ease-out;
+      }
+      @keyframes hud-bump-pulse {
+        0% {
+          transform: scale(1);
+          color: inherit;
+        }
+        40% {
+          transform: scale(1.5);
+          color: #facc15;
+        }
+        100% {
+          transform: scale(1);
+          color: inherit;
+        }
+      }
+      #build-panel {
+        width: 960px;
+        margin-top: 14px;
+        display: flex;
+        gap: 10px;
+      }
+      #build-panel button {
+        padding: 8px 16px;
+        font-size: 14px;
+        background: #262626;
+        color: #eee;
+        border: 1px solid #444;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      #build-panel button:hover:not(:disabled) {
+        background: #333;
+      }
+      #build-panel button.active {
+        border-color: #ffd54f;
+        box-shadow: 0 0 0 1px #ffd54f;
+      }
+      #build-panel button:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+      /* Step 29: pause/settings button row - anchored above hero-panel
+         (which is pushed down to top: 56px below) so the two never
+         overlap. */
+      #top-right-controls {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        display: flex;
+        gap: 6px;
+        z-index: 5;
+      }
+      #top-right-controls button {
+        padding: 6px 10px;
+        font-size: 16px;
+        line-height: 1;
+        background: rgba(0, 0, 0, 0.6);
+        color: #eee;
+        border: 1px solid #666;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      #top-right-controls button:hover:not(:disabled) {
+        background: rgba(40, 40, 40, 0.85);
+      }
+      #top-right-controls button:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+      #hero-panel {
+        display: none;
+        position: absolute;
+        top: 56px;
+        right: 12px;
+        width: 220px;
+        padding: 12px 14px;
+        background: rgba(0, 0, 0, 0.75);
+        border: 1px solid #facc15;
+        border-radius: 6px;
+        font-size: 13px;
+        line-height: 1.6;
+      }
+      #hero-panel .hero-panel-title {
+        font-weight: bold;
+        color: #facc15;
+        margin-bottom: 4px;
+      }
+      #hero-panel .hero-panel-stats {
+        margin-bottom: 8px;
+      }
+      #hero-panel button {
+        display: block;
+        width: 100%;
+        margin-top: 6px;
+        padding: 6px 10px;
+        font-size: 12px;
+        background: #262626;
+        color: #eee;
+        border: 1px solid #444;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      #hero-panel button:hover:not(:disabled) {
+        background: #333;
+      }
+      #hero-panel button:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+      #hero-panel .equipment-slots {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+        margin-bottom: 8px;
+      }
+      #hero-panel .equipment-slot {
+        border: 1px dashed #555;
+        border-radius: 4px;
+        padding: 4px 6px;
+        font-size: 11px;
+        line-height: 1.4;
+      }
+      #hero-panel .equipment-slot.filled {
+        border-style: solid;
+        border-color: #facc15;
+      }
+      #hero-panel .equipment-slot .slot-name {
+        opacity: 0.6;
+      }
+      #hero-panel .equipment-slot button {
+        margin-top: 2px;
+        padding: 2px 6px;
+        font-size: 10px;
+      }
+      #inventory-panel {
+        width: 960px;
+        margin-top: 14px;
+        padding: 10px 14px;
+        background: #161616;
+        border: 1px solid #333;
+        border-radius: 6px;
+        font-size: 13px;
+      }
+      #inventory-panel .inventory-title {
+        font-weight: bold;
+        margin-bottom: 8px;
+        color: #eee;
+      }
+      #inventory-items {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .inventory-item {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 6px 10px;
+        border-radius: 4px;
+        border: 1px solid #444;
+        background: #1e1e1e;
+        min-width: 140px;
+      }
+      .inventory-item .item-name {
+        font-weight: bold;
+      }
+      .inventory-item .item-meta {
+        font-size: 11px;
+        opacity: 0.75;
+      }
+      .inventory-item button {
+        padding: 4px 8px;
+        font-size: 11px;
+        background: #262626;
+        color: #eee;
+        border: 1px solid #444;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      .inventory-item button:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+      .rarity-common {
+        color: #cbd5e1;
+      }
+      .rarity-rare {
+        color: #60a5fa;
+      }
+      .rarity-epic {
+        color: #c084fc;
+      }
+      .rarity-legendary {
+        color: #facc15;
+      }
+      #enhance-modal-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.6);
+        align-items: center;
+        justify-content: center;
+        z-index: 10;
+      }
+      #enhance-modal-overlay.open {
+        display: flex;
+      }
+      #enhance-modal {
+        width: 480px;
+        max-height: 80vh;
+        overflow-y: auto;
+        padding: 16px 18px;
+        background: #1a1a1a;
+        border: 1px solid #facc15;
+        border-radius: 8px;
+        font-size: 13px;
+      }
+      #enhance-modal .enhance-title {
+        font-weight: bold;
+        color: #facc15;
+        margin-bottom: 10px;
+        font-size: 15px;
+      }
+      #enhance-modal .enhance-target {
+        padding: 8px 10px;
+        border: 1px solid #444;
+        border-radius: 4px;
+        margin-bottom: 10px;
+      }
+      #enhance-modal .enhance-food-list {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        max-height: 220px;
+        overflow-y: auto;
+        margin-bottom: 10px;
+        border: 1px solid #333;
+        border-radius: 4px;
+        padding: 6px;
+      }
+      #enhance-modal .enhance-food-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 6px;
+        border-radius: 4px;
+      }
+      #enhance-modal .enhance-food-row:hover {
+        background: #262626;
+      }
+      #enhance-modal .enhance-preview {
+        padding: 8px 10px;
+        border: 1px dashed #555;
+        border-radius: 4px;
+        margin-bottom: 12px;
+        line-height: 1.6;
+      }
+      #enhance-modal .enhance-actions {
+        display: flex;
+        gap: 8px;
+      }
+      #enhance-modal .enhance-actions button {
+        flex: 1;
+        padding: 8px 10px;
+        font-size: 13px;
+        background: #262626;
+        color: #eee;
+        border: 1px solid #444;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      #enhance-modal .enhance-actions button:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+      #enhance-modal .enhance-actions button.confirm {
+        border-color: #facc15;
+      }
+      #talents-button {
+        padding: 8px 16px;
+        font-size: 14px;
+        background: #1e293b;
+        color: #a78bfa;
+        border: 1px solid #7c3aed;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      #talents-button:hover {
+        background: #2d1f4d;
+      }
+      #talents-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.8);
+        align-items: center;
+        justify-content: center;
+        z-index: 20;
+      }
+      #talents-overlay.open {
+        display: flex;
+      }
+      #talents-panel {
+        width: 640px;
+        max-height: 85vh;
+        overflow-y: auto;
+        padding: 20px 24px;
+        background: #161020;
+        border: 1px solid #7c3aed;
+        border-radius: 10px;
+      }
+      #talents-panel .talents-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+      }
+      #talents-panel .talents-title {
+        font-size: 18px;
+        font-weight: bold;
+        color: #a78bfa;
+      }
+      #talents-panel .talents-fragments {
+        font-size: 14px;
+        color: #ffd54f;
+      }
+      #talents-panel .talents-close {
+        padding: 4px 12px;
+        background: #262626;
+        color: #eee;
+        border: 1px solid #444;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      .talent-node {
+        padding: 12px 14px;
+        margin-bottom: 10px;
+        border: 1px solid #444;
+        border-radius: 6px;
+        background: #1e1e1e;
+      }
+      .talent-node.locked {
+        opacity: 0.5;
+      }
+      .talent-node .talent-node-name {
+        font-weight: bold;
+        color: #eee;
+      }
+      .talent-node .talent-node-desc {
+        font-size: 12px;
+        opacity: 0.75;
+        margin: 4px 0;
+      }
+      .talent-node .talent-node-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 6px;
+      }
+      .talent-node button {
+        padding: 6px 14px;
+        font-size: 12px;
+        background: #262626;
+        color: #eee;
+        border: 1px solid #7c3aed;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      .talent-node button:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+        border-color: #444;
+      }
+      #talent-confirm-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.75);
+        align-items: center;
+        justify-content: center;
+        z-index: 25;
+      }
+      #talent-confirm-overlay.open {
+        display: flex;
+      }
+      #talent-confirm-dialog {
+        width: 380px;
+        padding: 20px 24px;
+        background: #1a1020;
+        border: 1px solid #ef4444;
+        border-radius: 10px;
+      }
+      #talent-confirm-dialog .talent-confirm-title {
+        font-size: 16px;
+        font-weight: bold;
+        color: #facc15;
+        margin-bottom: 10px;
+      }
+      #talent-confirm-dialog .talent-confirm-cost {
+        font-size: 14px;
+        margin-bottom: 10px;
+      }
+      #talent-confirm-dialog .talent-confirm-cost b {
+        color: #a78bfa;
+        font-size: 18px;
+      }
+      #talent-confirm-dialog .talent-confirm-warning {
+        font-size: 13px;
+        font-weight: bold;
+        color: #ef4444;
+        border: 1px solid #ef4444;
+        border-radius: 6px;
+        padding: 8px 10px;
+        margin-bottom: 16px;
+      }
+      #talent-confirm-dialog .talent-confirm-actions {
+        display: flex;
+        gap: 10px;
+      }
+      #talent-confirm-dialog .talent-confirm-actions button {
+        flex: 1;
+        padding: 10px;
+        font-size: 14px;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      #talent-confirm-cancel {
+        background: #262626;
+        color: #eee;
+        border: 1px solid #444;
+      }
+      #talent-confirm-commit {
+        background: #ef4444;
+        color: #fff;
+        border: 1px solid #ef4444;
+        font-weight: bold;
+      }
+      #welcome-back-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.85);
+        align-items: center;
+        justify-content: center;
+        z-index: 30;
+      }
+      #welcome-back-overlay.open {
+        display: flex;
+      }
+      #welcome-back-panel {
+        width: 520px;
+        max-height: 85vh;
+        overflow-y: auto;
+        padding: 28px 32px;
+        background: radial-gradient(circle at top, #2a1f4d 0%, #120c22 75%);
+        border: 2px solid #facc15;
+        border-radius: 14px;
+        text-align: center;
+        box-shadow: 0 0 40px rgba(250, 204, 21, 0.35);
+      }
+      #welcome-back-panel .welcome-title {
+        font-size: 26px;
+        font-weight: bold;
+        color: #facc15;
+        margin-bottom: 4px;
+      }
+      #welcome-back-panel .welcome-duration {
+        font-size: 14px;
+        opacity: 0.8;
+        margin-bottom: 20px;
+      }
+      #welcome-back-panel .welcome-rewards-row {
+        display: flex;
+        justify-content: center;
+        gap: 28px;
+        margin-bottom: 18px;
+      }
+      #welcome-back-panel .welcome-reward-stat {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+      #welcome-back-panel .welcome-reward-value {
+        font-size: 32px;
+        font-weight: bold;
+        color: #4ade80;
+      }
+      #welcome-back-panel .welcome-reward-value.fragments {
+        color: #a78bfa;
+      }
+      #welcome-back-panel .welcome-reward-label {
+        font-size: 12px;
+        opacity: 0.75;
+        margin-top: 2px;
+      }
+      #welcome-back-panel .welcome-equipment-title {
+        font-size: 13px;
+        opacity: 0.75;
+        margin-bottom: 8px;
+      }
+      #welcome-back-panel .welcome-equipment-grid {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 8px;
+        margin-bottom: 24px;
+        max-height: 160px;
+        overflow-y: auto;
+      }
+      #welcome-back-panel .welcome-equipment-icon {
+        width: 42px;
+        height: 42px;
+        border-radius: 6px;
+        border: 2px solid #666;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+        font-weight: bold;
+      }
+      #welcome-back-panel .welcome-equipment-icon.rarity-common {
+        border-color: #cbd5e1;
+        color: #cbd5e1;
+      }
+      #welcome-back-panel .welcome-equipment-icon.rarity-rare {
+        border-color: #60a5fa;
+        color: #60a5fa;
+      }
+      #claim-all-button {
+        width: 100%;
+        padding: 14px;
+        font-size: 18px;
+        font-weight: bold;
+        background: linear-gradient(180deg, #facc15, #d97706);
+        color: #1a1200;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+      }
+      #claim-all-button:hover {
+        filter: brightness(1.1);
+      }
+      /* Step 29: settings panel (BGM/SFX volume + hard reset) */
+      #settings-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.8);
+        align-items: center;
+        justify-content: center;
+        z-index: 20;
+      }
+      #settings-overlay.open {
+        display: flex;
+      }
+      #settings-panel {
+        width: 420px;
+        max-height: 85vh;
+        overflow-y: auto;
+        padding: 20px 24px;
+        background: #161616;
+        border: 1px solid #666;
+        border-radius: 10px;
+      }
+      #settings-panel .settings-title {
+        font-size: 18px;
+        font-weight: bold;
+        margin-bottom: 16px;
+      }
+      #settings-panel .settings-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 14px;
+      }
+      #settings-panel .settings-row label {
+        width: 70px;
+        font-size: 13px;
+      }
+      #settings-panel .settings-row input[type='range'] {
+        flex: 1;
+      }
+      #settings-panel .settings-row span {
+        width: 40px;
+        text-align: right;
+        font-size: 12px;
+        opacity: 0.8;
+      }
+      #settings-panel .settings-danger {
+        margin-top: 18px;
+        padding: 12px 14px;
+        border: 1px solid #ef4444;
+        border-radius: 8px;
+        background: rgba(239, 68, 68, 0.08);
+      }
+      #settings-panel .settings-danger-title {
+        font-weight: bold;
+        color: #ef4444;
+        margin-bottom: 6px;
+      }
+      #settings-panel .settings-danger-desc {
+        font-size: 12px;
+        opacity: 0.8;
+        margin-bottom: 10px;
+      }
+      #settings-panel .settings-danger input[type='text'] {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 6px 8px;
+        margin-bottom: 8px;
+        background: #0b0b0b;
+        color: #eee;
+        border: 1px solid #444;
+        border-radius: 4px;
+      }
+      #settings-panel .settings-danger button {
+        width: 100%;
+        padding: 8px 10px;
+        font-size: 13px;
+        font-weight: bold;
+        background: #ef4444;
+        color: #fff;
+        border: 1px solid #ef4444;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      #settings-panel .settings-danger button:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+        background: #262626;
+        border-color: #444;
+      }
+      #settings-panel #settings-close-button {
+        width: 100%;
+        margin-top: 16px;
+        padding: 8px 10px;
+        font-size: 13px;
+        background: #262626;
+        color: #eee;
+        border: 1px solid #444;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      /* Step 30: progressive tutorial - spotlight overlay + dialog */
+      #tutorial-layer {
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        pointer-events: none;
+      }
+      .tutorial-blocker {
+        position: fixed;
+        inset: 0;
+        pointer-events: auto;
+      }
+      .tutorial-hole {
+        position: fixed;
+        pointer-events: none;
+        border-radius: 10px;
+        border: 3px solid #facc15;
+        box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.78);
+        transition: all 0.2s ease;
+      }
+      /* Bumped above .tutorial-blocker (z-index 100, inherited from
+         #tutorial-layer's stacking context) so the real target element
+         stays genuinely clickable through the overlay - !important since
+         this needs to win over whatever static/position each target
+         element already has (button, div, canvas alike). */
+      .tutorial-highlighted-target {
+        position: relative !important;
+        z-index: 101 !important;
+      }
+      .tutorial-dialog {
+        position: fixed;
+        top: 80px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 360px;
+        max-width: calc(100vw - 32px);
+        padding: 16px 18px;
+        background: #1a1a1a;
+        border: 2px solid #facc15;
+        border-radius: 10px;
+        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
+        pointer-events: auto;
+        z-index: 102;
+      }
+      .tutorial-dialog-message {
+        font-size: 14px;
+        line-height: 1.6;
+        color: #f5f5f5;
+        margin-bottom: 12px;
+      }
+      .tutorial-dialog-dismiss {
+        width: 100%;
+        padding: 8px 10px;
+        font-size: 13px;
+        background: #262626;
+        color: #eee;
+        border: 1px solid #facc15;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      .tutorial-dialog-dismiss:hover {
+        background: #333;
+      }
+      /* Step 27: prestige/rebirth ("转生仪式") */
+      #ascension-button {
+        padding: 8px 16px;
+        font-size: 14px;
+        font-weight: bold;
+        background: linear-gradient(180deg, #fef3c7, #d97706);
+        color: #1a1200;
+        border: 1px solid #facc15;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      #ascension-button:hover:not(:disabled) {
+        filter: brightness(1.1);
+      }
+      #ascension-button:disabled {
+        background: #262626;
+        color: #888;
+        border-color: #444;
+        cursor: not-allowed;
+      }
+      #ascension-confirm-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.85);
+        align-items: center;
+        justify-content: center;
+        z-index: 25;
+      }
+      #ascension-confirm-overlay.open {
+        display: flex;
+      }
+      #ascension-confirm-dialog {
+        width: 440px;
+        padding: 24px 28px;
+        background: radial-gradient(circle at top, #3a2a05 0%, #120c22 75%);
+        border: 2px solid #facc15;
+        border-radius: 12px;
+        box-shadow: 0 0 40px rgba(250, 204, 21, 0.35);
+      }
+      #ascension-confirm-dialog .ascension-title {
+        font-size: 20px;
+        font-weight: bold;
+        color: #facc15;
+        text-align: center;
+        margin-bottom: 16px;
+      }
+      #ascension-confirm-dialog .ascension-section {
+        margin-bottom: 14px;
+        padding: 10px 12px;
+        border-radius: 6px;
+      }
+      #ascension-confirm-dialog .ascension-section.lose {
+        border: 1px solid #ef4444;
+        background: rgba(239, 68, 68, 0.08);
+      }
+      #ascension-confirm-dialog .ascension-section.gain {
+        border: 1px solid #4ade80;
+        background: rgba(74, 222, 128, 0.08);
+      }
+      #ascension-confirm-dialog .ascension-section-title {
+        font-weight: bold;
+        margin-bottom: 6px;
+      }
+      #ascension-confirm-dialog .ascension-section.lose .ascension-section-title {
+        color: #ef4444;
+      }
+      #ascension-confirm-dialog .ascension-section.gain .ascension-section-title {
+        color: #4ade80;
+      }
+      #ascension-confirm-dialog .ascension-actions {
+        display: flex;
+        gap: 10px;
+        margin-top: 4px;
+      }
+      #ascension-confirm-dialog .ascension-actions button {
+        flex: 1;
+        padding: 12px;
+        font-size: 14px;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      #ascension-confirm-cancel {
+        background: #262626;
+        color: #eee;
+        border: 1px solid #444;
+      }
+      #ascension-confirm-commit {
+        background: linear-gradient(180deg, #fef3c7, #d97706);
+        color: #1a1200;
+        border: 1px solid #facc15;
+        font-weight: bold;
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <div id="game-container">
+      <canvas id="game-canvas" width="960" height="540"></canvas>
+      <div id="hud">
+        <div>金币: <span id="hud-gold">0</span></div>
+        <div>经验: <span id="hud-exp">0</span></div>
+        <div>波次: <span id="hud-wave">-</span></div>
+        <div>场景: <span id="hud-theme">-</span></div>
+        <div>记忆碎片: <span id="hud-fragments">0</span></div>
+        <div>永恒星火: <span id="hud-sparks">0</span></div>
+      </div>
+      <div id="top-right-controls">
+        <button id="pause-button" title="暂停/继续">⏸️</button>
+        <button id="settings-button" title="设置">⚙️</button>
+      </div>
+      <div id="hero-panel"></div>
+      <div id="hud-hazard"></div>
+      <div id="hud-backpack-anchor">🎒</div>
+    </div>
+    <div id="settings-overlay">
+      <div id="settings-panel"></div>
+    </div>
+    <div id="welcome-back-overlay">
+      <div id="welcome-back-panel"></div>
+    </div>
+    <div id="build-panel">
+      <button id="talents-button">🌟 天赋 (Talents)</button>
+      <button id="ascension-button">✨ 转生仪式 (Ascension)</button>
+    </div>
+    <div id="hud-message"></div>
+    <div id="inventory-panel">
+      <div class="inventory-title">背包 / 战利品</div>
+      <div id="inventory-items"></div>
+    </div>
+    <div id="enhance-modal-overlay">
+      <div id="enhance-modal"></div>
+    </div>
+    <div id="talents-overlay">
+      <div id="talents-panel"></div>
+    </div>
+    <div id="talent-confirm-overlay">
+      <div id="talent-confirm-dialog"></div>
+    </div>
+    <div id="ascension-confirm-overlay">
+      <div id="ascension-confirm-dialog"></div>
+    </div>
+    <div id="tutorial-layer"></div>
+    <script type="module" src="/src/combat/main.ts"></script>
   </body>
 </html>

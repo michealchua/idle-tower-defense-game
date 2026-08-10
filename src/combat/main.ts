@@ -1,6 +1,7 @@
-// Standalone browser entry point for the new combat/GameManager architecture
-// (combat-test.html) - independent of the main React app in src/main.tsx,
-// which doesn't wire this system in yet.
+// Step 32's V1.0 entry point - boots the full src/combat/* engine
+// (combat-test.html's <script> tag points here). This is the shipped game:
+// the older React app under src/main.tsx/src/store is a separate, unrelated
+// system this module never touches.
 
 import { GameManager, GameState } from './GameManager';
 import { WaveState } from './WaveManager';
@@ -11,7 +12,6 @@ import { CELL_SIZE, CANVAS_WIDTH, CANVAS_HEIGHT } from './gridConfig';
 import { GameRenderer } from '../render/GameRenderer';
 import { InputManager } from '../input/InputManager';
 import {
-  EquipmentRarity,
   EquipmentSlot,
   RARITY_MAX_LEVEL,
   applyEnhancementExp,
@@ -21,8 +21,6 @@ import {
   type StatModifierValue,
   type StatModifiers,
 } from './Equipment';
-import { equipmentSpriteSrc, generateRandomEquipment } from './equipmentCatalog';
-import type { BattleHero } from './BattleHero';
 import { talentManager } from './TalentManager';
 import { addMemoryFragments, getMemoryFragments } from './MetaProgression';
 import { load as loadSave, getLastSaveTime, getHighestStageCleared, recordSaveNow } from './SaveManager';
@@ -201,7 +199,6 @@ const enhanceModal = document.getElementById('enhance-modal') as HTMLDivElement;
 const welcomeBackOverlay = document.getElementById('welcome-back-overlay') as HTMLDivElement;
 const welcomeBackPanel = document.getElementById('welcome-back-panel') as HTMLDivElement;
 const backpackAnchor = document.getElementById('hud-backpack-anchor') as HTMLDivElement;
-const testLootBurstButton = document.getElementById('test-loot-burst-button') as HTMLButtonElement;
 const hudSparks = document.getElementById('hud-sparks') as HTMLSpanElement;
 const ascensionButton = document.getElementById('ascension-button') as HTMLButtonElement;
 const ascensionConfirmOverlay = document.getElementById('ascension-confirm-overlay') as HTMLDivElement;
@@ -238,41 +235,11 @@ function canvasLocalCenter(element: HTMLElement): { x: number; y: number } {
   };
 }
 
-/**
- * Step 21 render-validation seam: every freshly-placed hero is
- * auto-equipped with a hand-authored Legendary weapon already at
- * enhancement level 12 - well past HIGH_ENHANCEMENT_LEVEL (10) - purely
- * so opening combat-test.html immediately shows all three of this step's
- * visual features at once (weapon sprite overlay, the gold Legendary aura,
- * and the enhancement shadow-glow) without needing to grind out a real
- * boss-drop-then-enhance loop first. Bypasses InventoryManager/loot
- * entirely - the item is created and equipped directly, same "demo data,
- * not real drop economy" spirit as STARTING_GOLD above.
- */
-function equipDemoLegendaryWeapon(hero: BattleHero): void {
-  const demoWeapon: EquipmentItem = {
-    instanceId: `demo-legendary-weapon-${hero.instanceId}`,
-    itemId: 'weapon-legendary-dawnbringer',
-    name: '曙光之刃（演示）',
-    slot: EquipmentSlot.Weapon,
-    rarity: EquipmentRarity.Legendary,
-    modifiers: { attack: { flat: 50 }, crit: { flat: 0.1 } },
-    level: 12,
-    currentExp: 0,
-    baseExpValue: 200,
-    spriteUrl: equipmentSpriteSrc('weapon-legendary-dawnbringer'),
-    glowColor: '#FFD700',
-  };
-  gameManager.inventory.addItem(demoWeapon);
-  gameManager.tryEquipItem(hero.instanceId, demoWeapon.instanceId);
-}
-
 const inputManager = new InputManager(canvas, {
   onPlaceHero: (heroTypeId, cell) => {
     const result = gameManager.tryPlaceHero(heroTypeId, cell);
     if (result.success) {
       showMessage(`已放置：${heroCatalog[heroTypeId].displayName}`);
-      equipDemoLegendaryWeapon(result.hero);
       // Step 30: the real "place a hero" action this step's spotlight was
       // waiting on - only actually completes the step if it's the one
       // currently active, so a placement that happens to occur while some
@@ -660,12 +627,14 @@ function openEnhanceModal(target: EquipmentItem): void {
   }
 
   render();
+  pushPauseForOverlay();
   enhanceModalOverlay.classList.add('open');
 }
 
 function closeEnhanceModal(): void {
   enhanceModalOverlay.classList.remove('open');
   enhanceModal.innerHTML = '';
+  popPauseForOverlay();
 }
 
 enhanceModalOverlay.addEventListener('click', (event) => {
@@ -923,6 +892,7 @@ function refreshTalentsPanel(): void {
 
 function closeTalentsPanel(): void {
   talentsOverlay.classList.remove('open');
+  popPauseForOverlay();
 }
 
 /**
@@ -953,12 +923,14 @@ function openTalentConfirmDialog(nodeId: string, nodeName: string, cost: number)
     refreshTalentsPanel();
   });
 
+  pushPauseForOverlay();
   talentConfirmOverlay.classList.add('open');
 }
 
 function closeTalentConfirmDialog(): void {
   talentConfirmOverlay.classList.remove('open');
   talentConfirmDialog.innerHTML = '';
+  popPauseForOverlay();
 }
 
 talentConfirmOverlay.addEventListener('click', (event) => {
@@ -1017,12 +989,14 @@ function openAscensionConfirmDialog(): void {
     showMessage(`转生完成！获得永恒星火 +${sparksGained}`);
   });
 
+  pushPauseForOverlay();
   ascensionConfirmOverlay.classList.add('open');
 }
 
 function closeAscensionConfirmDialog(): void {
   ascensionConfirmOverlay.classList.remove('open');
   ascensionConfirmDialog.innerHTML = '';
+  popPauseForOverlay();
 }
 
 ascensionConfirmOverlay.addEventListener('click', (event) => {
@@ -1046,7 +1020,8 @@ ascensionButton.addEventListener('click', () => {
   openAscensionConfirmDialog();
 });
 
-// --- Step 29: pause/resume + settings panel --------------------------------
+// --- Step 29/32: pause/resume + a shared "any full-screen/interactive panel
+// pauses the run" stack ------------------------------------------------------
 
 function updatePauseButtonLabel(): void {
   pauseButton.textContent = gameManager.isPaused ? '▶️' : '⏸️';
@@ -1057,21 +1032,50 @@ pauseButton.addEventListener('click', () => {
   updatePauseButtonLabel();
 });
 
-/** isPaused's state the instant the settings panel was opened - restored (not just forced back to false) on close, so opening Settings while already paused via the ⏸️ button doesn't un-pause the run out from under the player. */
-let pauseStateBeforeSettings = false;
+/**
+ * Step 32's UI-state-machine audit: every overlay/modal in this file (talent
+ * tree, talent confirm, equipment enhance modal, ascension confirm, settings,
+ * welcome-back) now opens/closes through this pair instead of each hand-
+ * rolling its own "remember whether we were already paused" snapshot the way
+ * openSettingsPanel/closeSettingsPanel used to. A simple depth counter
+ * (rather than a single "was it paused before" boolean) is what makes nested
+ * overlays behave correctly - e.g. opening the talent-confirm dialog *on top
+ * of* the already-open talent tree, then cancelling just that confirm
+ * dialog, must leave the run paused (the talent tree is still up), not
+ * resume it early. Only once the outermost pushPauseForOverlay's matching
+ * pop brings the depth back to 0 does isPaused actually revert to whatever
+ * it was before the very first overlay in the stack opened (respects a
+ * manual ⏸️ press that predates any of this).
+ */
+let overlayPauseDepth = 0;
+let pauseStateBeforeOverlays = false;
 
-function openSettingsPanel(): void {
-  pauseStateBeforeSettings = gameManager.isPaused;
+function pushPauseForOverlay(): void {
+  if (overlayPauseDepth === 0) {
+    pauseStateBeforeOverlays = gameManager.isPaused;
+  }
+  overlayPauseDepth += 1;
   gameManager.isPaused = true;
   updatePauseButtonLabel();
+}
+
+function popPauseForOverlay(): void {
+  overlayPauseDepth = Math.max(0, overlayPauseDepth - 1);
+  if (overlayPauseDepth === 0) {
+    gameManager.isPaused = pauseStateBeforeOverlays;
+    updatePauseButtonLabel();
+  }
+}
+
+function openSettingsPanel(): void {
+  pushPauseForOverlay();
   renderSettingsPanel();
   settingsOverlay.classList.add('open');
 }
 
 function closeSettingsPanel(): void {
   settingsOverlay.classList.remove('open');
-  gameManager.isPaused = pauseStateBeforeSettings;
-  updatePauseButtonLabel();
+  popPauseForOverlay();
 }
 
 function renderSettingsPanel(): void {
@@ -1137,6 +1141,7 @@ settingsOverlay.addEventListener('click', (event) => {
 });
 
 talentsButton.addEventListener('click', () => {
+  pushPauseForOverlay();
   refreshTalentsPanel();
   talentsOverlay.classList.add('open');
 });
@@ -1209,16 +1214,6 @@ function triggerLootBurst(originX: number, originY: number, gold: number, memory
   );
 }
 
-testLootBurstButton.addEventListener('click', () => {
-  const demoEquipment = [
-    generateRandomEquipment([EquipmentRarity.Common]),
-    generateRandomEquipment([EquipmentRarity.Common]),
-    generateRandomEquipment([EquipmentRarity.Common]),
-  ];
-  triggerLootBurst(CANVAS_CENTER_X, CANVAS_CENTER_Y, 500, 25, demoEquipment);
-  showMessage('测试爆金币：金币 x500，记忆碎片 x25，普通装备 x3');
-});
-
 /**
  * Step 25's "上线狂欢" panel - rendered once, on load, from a single
  * already-computed OfflineRewards snapshot (not recomputed on click,
@@ -1265,11 +1260,13 @@ function showWelcomeBackPanel(rewards: OfflineRewards): void {
     // comment for why gold/fragments/inventory are deliberately untouched
     // right here.
     welcomeBackOverlay.classList.remove('open');
+    popPauseForOverlay();
     triggerLootBurst(CANVAS_CENTER_X, CANVAS_CENTER_Y, rewards.gold, rewards.memoryFragments, rewards.equipment);
     recordSaveNow();
     beginRun();
   });
 
+  pushPauseForOverlay();
   welcomeBackOverlay.classList.add('open');
 }
 
@@ -1291,10 +1288,40 @@ function showWelcomeBackIfNeeded(): void {
 // one would never advance the offline clock at all.
 window.addEventListener('beforeunload', () => recordSaveNow());
 
+// --- Step 32: the module's full boot sequence, in the exact required order -
+// 1. SaveManager.load() - the very first line of this module (see the top
+//    of the file), so every read below (talent levels, Memory Fragments,
+//    highestStageCleared, TutorialFlags) already reflects whatever was
+//    actually persisted.
+// 2. OfflineManager settlement - showWelcomeBackIfNeeded() reads the
+//    lastSaveTime SaveManager.load() just restored, computes any offline
+//    reward package, and shows the Welcome Back panel if there's something
+//    worth claiming (skipped, going straight to beginRun(), below
+//    MIN_OFFLINE_SECONDS_TO_SHOW - see that function).
+// 3. TutorialManager's onboarding - not a separate explicit call here: a
+//    genuinely fresh save has every TutorialFlags entry false, so the very
+//    first updateHud() tick after beginRun() actually starts wave 1 (once
+//    the Welcome Back panel, if any, is dismissed) already has
+//    evaluateTutorialTriggers() detect "wave 0, zero heroes placed" and
+//    activate PlaceFirstHero on its own - TutorialManager's own flag-gating
+//    is what guarantees this can only ever happen on a save's first
+//    playthrough, with no extra "is this fresh?" check needed here.
 showWelcomeBackIfNeeded();
 
 let lastTimestamp: number | null = null;
 
+/**
+ * The one requestAnimationFrame loop everything in this module runs off:
+ * GameManager (combat/wave physics), ParticleManager (loot-burst particle
+ * motion), and GameRenderer (the actual draw call) each get ticked here
+ * every frame, all gated the same way on isPaused so "pause" genuinely means
+ * every moving part freezes together, not just combat. AudioManager
+ * deliberately has no per-frame call of its own - its BGM crossfades/SFX
+ * chimes (see AudioManager.ts) run on their own setInterval/Web Audio
+ * scheduling entirely independent of this loop, so there's nothing here for
+ * it to bind to; it only ever reacts to explicit playTrack/playChime calls
+ * elsewhere in this file (theme changes, particle arrivals, etc).
+ */
 function gameLoop(timestamp: number): void {
   if (lastTimestamp === null) {
     lastTimestamp = timestamp;
