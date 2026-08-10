@@ -3,6 +3,15 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
+  // Relative (not the default absolute "/") asset base - the packaged
+  // desktop app loads dist/index.html via file:// (see electron/main.cjs's
+  // win.loadFile), where an absolute "/assets/..." src resolves against the
+  // filesystem root instead of the dist/ folder next to index.html and 404s
+  // outright. This never showed up loading over plain HTTP (Vercel, the old
+  // architecture's win.loadURL) since an absolute path against an http(s)
+  // origin resolves correctly either way - it only breaks under file://,
+  // which only exists now that the app bundles and loads the game locally.
+  base: './',
   server: {
     port: 4728,
     // Bind to all network interfaces so a tunnel (ngrok, etc.) can reach the
