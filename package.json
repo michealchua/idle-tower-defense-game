@@ -48,7 +48,8 @@
     "publish": {
       "provider": "github",
       "owner": "michealchua",
-      "repo": "idle-tower-defense-game"
+      "repo": "idle-tower-defense-game",
+      "draft": false
     },
     "win": {
       "target": "nsis",
