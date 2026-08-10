@@ -208,6 +208,88 @@ const settingsButton = document.getElementById('settings-button') as HTMLButtonE
 const settingsOverlay = document.getElementById('settings-overlay') as HTMLDivElement;
 const settingsPanel = document.getElementById('settings-panel') as HTMLDivElement;
 const tutorialLayer = document.getElementById('tutorial-layer') as HTMLDivElement;
+const gameScaleRoot = document.getElementById('game-scale-root') as HTMLDivElement;
+
+/**
+ * Step 33: makes the whole game (canvas + every panel stacked under it, all
+ * built at a fixed 960px-wide "design size" in the HTML/CSS) scale up or
+ * down to fill whatever window/screen it's actually opened in, instead of
+ * always rendering at a fixed pixel size - a small Electron window, a
+ * maximized 4K monitor, anything in between. Applies a single CSS
+ * `transform: scale(...)` to #game-scale-root rather than resizing the
+ * canvas's own drawing buffer or touching any game/world-coordinate math:
+ * the canvas keeps its exact internal 960x540 buffer, and InputManager's
+ * own click-to-world conversion (toWorldPosition) already divides by
+ * `canvas.getBoundingClientRect().width / canvas.width` - a ratio CSS
+ * transforms already factor into `getBoundingClientRect()` for free - so
+ * clicks land correctly at any scale with zero changes there. The one place
+ * that *did* need a matching fix is canvasLocalCenter() below, which used to
+ * assume a 1:1 CSS-to-buffer-pixel ratio.
+ *
+ * Uses a ResizeObserver on the wrapper itself (not just a window `resize`
+ * listener) so the "natural" unscaled size it measures - what the transform
+ * scale is computed against - stays correct even if the wrapper's own
+ * content grows or shrinks (e.g. the inventory panel gaining more rows of
+ * loot), not just when the window itself resizes.
+ */
+function installResponsiveGameScaling(): void {
+  let naturalWidth = 0;
+  let naturalHeight = 0;
+
+  function applyScale(): void {
+    if (naturalWidth <= 0 || naturalHeight <= 0) {
+      return;
+    }
+    // Uniform scale (not a separate X/Y stretch) so nothing in the canvas
+    // or UI ever renders visually distorted - it just gets uniformly
+    // bigger/smaller to fit whichever of width/height is the tighter
+    // constraint. Capped a bit above 1x so a very large/ultrawide display
+    // doesn't blow the (fixed 960x540 buffer) canvas up into a visibly
+    // blurry mess - it can still scale well past its original size, just
+    // not arbitrarily far past the point where it'd stop looking sharp.
+    const scale = Math.min(window.innerWidth / naturalWidth, window.innerHeight / naturalHeight, 1.8);
+    gameScaleRoot.style.transform = `scale(${scale})`;
+  }
+
+  // Watches #game-scale-root itself for its *content* growing/shrinking
+  // (e.g. the inventory panel gaining more rows of loot) - a naturalWidth/
+  // Height change, which is what applyScale's ratio is computed against.
+  const contentResizeObserver = new ResizeObserver((entries) => {
+    const entry = entries[0];
+    const box = entry.borderBoxSize?.[0];
+    naturalWidth = box ? box.inlineSize : entry.contentRect.width;
+    naturalHeight = box ? box.blockSize : entry.contentRect.height;
+    applyScale();
+  });
+  contentResizeObserver.observe(gameScaleRoot);
+
+  // Watches <body> (width/height: 100% of the viewport, per this page's own
+  // CSS) for the *window* resizing - deliberately not relying on the
+  // `window` 'resize' event alone for this: it doesn't fire reliably for
+  // every kind of viewport-size change an embedding context can trigger
+  // (e.g. a devtools-protocol-driven viewport resize, as opposed to a user
+  // dragging a real OS window edge), while a ResizeObserver on an
+  // element whose box genuinely tracks the viewport catches those too.
+  const viewportResizeObserver = new ResizeObserver(applyScale);
+  viewportResizeObserver.observe(document.body);
+
+  // A ResizeObserver's first callback is always deferred at least a frame
+  // (and, in a backgrounded/not-yet-composited window, potentially much
+  // longer) - measuring directly here too means the very first paint is
+  // already correctly scaled instead of a brief flash at 100%. Safe to read
+  // getBoundingClientRect() directly at this exact point and nowhere else:
+  // gameScaleRoot's `transform` has never been touched yet (this is the
+  // first thing that would ever set it), so what this reads back is
+  // guaranteed to still be the untransformed, natural size.
+  const initialRect = gameScaleRoot.getBoundingClientRect();
+  naturalWidth = initialRect.width;
+  naturalHeight = initialRect.height;
+  applyScale();
+
+  window.addEventListener('resize', applyScale);
+}
+
+installResponsiveGameScaling();
 
 let messageTimeoutId: number | undefined;
 function showMessage(text: string): void {
@@ -225,13 +307,30 @@ function bumpHudElement(element: HTMLElement): void {
   element.classList.add('hud-bump');
 }
 
-/** Canvas-local (not viewport) center point of `element` - both rects come from getBoundingClientRect() in the same viewport space, so subtracting the canvas's own origin converts straight into the coordinate space GameRenderer/ParticleManager already draw/simulate in (this canvas has no devicePixelRatio/letterbox scaling - see combat-test.html's fixed 960x540 width/height attributes matching its CSS size exactly). */
+/**
+ * `element`'s center point converted into the canvas's own internal 960x540
+ * buffer coordinate space - the same space GameRenderer/ParticleManager
+ * already draw/simulate in - so a HUD element's on-screen position can be
+ * used as a real loot-burst particle destination. Both rects come from
+ * getBoundingClientRect() in viewport space, so subtracting the canvas's
+ * own origin gives a delta in *viewport* pixels first; dividing by
+ * (canvasRect.width / canvas.width) then rescales that delta into buffer
+ * pixels. Step 33: this ratio is 1 whenever the canvas is displayed at
+ * exactly its native 960x540 (the old assumption this function used to hard-
+ * code), but installResponsiveGameScaling can now render the whole game
+ * larger or smaller than that via a CSS transform on an ancestor -
+ * getBoundingClientRect() already reflects that scale, so dividing it back
+ * out here is what keeps particles landing on the actual HUD numbers
+ * instead of drifting off as soon as the window isn't exactly 960px wide.
+ */
 function canvasLocalCenter(element: HTMLElement): { x: number; y: number } {
   const canvasRect = canvas.getBoundingClientRect();
   const elementRect = element.getBoundingClientRect();
+  const scaleX = canvas.width / canvasRect.width;
+  const scaleY = canvas.height / canvasRect.height;
   return {
-    x: elementRect.left + elementRect.width / 2 - canvasRect.left,
-    y: elementRect.top + elementRect.height / 2 - canvasRect.top,
+    x: (elementRect.left + elementRect.width / 2 - canvasRect.left) * scaleX,
+    y: (elementRect.top + elementRect.height / 2 - canvasRect.top) * scaleY,
   };
 }
 

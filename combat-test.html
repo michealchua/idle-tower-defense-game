@@ -5,15 +5,34 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Combat Renderer Test</title>
     <style>
+      html,
       body {
         margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+      }
+      body {
         background: #0b0b0b;
         color: #eee;
         font-family: sans-serif;
         display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      /* Step 33: the whole game (canvas + HUD + build/inventory panels)
+         lives at a fixed 960px-wide "design size" in here - main.ts scales
+         this single element to fit whatever window/screen it's actually
+         opened in (see installResponsiveGameScaling), so nothing below has
+         to change to support that. transform-origin: center keeps it
+         centered in the viewport at any scale, matching this rule's
+         align-items/justify-content centering of the unscaled layout box. */
+      #game-scale-root {
+        display: flex;
         flex-direction: column;
         align-items: center;
         padding: 32px 0;
+        transform-origin: center center;
       }
       #game-container {
         position: relative;
@@ -884,38 +903,40 @@
     </style>
   </head>
   <body>
-    <div id="game-container">
-      <canvas id="game-canvas" width="960" height="540"></canvas>
-      <div id="hud">
-        <div>金币: <span id="hud-gold">0</span></div>
-        <div>经验: <span id="hud-exp">0</span></div>
-        <div>波次: <span id="hud-wave">-</span></div>
-        <div>场景: <span id="hud-theme">-</span></div>
-        <div>记忆碎片: <span id="hud-fragments">0</span></div>
-        <div>永恒星火: <span id="hud-sparks">0</span></div>
+    <div id="game-scale-root">
+      <div id="game-container">
+        <canvas id="game-canvas" width="960" height="540"></canvas>
+        <div id="hud">
+          <div>金币: <span id="hud-gold">0</span></div>
+          <div>经验: <span id="hud-exp">0</span></div>
+          <div>波次: <span id="hud-wave">-</span></div>
+          <div>场景: <span id="hud-theme">-</span></div>
+          <div>记忆碎片: <span id="hud-fragments">0</span></div>
+          <div>永恒星火: <span id="hud-sparks">0</span></div>
+        </div>
+        <div id="top-right-controls">
+          <button id="pause-button" title="暂停/继续">⏸️</button>
+          <button id="settings-button" title="设置">⚙️</button>
+        </div>
+        <div id="hero-panel"></div>
+        <div id="hud-hazard"></div>
+        <div id="hud-backpack-anchor">🎒</div>
       </div>
-      <div id="top-right-controls">
-        <button id="pause-button" title="暂停/继续">⏸️</button>
-        <button id="settings-button" title="设置">⚙️</button>
+      <div id="build-panel">
+        <button id="talents-button">🌟 天赋 (Talents)</button>
+        <button id="ascension-button">✨ 转生仪式 (Ascension)</button>
       </div>
-      <div id="hero-panel"></div>
-      <div id="hud-hazard"></div>
-      <div id="hud-backpack-anchor">🎒</div>
+      <div id="hud-message"></div>
+      <div id="inventory-panel">
+        <div class="inventory-title">背包 / 战利品</div>
+        <div id="inventory-items"></div>
+      </div>
     </div>
     <div id="settings-overlay">
       <div id="settings-panel"></div>
     </div>
     <div id="welcome-back-overlay">
       <div id="welcome-back-panel"></div>
-    </div>
-    <div id="build-panel">
-      <button id="talents-button">🌟 天赋 (Talents)</button>
-      <button id="ascension-button">✨ 转生仪式 (Ascension)</button>
-    </div>
-    <div id="hud-message"></div>
-    <div id="inventory-panel">
-      <div class="inventory-title">背包 / 战利品</div>
-      <div id="inventory-items"></div>
     </div>
     <div id="enhance-modal-overlay">
       <div id="enhance-modal"></div>
