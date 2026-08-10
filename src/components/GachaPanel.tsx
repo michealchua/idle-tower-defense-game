@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { gachaPullConfig, gachaRarityConfig, type GachaRarity } from '../data/gachaConfig';
 import { diamondExchangeConfig } from '../data/diamondConfig';
 import { gachaPityConfig, type PityPoolId } from '../data/pityConfig';
@@ -40,12 +40,19 @@ function formatResult(result: GachaPullResult): string {
   return `${label} ${t('gacha.lastResultDuplicate')} ${shards} ${t('gacha.shardsUnit')}${pitySuffix}`;
 }
 
-function formatMultiResult(results: GachaPullResult[]): string {
+function countByRarity(results: GachaPullResult[]): Record<GachaRarity, number> {
   const counts: Record<GachaRarity, number> = { white: 0, green: 0, blue: 0, purple: 0, gold: 0, red: 0, rainbow: 0 };
+  for (const result of results) {
+    counts[result.rarity] += 1;
+  }
+  return counts;
+}
+
+function formatMultiResult(results: GachaPullResult[]): string {
+  const counts = countByRarity(results);
   const newUnlockLabels: string[] = [];
   let pityHits = 0;
   for (const result of results) {
-    counts[result.rarity] += 1;
     if (result.isNewUnlock) {
       newUnlockLabels.push(formatRosterLabel(result.rarity, result.id));
     }
@@ -61,6 +68,35 @@ function formatMultiResult(results: GachaPullResult[]): string {
     newUnlockLabels.length > 0 ? `${t('gacha.multiResultNew')}: ${newUnlockLabels.join(', ')}` : t('gacha.multiResultNone');
 
   return `${breakdown} · ${newLabel}${formatPitySuffix(pityHits)}`;
+}
+
+// Plan section 17's "高品质抽卡拥有独特演出" - only gold/red/rainbow hits
+// (single pull or anywhere in a multi-pull batch) earn the full-screen
+// celebration overlay (see GachaCelebration below); everything below that
+// stays as the plain result line, so the flashy moment reads as genuinely
+// rare instead of firing on every pull.
+const CELEBRATION_RARITIES: GachaRarity[] = ['rainbow', 'red', 'gold'];
+
+function getBestCelebrationRarity(results: GachaPullResult[]): GachaRarity | null {
+  const counts = countByRarity(results);
+  return CELEBRATION_RARITIES.find((rarity) => counts[rarity] > 0) ?? null;
+}
+
+// Odds actually used by the given pool (gold pool = pullWeight, premium pool
+// = premiumPullWeight - see gachaConfig.ts) as player-facing percentages -
+// plan section 17's "显示概率明细". Normalizes against the sum of every
+// rarity's weight for that field rather than assuming it's pre-summed to
+// 100 (premiumPullWeight isn't).
+function getOddsBreakdown(weightField: 'pullWeight' | 'premiumPullWeight'): { rarity: GachaRarity; pct: number }[] {
+  const total = RARITY_DISPLAY_ORDER.reduce((sum, rarity) => sum + gachaRarityConfig[rarity][weightField], 0);
+  return RARITY_DISPLAY_ORDER.map((rarity) => ({
+    rarity,
+    pct: total > 0 ? (gachaRarityConfig[rarity][weightField] / total) * 100 : 0,
+  }));
+}
+
+function formatOddsPct(pct: number): string {
+  return pct >= 0.1 ? `${pct.toFixed(1)}%` : `${pct.toFixed(3)}%`;
 }
 
 // Shared by the gold-cost and diamond-premium cards for both hero/pet pools -
@@ -81,6 +117,7 @@ function PullCard({
   pityPoolId,
   pityCurrent,
   showFirstTenPullBadge,
+  weightField,
 }: {
   icon: string;
   label: string;
@@ -89,7 +126,7 @@ function PullCard({
   balance: number;
   pullOne: () => GachaPullResult | null;
   pullMulti: (count: number) => GachaPullResult[];
-  onResult: (text: string) => void;
+  onResult: (text: string, results: GachaPullResult[]) => void;
   pityPoolId: PityPoolId;
   pityCurrent: number;
   // "新手绝对福利" - true until the player's very first ever 10-pull (on
@@ -98,11 +135,14 @@ function PullCard({
   // pullMulti) - just tells the player which x10 button is the guaranteed
   // one before they click it.
   showFirstTenPullBadge: boolean;
+  weightField: 'pullWeight' | 'premiumPullWeight';
 }) {
+  const [showOdds, setShowOdds] = useState(false);
   const canAfford = (count: number) => balance >= costPerPull * count;
   const pityRule = gachaPityConfig[pityPoolId];
   const pityRarityLabel = t(RARITY_LABEL_KEYS[pityRule.rarities[0]]);
   const pityRatio = Math.min(1, pityCurrent / pityRule.pullsUntilGuarantee);
+  const oddsBreakdown = getOddsBreakdown(weightField);
 
   return (
     <div className="mini-card">
@@ -118,6 +158,19 @@ function PullCard({
       <div className="bar-track" style={{ marginTop: 4 }}>
         <div className="bar-fill bar-fill-exp" style={{ width: `${pityRatio * 100}%` }} />
       </div>
+      <button className="gacha-odds-toggle" onClick={() => setShowOdds((open) => !open)}>
+        {showOdds ? '▾' : '▸'} {t('gacha.oddsDetail')}
+      </button>
+      {showOdds && (
+        <div className="gacha-odds-list">
+          {oddsBreakdown.map(({ rarity, pct }) => (
+            <div key={rarity} className={`gacha-odds-row ${RARITY_LABEL_KEYS[rarity] ? `rarity-${rarity}` : ''}`}>
+              <span>{t(RARITY_LABEL_KEYS[rarity])}</span>
+              <span>{formatOddsPct(pct)}</span>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="item-actions" style={{ marginTop: 8 }}>
         <button
           className="btn btn-primary btn-sm"
@@ -125,7 +178,7 @@ function PullCard({
           onClick={() => {
             const result = pullOne();
             if (result) {
-              onResult(formatResult(result));
+              onResult(formatResult(result), [result]);
             }
           }}
         >
@@ -137,7 +190,7 @@ function PullCard({
           onClick={() => {
             const results = pullMulti(10);
             if (results.length > 0) {
-              onResult(formatMultiResult(results));
+              onResult(formatMultiResult(results), results);
             }
           }}
         >
@@ -150,7 +203,7 @@ function PullCard({
             onClick={() => {
               const results = pullMulti(100);
               if (results.length > 0) {
-                onResult(formatMultiResult(results));
+                onResult(formatMultiResult(results), results);
               }
             }}
           >
@@ -177,10 +230,35 @@ function GachaPanel() {
   const pullPetPremiumMulti = useGameStore((state) => state.pullPetPremiumMulti);
   const exchangeDiamondsForGold = useGameStore((state) => state.exchangeDiamondsForGold);
   const [lastResult, setLastResult] = useState<string | null>(null);
+  const [celebration, setCelebration] = useState<{ rarity: GachaRarity; key: number } | null>(null);
+
+  // Auto-dismiss the celebration overlay - no explicit close action needed,
+  // it's a brief flourish, not a modal the player has to acknowledge.
+  useEffect(() => {
+    if (!celebration) {
+      return;
+    }
+    const timer = setTimeout(() => setCelebration(null), 1800);
+    return () => clearTimeout(timer);
+  }, [celebration]);
+
+  function handleResult(text: string, results: GachaPullResult[]): void {
+    setLastResult(text);
+    const bestRarity = getBestCelebrationRarity(results);
+    if (bestRarity) {
+      setCelebration({ rarity: bestRarity, key: Date.now() });
+    }
+  }
 
   return (
     <div className="card">
       <div className="card-title">{t('gacha.title')}</div>
+
+      {celebration && (
+        <div key={celebration.key} className={`gacha-celebration gacha-celebration-${celebration.rarity}`}>
+          <div className="gacha-celebration-label">{t(RARITY_LABEL_KEYS[celebration.rarity])}</div>
+        </div>
+      )}
 
       <div className="card-grid">
         <PullCard
@@ -191,10 +269,11 @@ function GachaPanel() {
           balance={gold}
           pullOne={pullHero}
           pullMulti={pullHeroMulti}
-          onResult={setLastResult}
+          onResult={handleResult}
           pityPoolId="heroGold"
           pityCurrent={pityCounters.heroGold}
           showFirstTenPullBadge={!isFirstTenPullDone}
+          weightField="pullWeight"
         />
         <PullCard
           icon="🐾"
@@ -204,10 +283,11 @@ function GachaPanel() {
           balance={gold}
           pullOne={pullPet}
           pullMulti={pullPetMulti}
-          onResult={setLastResult}
+          onResult={handleResult}
           pityPoolId="petGold"
           pityCurrent={pityCounters.petGold}
           showFirstTenPullBadge={!isFirstTenPullDone}
+          weightField="pullWeight"
         />
       </div>
 
@@ -223,10 +303,11 @@ function GachaPanel() {
           balance={diamonds}
           pullOne={pullHeroPremium}
           pullMulti={pullHeroPremiumMulti}
-          onResult={setLastResult}
+          onResult={handleResult}
           pityPoolId="heroPremium"
           pityCurrent={pityCounters.heroPremium}
           showFirstTenPullBadge={!isFirstTenPullDone}
+          weightField="premiumPullWeight"
         />
         <PullCard
           icon="💎🐾"
@@ -236,10 +317,11 @@ function GachaPanel() {
           balance={diamonds}
           pullOne={pullPetPremium}
           pullMulti={pullPetPremiumMulti}
-          onResult={setLastResult}
+          onResult={handleResult}
           pityPoolId="petPremium"
           pityCurrent={pityCounters.petPremium}
           showFirstTenPullBadge={!isFirstTenPullDone}
+          weightField="premiumPullWeight"
         />
       </div>
 

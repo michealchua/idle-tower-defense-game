@@ -692,6 +692,124 @@ select {
   text-align: center;
 }
 
+/* GachaPanel's "概率详情" toggle/list - plan section 17's "显示概率明细".
+   Plain text button (not .btn) so it reads as a disclosure affordance
+   tucked under the pity bar, not another primary action competing with the
+   x1/x10/x100 buttons below it. */
+.gacha-odds-toggle {
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  font-size: 11px;
+  padding: 4px 0;
+  cursor: pointer;
+  text-align: left;
+}
+.gacha-odds-toggle:hover {
+  color: var(--text-muted);
+}
+
+.gacha-odds-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  margin-bottom: 4px;
+  background: var(--bg-alt);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+}
+
+.gacha-odds-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* Plan section 17's "高品质抽卡拥有独特演出" - a brief full-panel flourish
+   that only fires for gold/red/rainbow hits (see GachaPanel's
+   CELEBRATION_RARITIES), so it reads as a genuinely rare moment instead of
+   a generic result toast. Rarity-specific glow color/duration below;
+   pointer-events:none so it never blocks the buttons underneath while it
+   plays out. */
+.gacha-celebration {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  border-radius: var(--radius);
+  animation: gacha-celebration-fade 1.8s ease-out forwards;
+}
+
+.gacha-celebration-label {
+  font-size: clamp(28px, 6vw, 52px);
+  font-weight: 800;
+  letter-spacing: 4px;
+  animation: gacha-celebration-pop 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.gacha-celebration-gold {
+  background: radial-gradient(circle, rgba(255, 182, 72, 0.35), transparent 70%);
+}
+.gacha-celebration-gold .gacha-celebration-label {
+  color: var(--rarity-gold);
+  text-shadow: 0 0 24px rgba(255, 182, 72, 0.8);
+}
+
+.gacha-celebration-red {
+  background: radial-gradient(circle, rgba(255, 59, 59, 0.35), transparent 70%);
+}
+.gacha-celebration-red .gacha-celebration-label {
+  color: var(--rarity-red);
+  text-shadow: 0 0 24px rgba(255, 59, 59, 0.85);
+}
+
+.gacha-celebration-rainbow {
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.25), transparent 70%);
+}
+.gacha-celebration-rainbow .gacha-celebration-label {
+  background-image: linear-gradient(
+    90deg,
+    var(--rarity-rainbow-1),
+    var(--rarity-rainbow-2),
+    var(--rarity-rainbow-3),
+    var(--rarity-rainbow-4),
+    var(--rarity-rainbow-5)
+  );
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  text-shadow: 0 0 30px rgba(255, 255, 255, 0.5);
+}
+
+@keyframes gacha-celebration-pop {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes gacha-celebration-fade {
+  0%,
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
 /* Responsive card grids - auto-fit means the same markup naturally goes
    from 1 column (narrow mobile sheet) to 2-3+ columns (docked landscape
    console) without a media query, satisfying the "use the horizontal

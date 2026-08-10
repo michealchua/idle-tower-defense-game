@@ -192,12 +192,9 @@ export function tickGachaWelcomeBonus(state: GameState): void {
 // until the date changes. state.lastLoginDate starts null (see GameState.ts),
 // which never equals a real date string, so the very first tick of a brand
 // new game already counts as "today's first login" and grants immediately -
-// no separate first-run special case needed.
-//
-// Caveat: this project has no save/load persistence yet (see engine/core/
-// GameState.ts), so lastLoginDate lives only in memory - today this reward
-// re-fires once per page load/reload rather than truly once per calendar
-// day. The check itself is correct for whenever persistence lands.
+// no separate first-run special case needed. lastLoginDate is persisted via
+// SaveSystem.ts, so this genuinely fires once per real calendar day across
+// saved sessions, not once per page load.
 export function tickDailyLoginReward(state: GameState): void {
   const today = new Date().toISOString().slice(0, 10);
   if (state.lastLoginDate === today) {

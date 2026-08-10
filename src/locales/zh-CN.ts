@@ -260,6 +260,7 @@ const zhCN = {
     pityOrAbove: '及以上',
     pityTriggered: '保底触发',
     firstTenPullBadge: '首次必出SSR!',
+    oddsDetail: '概率详情',
   },
   rarity: {
     white: '白',
