@@ -2,11 +2,12 @@ import { dailyQuestConfig, dailyQuestIds, type DailyQuestId } from '../data/dail
 import { formatBigNumber } from '../utils/scaling';
 import { t } from '../locales/i18n';
 import { useGameStore } from '../store/useGameStore';
+import { IconSword, IconFlag, IconGiftBox, IconDiamond, type IconProps } from './icons';
 
-const DAILY_QUEST_ICON: Record<DailyQuestId, string> = {
-  killEnemies: '⚔️',
-  clearWaves: '🚩',
-  pullGacha: '🎰',
+const DAILY_QUEST_ICON: Record<DailyQuestId, (props: IconProps) => JSX.Element> = {
+  killEnemies: IconSword,
+  clearWaves: IconFlag,
+  pullGacha: IconGiftBox,
 };
 
 // Plan section 28's "活动"/"排行榜" - this game has no backend to serve a
@@ -58,11 +59,12 @@ function RecordsPanel() {
             const progress = Math.min(def.targetAmount, dailyQuestProgress[id] ?? 0);
             const claimed = dailyQuestClaimed[id] ?? false;
             const complete = progress >= def.targetAmount;
+            const QuestIcon = DAILY_QUEST_ICON[id];
             return (
               <div key={id} className="mini-card">
                 <div className="mini-card-name">
                   <span>
-                    {DAILY_QUEST_ICON[id]} {t(def.labelKey)}
+                    <QuestIcon /> {t(def.labelKey)}
                   </span>
                 </div>
                 <div className="mini-card-sub">
@@ -88,7 +90,7 @@ function RecordsPanel() {
       </div>
 
       <div className="text-faint" style={{ padding: '0 4px' }}>
-        {t('records.diamondBalance')}: 💎 {formatBigNumber(diamonds)}
+        {t('records.diamondBalance')}: <IconDiamond /> {formatBigNumber(diamonds)}
       </div>
     </div>
   );

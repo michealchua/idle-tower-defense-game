@@ -1,3 +1,17 @@
+/* Self-hosted (not a CDN link - this is a packaged offline Electron app)
+   display serif for the "tataKAI" logo wordmark only. Latin-only subset (no
+   CJK glyphs), so it's deliberately scoped to .title-name rather than any
+   shared heading class - everywhere else in the UI is Chinese body/label
+   text, where this would just silently fall back per-glyph and read as
+   inconsistent mid-string. */
+@font-face {
+  font-family: 'Cinzel';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/cinzel-800.woff2') format('woff2');
+}
+
 :root {
   --bg: #0f1117;
   --bg-alt: #161a24;
@@ -1242,11 +1256,16 @@ select {
 }
 
 .title-name {
+  font-family: 'Cinzel', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: clamp(36px, 8vw, 64px);
-  font-weight: 800;
-  letter-spacing: 2px;
+  font-weight: 700;
+  letter-spacing: 3px;
   color: var(--text);
-  text-shadow: 0 0 24px rgba(91, 140, 255, 0.45);
+  background: linear-gradient(180deg, #ffffff 0%, #cfd9ff 45%, #7aa2ff 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 20px rgba(122, 162, 255, 0.55)) drop-shadow(0 2px 0 rgba(6, 8, 16, 0.8));
 }
 
 .title-subtitle {

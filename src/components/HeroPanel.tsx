@@ -19,6 +19,23 @@ import PanelHeader from './PanelHeader';
 import StatTile from './StatTile';
 import { ItemCard, SLOT_ICON, SLOT_IDS, SLOT_LABEL_KEYS } from './EquipmentPanel';
 import { getActiveSetBonuses, type EquipmentSlot } from '../data/equipmentConfig';
+import {
+  IconSword,
+  IconOrb,
+  IconBow,
+  IconShield,
+  IconStar,
+  IconDagger,
+  IconGhost,
+  IconHeal,
+  IconElementFire,
+  IconElementWater,
+  IconElementEarth,
+  IconElementWind,
+  IconElementLight,
+  IconElementDark,
+  type IconProps,
+} from './icons';
 
 const STAT_LABEL_KEYS: Record<UpgradeableStat, string> = {
   attackDamage: 'hero.attackDamage',
@@ -119,15 +136,15 @@ const BOND_LABEL_KEYS: Record<BondId, string> = {
 
 // Quick-scan glyph per bond archetype - lets the compact roster row read at
 // a glance instead of relying on the rarity color alone.
-const BOND_ICON: Record<BondId, string> = {
-  warrior: '⚔️',
-  mage: '🔮',
-  archer: '🏹',
-  guardian: '🛡️',
-  support: '✨',
-  assassin: '🗡️',
-  summoner: '👻',
-  special: '🌟',
+const BOND_ICON: Record<BondId, (props: IconProps) => JSX.Element> = {
+  warrior: IconSword,
+  mage: IconOrb,
+  archer: IconBow,
+  guardian: IconShield,
+  support: IconStar,
+  assassin: IconDagger,
+  summoner: IconGhost,
+  special: IconStar,
 };
 
 const CLASS_LABEL_KEYS: Record<HeroClass, string> = {
@@ -144,15 +161,15 @@ const CLASS_LABEL_KEYS: Record<HeroClass, string> = {
 // Distinct from BOND_ICON above - class and bond are independent axes (see
 // heroRosterConfig.ts's HeroDefinition doc comments), each gets its own
 // glyph so the two never read as the same thing at a glance.
-const CLASS_ICON: Record<HeroClass, string> = {
-  warrior: '⚔️',
-  mage: '🔥',
-  paladin: '🛐',
-  summoner: '👻',
-  archer: '🏹',
-  assassin: '🗡️',
-  priest: '💉',
-  special: '🌀',
+const CLASS_ICON: Record<HeroClass, (props: IconProps) => JSX.Element> = {
+  warrior: IconSword,
+  mage: IconOrb,
+  paladin: IconShield,
+  summoner: IconGhost,
+  archer: IconBow,
+  assassin: IconDagger,
+  priest: IconHeal,
+  special: IconStar,
 };
 
 export const ELEMENT_LABEL_KEYS: Record<ElementId, string> = {
@@ -164,13 +181,13 @@ export const ELEMENT_LABEL_KEYS: Record<ElementId, string> = {
   dark: 'element.dark',
 };
 
-export const ELEMENT_ICON: Record<ElementId, string> = {
-  fire: '🔥',
-  water: '💧',
-  earth: '🪨',
-  wind: '🌪️',
-  light: '☀️',
-  dark: '🌑',
+export const ELEMENT_ICON: Record<ElementId, (props: IconProps) => JSX.Element> = {
+  fire: IconElementFire,
+  water: IconElementWater,
+  earth: IconElementEarth,
+  wind: IconElementWind,
+  light: IconElementLight,
+  dark: IconElementDark,
 };
 
 const RARITY_LABEL_KEYS: Record<GachaRarity, string> = {
@@ -253,10 +270,12 @@ function HeroEquipmentSection({ heroId }: { heroId: string }) {
             );
           }
 
+          const SlotIcon = SLOT_ICON[slot];
+
           return (
             <div key={slot} className="mini-card">
               <div className="mini-card-name">
-                {SLOT_ICON[slot]} {t(SLOT_LABEL_KEYS[slot])}
+                <SlotIcon /> {t(SLOT_LABEL_KEYS[slot])}
               </div>
               <div className="mini-card-sub">{t('equipment.empty')}</div>
               {slotInventory.length > 0 && (
@@ -330,7 +349,7 @@ function HeroEvolutionSection({ definition, hero }: { definition: HeroDefinition
     const branch = definition.evolutionBranches.find((candidate) => candidate.id === hero.evolutionBranchId);
     return (
       <div className="item-detail" style={{ marginTop: 8 }}>
-        ✨ {t('hero.evolved')}: {branch ? t(branch.nameKey) : hero.evolutionBranchId}
+        <IconStar /> {t('hero.evolved')}: {branch ? t(branch.nameKey) : hero.evolutionBranchId}
       </div>
     );
   }
@@ -346,7 +365,7 @@ function HeroEvolutionSection({ definition, hero }: { definition: HeroDefinition
   if (!choosing) {
     return (
       <button type="button" className="btn btn-evolve btn-block" style={{ marginTop: 8 }} onClick={() => setChoosing(true)}>
-        ✨ {t('hero.evolveButton')} ✨
+        <IconStar /> {t('hero.evolveButton')} <IconStar />
       </button>
     );
   }
@@ -355,7 +374,9 @@ function HeroEvolutionSection({ definition, hero }: { definition: HeroDefinition
     <div className="evolve-picker">
       <div className="evolve-picker-title">{t('hero.evolveButton')}</div>
       <div className="card-grid-sm">
-        {definition.evolutionBranches.map((branch) => (
+        {definition.evolutionBranches.map((branch) => {
+          const BranchIcon = CLASS_ICON[branch.resultClass];
+          return (
           <button
             key={branch.id}
             type="button"
@@ -363,14 +384,15 @@ function HeroEvolutionSection({ definition, hero }: { definition: HeroDefinition
             onClick={() => setPendingBranchId(branch.id)}
           >
             <div className="mini-card-name">
-              {CLASS_ICON[branch.resultClass]} {t(branch.nameKey)}
+              <BranchIcon /> {t(branch.nameKey)}
             </div>
             <div className="mini-card-sub">{t(CLASS_LABEL_KEYS[branch.resultClass])}</div>
             <div className="mini-card-sub">
               {t('hero.attackDamage')} ×{branch.statMultiplier.attackDamage} · {t('hero.maxHp')} ×{branch.statMultiplier.maxHp}
             </div>
           </button>
-        ))}
+          );
+        })}
       </div>
       <div className="item-actions" style={{ marginTop: 8 }}>
         <button
@@ -437,17 +459,20 @@ function HeroDetail({
     (!nextCost.material || (materialKey !== undefined && materials[materialKey] >= nextCost.material));
 
   const effectiveClass = getEffectiveHeroClass(hero);
+  const BondIcon = BOND_ICON[definition.bondId];
+  const HeroClassIcon = CLASS_ICON[effectiveClass];
+  const HeroElementIcon = ELEMENT_ICON[definition.element];
 
   return (
     <div className={`detail-card ${RARITY_BORDER_CLASS[definition.rarity]}`}>
       <div className={`detail-title ${RARITY_CLASS[definition.rarity]}`}>
-        {BOND_ICON[definition.bondId]} {hero.name}{' '}
+        <BondIcon /> {hero.name}{' '}
         <span className="text-faint">Lv.{hero.level} · ★{currentStar}/{MAX_STAR_LEVEL}</span>
       </div>
       <div className="item-detail">
-        {CLASS_ICON[effectiveClass]} {t(CLASS_LABEL_KEYS[effectiveClass])}
+        <HeroClassIcon /> {t(CLASS_LABEL_KEYS[effectiveClass])}
         {' · '}
-        {ELEMENT_ICON[definition.element]} {t(ELEMENT_LABEL_KEYS[definition.element])}
+        <HeroElementIcon /> {t(ELEMENT_LABEL_KEYS[definition.element])}
         <span className="text-faint"> · {heroLabel(definition)}</span>
       </div>
 
@@ -524,7 +549,7 @@ function HeroDetail({
             const cooldownRemaining = hero.skills[branch.skillUnlock.skillId]?.cooldownRemaining ?? 0;
             return (
               <div className="text-faint" style={{ marginTop: 2 }}>
-                ✨ {t(skillDef.nameKey)} ({t('hero.evolveButton')}):{' '}
+                <IconStar /> {t(skillDef.nameKey)} ({t('hero.evolveButton')}):{' '}
                 {cooldownRemaining > 0 ? `${cooldownRemaining.toFixed(1)}s` : t('skill.ready')}
               </div>
             );
@@ -605,6 +630,9 @@ const HeroRosterList = memo(function HeroRosterList({
           : definition.class;
         const isDeployed = deployedHeroIds.includes(definition.id);
         const isSelected = definition.id === effectiveSelectedId;
+        const RowBondIcon = BOND_ICON[definition.bondId];
+        const RowClassIcon = CLASS_ICON[effectiveClass];
+        const RowElementIcon = ELEMENT_ICON[definition.element];
         return (
           <div
             key={definition.id}
@@ -616,10 +644,10 @@ const HeroRosterList = memo(function HeroRosterList({
           >
             <div className={`mini-card-name ${RARITY_CLASS[definition.rarity]}`}>
               <span>
-                {BOND_ICON[definition.bondId]}
-                {CLASS_ICON[effectiveClass]}
-                {ELEMENT_ICON[definition.element]} {name}
-                {evolutionBranchId ? ' ✨' : ''}
+                <RowBondIcon />
+                <RowClassIcon />
+                <RowElementIcon /> {name}
+                {evolutionBranchId ? <IconStar /> : ''}
               </span>
               <span className={`status-dot${isDeployed ? ' on' : ''}`} title={isDeployed ? t('squad.deployed') : t('squad.benched')} />
             </div>
@@ -773,7 +801,11 @@ function HeroPanel({ gameScreenRef }: { gameScreenRef: RefObject<HTMLDivElement>
 
       {draggingDefinition && (
         <div className="drag-ghost" style={{ left: drag.pointerX, top: drag.pointerY }}>
-          {BOND_ICON[draggingDefinition.bondId]} {heroes.find((h) => h.id === draggingDefinition.id)?.name ?? heroLabel(draggingDefinition)}
+          {(() => {
+            const DragBondIcon = BOND_ICON[draggingDefinition.bondId];
+            return <DragBondIcon />;
+          })()}{' '}
+          {heroes.find((h) => h.id === draggingDefinition.id)?.name ?? heroLabel(draggingDefinition)}
         </div>
       )}
     </div>

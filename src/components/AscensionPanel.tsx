@@ -3,6 +3,7 @@ import { getGlobalWaveNumber } from '../engine/systems/WaveSystem';
 import { t } from '../locales/i18n';
 import { useGameStore } from '../store/useGameStore';
 import Accordion from './Accordion';
+import { IconStar } from './icons';
 
 // No list to select from here, so the panel itself is the "always-visible
 // overview" - stat tiles + the eligibility requirement stay on screen by
@@ -16,7 +17,7 @@ function AscensionPanel() {
 
   return (
     <div className="card">
-      <div className="card-title">🌟 {t('ascension.title')}</div>
+      <div className="card-title"><IconStar /> {t('ascension.title')}</div>
 
       <div className="stat-grid">
         <div className="stat-tile">

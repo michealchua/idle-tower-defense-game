@@ -22,30 +22,47 @@ import { getGlobalWaveNumber } from './engine/systems/WaveSystem';
 import { t } from './locales/i18n';
 import { audioManager } from './audio/AudioManager';
 import { useGameStore } from './store/useGameStore';
+import {
+  IconCastle,
+  IconStar,
+  IconDiamond,
+  IconBook,
+  IconTrophy,
+  IconGiftBox,
+  IconPaw,
+  IconBag,
+  IconSword,
+  IconCoin,
+  IconBrick,
+  IconMuteOn,
+  IconMuteOff,
+  IconSave,
+  type IconProps,
+} from './components/icons';
 
 interface TabDef {
   id: PanelId;
   labelKey: string;
-  icon: string;
+  Icon: (props: IconProps) => JSX.Element;
 }
 
 // Split the same 9 panels the old bottom-nav exposed into two HUD groups -
 // long-term base building bottom-left, high-frequency roster/gacha upkeep
 // bottom-right. Every id here must have a case in renderPanel below.
 const GROWTH_TABS: TabDef[] = [
-  { id: 'castle', labelKey: 'castle.title', icon: '🏰' },
-  { id: 'ascension', labelKey: 'ascension.title', icon: '🌟' },
-  { id: 'ascensionShop', labelKey: 'ascensionShop.title', icon: '💎' },
-  { id: 'codex', labelKey: 'codex.title', icon: '📖' },
-  { id: 'records', labelKey: 'records.title', icon: '🏆' },
+  { id: 'castle', labelKey: 'castle.title', Icon: IconCastle },
+  { id: 'ascension', labelKey: 'ascension.title', Icon: IconStar },
+  { id: 'ascensionShop', labelKey: 'ascensionShop.title', Icon: IconDiamond },
+  { id: 'codex', labelKey: 'codex.title', Icon: IconBook },
+  { id: 'records', labelKey: 'records.title', Icon: IconTrophy },
 ];
 
 const CORE_TABS: TabDef[] = [
-  { id: 'gacha', labelKey: 'gacha.title', icon: '🎰' },
-  { id: 'pet', labelKey: 'petRoster.title', icon: '🐾' },
-  { id: 'talent', labelKey: 'talent.title', icon: '✨' },
-  { id: 'equipment', labelKey: 'equipment.title', icon: '🎒' },
-  { id: 'hero', labelKey: 'heroRoster.title', icon: '⚔️' },
+  { id: 'gacha', labelKey: 'gacha.title', Icon: IconGiftBox },
+  { id: 'pet', labelKey: 'petRoster.title', Icon: IconPaw },
+  { id: 'talent', labelKey: 'talent.title', Icon: IconStar },
+  { id: 'equipment', labelKey: 'equipment.title', Icon: IconBag },
+  { id: 'hero', labelKey: 'heroRoster.title', Icon: IconSword },
 ];
 
 const ALL_TABS = [...GROWTH_TABS, ...CORE_TABS];
@@ -155,8 +172,8 @@ function App() {
         <div className="hud-corner top-left">
           <div className="hud-widget">
             <div className="hud-widget-row">
-              <span>🏰 {t('castle.level')} {castleLevel}</span>
-              <span>🧱 {formatBigNumber(buildMaterials)}</span>
+              <span><IconCastle /> {t('castle.level')} {castleLevel}</span>
+              <span><IconBrick /> {formatBigNumber(buildMaterials)}</span>
             </div>
             <div className="hud-label">
               {t('wave.stage')} {wave.chapter}-{wave.waveInChapter} · {t(biome.labelKey)}
@@ -167,11 +184,11 @@ function App() {
         <div className="hud-corner top-right">
           <div className="hud-widget">
             <div className="hud-widget-row">
-              <span className="hud-gold">💰 {formatBigNumber(gold)}</span>
-              <span className="hud-diamond">💎 {formatBigNumber(diamonds)}</span>
+              <span className="hud-gold"><IconCoin /> {formatBigNumber(gold)}</span>
+              <span className="hud-diamond"><IconDiamond /> {formatBigNumber(diamonds)}</span>
               {activeSlot !== null && (
                 <button className="btn btn-sm mute-toggle-btn" onClick={handleSaveClick} title={t('save.saveButton')}>
-                  {justSaved ? '✅' : '💾'}
+                  {justSaved ? '✓' : <IconSave />}
                 </button>
               )}
               <button
@@ -179,7 +196,7 @@ function App() {
                 onClick={() => setIsMuted(audioManager.toggleMute())}
                 title={t(isMuted ? 'battle.unmuteMusic' : 'battle.muteMusic')}
               >
-                {isMuted ? '🔇' : '🔊'}
+                {isMuted ? <IconMuteOn /> : <IconMuteOff />}
               </button>
             </div>
             <div className="hud-label">
@@ -192,7 +209,9 @@ function App() {
           <div className="hud-actions">
             {visibleGrowthTabs.map((tab) => (
               <button key={tab.id} className="hud-btn" data-tutorial={`nav-${tab.id}`} onClick={() => handleTabClick(tab.id)}>
-                <span className="hud-btn-icon">{tab.icon}</span>
+                <span className="hud-btn-icon">
+                  <tab.Icon />
+                </span>
                 <span>{t(tab.labelKey)}</span>
               </button>
             ))}
@@ -203,7 +222,9 @@ function App() {
           <div className="hud-actions">
             {visibleCoreTabs.map((tab) => (
               <button key={tab.id} className="hud-btn" data-tutorial={`nav-${tab.id}`} onClick={() => handleTabClick(tab.id)}>
-                <span className="hud-btn-icon">{tab.icon}</span>
+                <span className="hud-btn-icon">
+                  <tab.Icon />
+                </span>
                 <span>{t(tab.labelKey)}</span>
               </button>
             ))}
@@ -216,7 +237,7 @@ function App() {
           <div className="modal-container" onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
               <span className="modal-title">
-                {activeTab.icon} {t(activeTab.labelKey)}
+                <activeTab.Icon /> {t(activeTab.labelKey)}
               </span>
               <button className="modal-close" onClick={() => setActivePanel(null)}>
                 ×

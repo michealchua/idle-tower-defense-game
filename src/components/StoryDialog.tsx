@@ -2,8 +2,17 @@ import { useEffect, useRef, useState } from 'react';
 import { t } from '../locales/i18n';
 import { storyScripts } from '../data/storyConfig';
 import { useGameStore } from '../store/useGameStore';
+import { IconSteward, type IconProps } from './icons';
 
 const TYPEWRITER_MS_PER_CHAR = 28;
+
+// storyConfig.ts's per-line `avatar` is still an emoji string (every line
+// uses the same one - see that file) - mapped to a real icon component here
+// rather than rendered as raw emoji text, with the original string kept as
+// a safe fallback for any value this map doesn't recognize yet.
+const AVATAR_ICON: Record<string, (props: IconProps) => JSX.Element> = {
+  '🧙': IconSteward,
+};
 
 // Visual-novel-style dialog, fixed to the bottom of the screen - see
 // storyConfig.ts for script content and WaveSystem.tickTutorialStoryTrigger
@@ -89,7 +98,16 @@ function StoryDialog() {
     <div className="story-dialog-backdrop" onClick={handleAdvance}>
       <div className="story-dialog">
         <div className="story-dialog-speaker">
-          <div className="story-dialog-avatar">{line.avatar}</div>
+          <div className="story-dialog-avatar">
+            {AVATAR_ICON[line.avatar] ? (
+              (() => {
+                const AvatarIcon = AVATAR_ICON[line.avatar];
+                return <AvatarIcon size={32} />;
+              })()
+            ) : (
+              line.avatar
+            )}
+          </div>
           <div className="story-dialog-name">{t(line.speakerNameKey)}</div>
         </div>
         <div className="story-dialog-body">

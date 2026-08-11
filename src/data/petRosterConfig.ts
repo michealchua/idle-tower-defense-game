@@ -43,6 +43,7 @@ export const petRosterConfig: PetDefinition[] = [
   },
   {
     id: 'pet-2',
+    spriteId: 'vine_sprite',
     rarity: 'green',
     passiveBonus: { maxHp: 20 },
     attackDamage: 3,
@@ -51,6 +52,7 @@ export const petRosterConfig: PetDefinition[] = [
   },
   {
     id: 'pet-3',
+    spriteId: 'sun_phoenix_chick',
     rarity: 'gold',
     passiveBonus: { attackSpeed: 0.05, criticalChance: 0.03 },
     attackDamage: 6,
@@ -59,6 +61,7 @@ export const petRosterConfig: PetDefinition[] = [
   },
   {
     id: 'pet-4',
+    spriteId: 'frost_kit',
     rarity: 'blue',
     passiveBonus: { criticalChance: 0.05 },
     attackDamage: 5,
@@ -68,6 +71,7 @@ export const petRosterConfig: PetDefinition[] = [
   // Condition-locked: reach ascension level 1. Never appears in the gacha pool.
   {
     id: 'pet-5',
+    spriteId: 'shadow_wisp',
     rarity: 'purple',
     passiveBonus: { attackDamage: 8, maxHp: 30 },
     attackDamage: 8,
@@ -79,6 +83,7 @@ export const petRosterConfig: PetDefinition[] = [
   // the diamond premium pool something worth chasing.
   {
     id: 'pet-6',
+    spriteId: 'ember_hound',
     rarity: 'red',
     passiveBonus: { attackDamage: 14, maxHp: 40, criticalChance: 0.04 },
     attackDamage: 12,
@@ -87,6 +92,7 @@ export const petRosterConfig: PetDefinition[] = [
   },
   {
     id: 'pet-7',
+    spriteId: 'star_wyrmling',
     rarity: 'rainbow',
     passiveBonus: { attackDamage: 22, maxHp: 60, criticalChance: 0.06, attackSpeed: 0.06 },
     attackDamage: 18,

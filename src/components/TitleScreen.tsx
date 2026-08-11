@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { t } from '../locales/i18n';
 import { useGameStore } from '../store/useGameStore';
 import { SAVE_SLOTS, getSaveMetadata, hasSave, getMostRecentSlot, type SaveMetadata, type SaveSlot } from '../engine/core/SaveSystem';
+import { IconSave } from './icons';
 
 interface TitleScreenProps {
   onEnterGame: () => void;
@@ -101,7 +102,7 @@ function TitleScreen({ onEnterGame }: TitleScreenProps) {
           setIsPanelOpen((open) => !open);
         }}
       >
-        💾 {t('title.slotManagement')}
+        <IconSave /> {t('title.slotManagement')}
       </button>
 
       {isPanelOpen && (

@@ -15,6 +15,7 @@ import {
   getPetSpriteSrc,
   getTowerSpriteSrc,
   preloadSprites,
+  type SpriteImage,
 } from './assetLoader';
 import type { BaseState, EnemyState, HeroState, PetState, Position, VisualEffect } from '../engine/types';
 
@@ -23,7 +24,7 @@ import type { BaseState, EnemyState, HeroState, PetState, Position, VisualEffect
 export const HERO_RADIUS = 20;
 export const PET_RADIUS = 12;
 const ENEMY_RADIUS = 16;
-const BASE_SIZE = 36;
+const BASE_SIZE = 46;
 const HP_BAR_WIDTH = 40;
 const HP_BAR_HEIGHT = 5;
 const ATTACK_PULSE_SCALE = 0.2;
@@ -118,12 +119,40 @@ const ENEMY_SPRITE_TYPE: Record<EnemyArchetypeId, string> = {
   boss: 'demon_boss',
 };
 
+const HP_BAR_RADIUS = HP_BAR_HEIGHT / 2;
+
+// Three tiers instead of a hard green/red cutoff - an amber middle band
+// means a bar crossing 50% reads as "getting concerning" a beat before it
+// hits the old danger-red threshold, instead of jumping straight there.
+function hpBarColorForRatio(ratio: number): string {
+  if (ratio > 0.55) {
+    return '#4caf50';
+  }
+  return ratio > 0.3 ? '#ffb300' : '#e53935';
+}
+
 function drawHpBar(ctx: CanvasRenderingContext2D, x: number, y: number, ratio: number): void {
   const barX = x - HP_BAR_WIDTH / 2;
-  ctx.fillStyle = '#333333';
-  ctx.fillRect(barX, y, HP_BAR_WIDTH, HP_BAR_HEIGHT);
-  ctx.fillStyle = ratio > 0.3 ? '#4caf50' : '#e53935';
-  ctx.fillRect(barX, y, HP_BAR_WIDTH * Math.max(0, ratio), HP_BAR_HEIGHT);
+  ctx.fillStyle = 'rgba(10, 10, 14, 0.75)';
+  ctx.beginPath();
+  ctx.roundRect(barX, y, HP_BAR_WIDTH, HP_BAR_HEIGHT, HP_BAR_RADIUS);
+  ctx.fill();
+
+  const filledWidth = HP_BAR_WIDTH * Math.max(0, Math.min(1, ratio));
+  if (filledWidth <= 0.5) {
+    return;
+  }
+  ctx.fillStyle = hpBarColorForRatio(ratio);
+  ctx.beginPath();
+  ctx.roundRect(barX, y, filledWidth, HP_BAR_HEIGHT, HP_BAR_RADIUS);
+  ctx.fill();
+
+  // Glossy top-half highlight - the one detail that reliably reads as "a
+  // rendered bar" instead of a flat color-block rectangle.
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.28)';
+  ctx.beginPath();
+  ctx.roundRect(barX, y, filledWidth, HP_BAR_HEIGHT * 0.45, HP_BAR_RADIUS * 0.8);
+  ctx.fill();
 }
 
 interface HpBarRequest {
@@ -149,28 +178,56 @@ interface HpBarRequest {
 // (if imperceptible) change to draw order, not a byte-for-byte-identical
 // output guarantee - the standard trade-off for batching draw calls by
 // state, called out here instead of glossed over.
+// Same rounded-pill/tiered-color/glossy-highlight treatment as drawHpBar,
+// batched the same way the flat-rect version was: every bar's background
+// pill first, then each color tier's filled portion in one pass, then one
+// shared highlight pass - a fixed number of fillStyle assignments (1
+// background + 3 tiers + 1 highlight = 5) independent of how many bars are
+// in the group, same property the original 3-assignment version had, just
+// with two more tiers/passes for the added polish.
+const HP_BAR_TIERS: { matches: (ratio: number) => boolean; color: string }[] = [
+  { matches: (ratio) => ratio > 0.55, color: '#4caf50' },
+  { matches: (ratio) => ratio > 0.3 && ratio <= 0.55, color: '#ffb300' },
+  { matches: (ratio) => ratio <= 0.3, color: '#e53935' },
+];
+
 function drawHpBarsBatched(ctx: CanvasRenderingContext2D, bars: HpBarRequest[]): void {
   if (bars.length === 0) {
     return;
   }
 
-  ctx.fillStyle = '#333333';
+  ctx.fillStyle = 'rgba(10, 10, 14, 0.75)';
   for (const bar of bars) {
-    ctx.fillRect(bar.x - HP_BAR_WIDTH / 2, bar.y, HP_BAR_WIDTH, HP_BAR_HEIGHT);
+    ctx.beginPath();
+    ctx.roundRect(bar.x - HP_BAR_WIDTH / 2, bar.y, HP_BAR_WIDTH, HP_BAR_HEIGHT, HP_BAR_RADIUS);
+    ctx.fill();
   }
 
-  ctx.fillStyle = '#4caf50';
-  for (const bar of bars) {
-    if (bar.ratio > 0.3) {
-      ctx.fillRect(bar.x - HP_BAR_WIDTH / 2, bar.y, HP_BAR_WIDTH * Math.max(0, bar.ratio), HP_BAR_HEIGHT);
+  for (const tier of HP_BAR_TIERS) {
+    ctx.fillStyle = tier.color;
+    for (const bar of bars) {
+      if (!tier.matches(bar.ratio)) {
+        continue;
+      }
+      const filledWidth = HP_BAR_WIDTH * Math.max(0, Math.min(1, bar.ratio));
+      if (filledWidth <= 0.5) {
+        continue;
+      }
+      ctx.beginPath();
+      ctx.roundRect(bar.x - HP_BAR_WIDTH / 2, bar.y, filledWidth, HP_BAR_HEIGHT, HP_BAR_RADIUS);
+      ctx.fill();
     }
   }
 
-  ctx.fillStyle = '#e53935';
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.28)';
   for (const bar of bars) {
-    if (bar.ratio <= 0.3) {
-      ctx.fillRect(bar.x - HP_BAR_WIDTH / 2, bar.y, HP_BAR_WIDTH * Math.max(0, bar.ratio), HP_BAR_HEIGHT);
+    const filledWidth = HP_BAR_WIDTH * Math.max(0, Math.min(1, bar.ratio));
+    if (filledWidth <= 0.5) {
+      continue;
     }
+    ctx.beginPath();
+    ctx.roundRect(bar.x - HP_BAR_WIDTH / 2, bar.y, filledWidth, HP_BAR_HEIGHT * 0.45, HP_BAR_RADIUS * 0.8);
+    ctx.fill();
   }
 }
 
@@ -188,6 +245,276 @@ function drawFallbackGlyph(ctx: CanvasRenderingContext2D, x: number, y: number, 
   ctx.textBaseline = 'middle';
   ctx.fillText(glyph, x, y);
   ctx.restore();
+}
+
+// --- Procedural fallback silhouettes -------------------------------------
+//
+// Everything below draws a shaded, shaped silhouette in place of a real
+// sprite - used by drawHero/drawEnemy/drawPet/renderScene's castle whenever
+// the corresponding PNG hasn't been dropped into public/sprites/ yet (most
+// of the enemy roster, half the hero classes, every pet, the castle itself -
+// see ART_ASSET_CHECKLIST.md). A flat single-color circle-plus-letter read as
+// an obvious debug placeholder; a gradient-shaded, category-shaped silhouette
+// (humanoid/slime/creature/castle) reads as "stylized but intentional" and
+// upgrades to the real sprite automatically the moment one is dropped in, no
+// code change needed on that side.
+
+// Linear-interpolates an existing hex color toward white (percent > 0) or
+// black (percent < 0) - the standard "shade" trick for deriving a
+// highlight/shadow tone from a single base color without hand-authoring a
+// second palette entry per entity type.
+function hexToRgb(hex: string): [number, number, number] {
+  const clean = hex.replace('#', '');
+  const value = parseInt(clean.length === 3 ? clean.replace(/(.)/g, '$1$1') : clean, 16);
+  return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+}
+
+function shadeColor(hex: string, percent: number): string {
+  const [r, g, b] = hexToRgb(hex);
+  const target = percent < 0 ? 0 : 255;
+  const p = Math.min(1, Math.abs(percent));
+  const mix = (channel: number) => Math.round((target - channel) * p) + channel;
+  return `rgb(${mix(r)}, ${mix(g)}, ${mix(b)})`;
+}
+
+// Upper-left-lit radial gradient from a single base color - this one call is
+// what turns every flat-fill silhouette below into something that reads as
+// shaded/rendered instead of a paint-bucket fill.
+function radialShadedFill(ctx: CanvasRenderingContext2D, x: number, y: number, radius: number, baseColor: string): CanvasGradient {
+  const gradient = ctx.createRadialGradient(x - radius * 0.35, y - radius * 0.45, radius * 0.1, x, y, radius * 1.2);
+  gradient.addColorStop(0, shadeColor(baseColor, 0.4));
+  gradient.addColorStop(0.6, baseColor);
+  gradient.addColorStop(1, shadeColor(baseColor, -0.3));
+  return gradient;
+}
+
+// Soft contact shadow beneath a unit's feet - drawn for both real sprites
+// and procedural silhouettes alike (called from drawHero/drawEnemy/drawPet
+// before either), since "floating flat against the background" was never
+// specific to the placeholder shapes. yBottom is where the unit's feet sit,
+// not its center - see call sites.
+function drawGroundShadow(ctx: CanvasRenderingContext2D, x: number, yBottom: number, radiusX: number): void {
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+  ctx.beginPath();
+  ctx.ellipse(x, yBottom, radiusX, radiusX * 0.34, 0, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// Shared "head + body" construction (two overlapping ellipses) used by every
+// biped silhouette (hero fallback, goblin/zombie enemy fallback) - safe,
+// mechanical primitives rather than a hand-tuned bezier outline, so it
+// renders correctly at the small sizes these draw at without needing visual
+// iteration to get a curve right.
+function drawSilhouetteBody(ctx: CanvasRenderingContext2D, x: number, y: number, radius: number, fillStyle: string | CanvasGradient, strokeStyle: string): void {
+  ctx.fillStyle = fillStyle;
+  ctx.strokeStyle = strokeStyle;
+  ctx.lineWidth = Math.max(1, radius * 0.07);
+
+  ctx.beginPath();
+  ctx.ellipse(x, y + radius * 0.3, radius * 0.62, radius * 0.56, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(x, y - radius * 0.4, radius * 0.4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+}
+
+// One silhouette per shared enemy sprite identity (see ENEMY_SPRITE_TYPE) -
+// 'demon_boss' never reaches this path (that file always exists), so only
+// the four non-boss identities need a case here.
+function drawProceduralEnemySilhouette(ctx: CanvasRenderingContext2D, spriteType: string, x: number, y: number, radius: number, baseColor: string): void {
+  const fill = radialShadedFill(ctx, x, y, radius, baseColor);
+  const outline = shadeColor(baseColor, -0.45);
+
+  if (spriteType === 'slime') {
+    ctx.fillStyle = fill;
+    ctx.strokeStyle = outline;
+    ctx.lineWidth = Math.max(1, radius * 0.07);
+    ctx.beginPath();
+    ctx.ellipse(x, y + radius * 0.15, radius * 0.95, radius * 0.72, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    // Glossy highlight - the one thing that reliably reads as "wet/squishy"
+    // on an otherwise plain blob.
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.beginPath();
+    ctx.ellipse(x - radius * 0.32, y - radius * 0.1, radius * 0.22, radius * 0.14, -0.4, 0, Math.PI * 2);
+    ctx.fill();
+    return;
+  }
+
+  if (spriteType === 'witch') {
+    drawSilhouetteBody(ctx, x, y, radius, fill, outline);
+    ctx.fillStyle = outline;
+    ctx.beginPath();
+    ctx.moveTo(x, y - radius * 1.3);
+    ctx.lineTo(x - radius * 0.32, y - radius * 0.5);
+    ctx.lineTo(x + radius * 0.32, y - radius * 0.5);
+    ctx.closePath();
+    ctx.fill();
+    return;
+  }
+
+  if (spriteType === 'zombie') {
+    // A slight lean is the cheapest possible "shambling" tell versus the
+    // upright goblin silhouette below.
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(0.14);
+    drawSilhouetteBody(ctx, 0, 0, radius, fill, outline);
+    ctx.restore();
+    return;
+  }
+
+  // 'goblin' and any future/unmapped type share the plain upright body -
+  // the eight archetypes that key into 'goblin' already read as distinct via
+  // ENEMY_VISUAL_STYLES' per-archetype color/radiusMultiplier.
+  drawSilhouetteBody(ctx, x, y, radius, fill, outline);
+}
+
+// One silhouette per hero class that has no real art yet (archer/assassin/
+// priest/special - see ART_ASSET_CHECKLIST.md) - shares the same body as the
+// enemy silhouettes above, plus one thin accent stroke per class so the four
+// don't all read as the same generic figure.
+function drawHeroSilhouette(ctx: CanvasRenderingContext2D, heroClass: string, x: number, y: number, radius: number, baseColor: string): void {
+  const fill = radialShadedFill(ctx, x, y, radius, baseColor);
+  const outline = shadeColor(baseColor, -0.4);
+  drawSilhouetteBody(ctx, x, y, radius, fill, outline);
+
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+  ctx.lineWidth = Math.max(1, radius * 0.09);
+  ctx.lineCap = 'round';
+
+  switch (heroClass) {
+    case 'archer': {
+      ctx.beginPath();
+      ctx.arc(x + radius * 0.78, y, radius * 0.55, Math.PI * 0.65, Math.PI * 1.35);
+      ctx.stroke();
+      return;
+    }
+    case 'assassin': {
+      ctx.beginPath();
+      ctx.moveTo(x - radius * 0.5, y - radius * 0.55);
+      ctx.lineTo(x + radius * 0.5, y + radius * 0.15);
+      ctx.moveTo(x + radius * 0.5, y - radius * 0.55);
+      ctx.lineTo(x - radius * 0.5, y + radius * 0.15);
+      ctx.stroke();
+      return;
+    }
+    case 'priest': {
+      ctx.beginPath();
+      ctx.ellipse(x, y - radius * 0.88, radius * 0.3, radius * 0.1, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      return;
+    }
+    case 'special': {
+      ctx.beginPath();
+      ctx.arc(x, y + radius * 0.2, radius * 0.88, -0.4, Math.PI * 1.1);
+      ctx.stroke();
+      return;
+    }
+    default:
+      return;
+  }
+}
+
+// Small "creature" silhouette (round body + triangle ears + a tail) for any
+// pet without a dedicated sprite yet - deliberately distinct from the biped
+// hero/enemy silhouette so a pet reads as "companion", not "tiny enemy".
+function drawPetSilhouette(ctx: CanvasRenderingContext2D, x: number, y: number, radius: number, baseColor: string): void {
+  const fill = radialShadedFill(ctx, x, y, radius, baseColor);
+  const outline = shadeColor(baseColor, -0.4);
+  ctx.fillStyle = fill;
+  ctx.strokeStyle = outline;
+  ctx.lineWidth = Math.max(1, radius * 0.08);
+
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(x + side * radius * 0.55, y - radius * 0.35);
+    ctx.lineTo(x + side * radius * 0.75, y - radius * 1.05);
+    ctx.lineTo(x + side * radius * 0.15, y - radius * 0.55);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  ctx.beginPath();
+  ctx.arc(x, y, radius * 0.75, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(x + radius * 0.72, y + radius * 0.28, radius * 0.22, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+}
+
+// Procedural castle - stone-gradient curtain wall, two crenellated corner
+// towers, an arched gate, and a small flag. Replaces a flat filled square
+// whenever public/sprites/towers/castle.png hasn't been dropped in yet (it
+// doesn't exist at all as of this writing - see ART_ASSET_CHECKLIST.md).
+function drawProceduralCastle(ctx: CanvasRenderingContext2D, x: number, y: number, size: number): void {
+  const stoneBase = '#8d8478';
+  const stoneDark = shadeColor(stoneBase, -0.35);
+  const stoneLight = shadeColor(stoneBase, 0.22);
+
+  const halfW = size * 0.5;
+  const wallTop = y - size * 0.05;
+  const wallBottom = y + size * 0.5;
+  const towerTop = y - size * 0.42;
+  const towerW = size * 0.3;
+
+  const gradient = ctx.createLinearGradient(x, towerTop, x, wallBottom);
+  gradient.addColorStop(0, stoneLight);
+  gradient.addColorStop(1, stoneDark);
+
+  ctx.fillStyle = gradient;
+  ctx.strokeStyle = stoneDark;
+  ctx.lineWidth = Math.max(1, size * 0.025);
+
+  ctx.fillRect(x - halfW * 0.62, wallTop, halfW * 1.24, wallBottom - wallTop);
+  ctx.strokeRect(x - halfW * 0.62, wallTop, halfW * 1.24, wallBottom - wallTop);
+
+  for (const side of [-1, 1]) {
+    const towerX = x + side * halfW * 0.72;
+    ctx.fillRect(towerX - towerW / 2, towerTop, towerW, wallBottom - towerTop);
+    ctx.strokeRect(towerX - towerW / 2, towerTop, towerW, wallBottom - towerTop);
+    ctx.fillRect(towerX - towerW / 2, towerTop - size * 0.12, towerW * 0.32, size * 0.12);
+    ctx.fillRect(towerX + towerW / 2 - towerW * 0.32, towerTop - size * 0.12, towerW * 0.32, size * 0.12);
+  }
+
+  ctx.fillRect(x - size * 0.14, wallTop - size * 0.1, size * 0.1, size * 0.1);
+  ctx.fillRect(x + size * 0.04, wallTop - size * 0.1, size * 0.1, size * 0.1);
+
+  // Arched gate - straight sides up to the springline, one semicircular arc
+  // for the top, same construction as the equipment "boot" UI icon's heel.
+  ctx.fillStyle = shadeColor(stoneDark, -0.3);
+  const doorHalfW = size * 0.11;
+  const doorSpringY = wallBottom - size * 0.17;
+  ctx.beginPath();
+  ctx.moveTo(x - doorHalfW, wallBottom);
+  ctx.lineTo(x - doorHalfW, doorSpringY);
+  ctx.arc(x, doorSpringY, doorHalfW, Math.PI, 0);
+  ctx.lineTo(x + doorHalfW, wallBottom);
+  ctx.closePath();
+  ctx.fill();
+
+  // Flag on the right tower.
+  ctx.strokeStyle = stoneDark;
+  ctx.lineWidth = Math.max(1, size * 0.02);
+  ctx.beginPath();
+  ctx.moveTo(x + halfW * 0.72, towerTop - size * 0.12);
+  ctx.lineTo(x + halfW * 0.72, towerTop - size * 0.34);
+  ctx.stroke();
+  ctx.fillStyle = '#c0392b';
+  ctx.beginPath();
+  ctx.moveTo(x + halfW * 0.72, towerTop - size * 0.34);
+  ctx.lineTo(x + halfW * 0.72 + size * 0.17, towerTop - size * 0.28);
+  ctx.lineTo(x + halfW * 0.72, towerTop - size * 0.22);
+  ctx.closePath();
+  ctx.fill();
 }
 
 // --- Sprite sheet frame animation --------------------------------------
@@ -254,7 +581,7 @@ function needsFlip(kind: 'hero' | 'pet' | 'enemy'): boolean {
 // needsFlip.
 function drawSpriteFrame(
   ctx: CanvasRenderingContext2D,
-  image: HTMLImageElement,
+  image: SpriteImage,
   state: SpriteAnimationState,
   nowSeconds: number,
   x: number,
@@ -304,7 +631,7 @@ const MAX_SHEET_ROWS = 6;
 // sheet replaces a portrait at the same path, this starts returning true and
 // the exact same draw call animates automatically - no other code path
 // changes.
-function isFrameSheet(image: HTMLImageElement): boolean {
+function isFrameSheet(image: SpriteImage): boolean {
   const { frameWidth, frameHeight } = SPRITE_SHEET_CONFIG;
   const widthInRange = image.width >= frameWidth * 2 && image.width <= frameWidth * MAX_SHEET_COLUMNS;
   const heightInRange = image.height >= frameHeight * 2 && image.height <= frameHeight * MAX_SHEET_ROWS;
@@ -325,7 +652,7 @@ function isFrameSheet(image: HTMLImageElement): boolean {
 // actual 32x32 pixel-art asset (enemy/tower/pet sheets, or their static-image
 // fallback), which wants to stay crisp. Always restored before returning so
 // the smoothing flag never leaks into the next draw call.
-function drawStaticSprite(ctx: CanvasRenderingContext2D, image: HTMLImageElement, x: number, y: number, size: number, flip: boolean, smooth = false): void {
+function drawStaticSprite(ctx: CanvasRenderingContext2D, image: SpriteImage, x: number, y: number, size: number, flip: boolean, smooth = false): void {
   const scale = Math.min(size / image.width, size / image.height);
   const drawWidth = image.width * scale;
   const drawHeight = image.height * scale;
@@ -356,7 +683,7 @@ function drawStaticSprite(ctx: CanvasRenderingContext2D, image: HTMLImageElement
 // the loaded image, so call sites never need to know which one they got.
 function drawEntitySprite(
   ctx: CanvasRenderingContext2D,
-  image: HTMLImageElement,
+  image: SpriteImage,
   state: SpriteAnimationState,
   nowSeconds: number,
   x: number,
@@ -477,7 +804,7 @@ function drawVisualEffect(ctx: CanvasRenderingContext2D, effect: VisualEffect): 
         ctx.font = '13px sans-serif';
         ctx.fillStyle = `rgba(255, 255, 255, ${fadeAlpha})`;
         ctx.textAlign = 'center';
-        ctx.fillText(`-${effect.amount}`, effect.x, y);
+        ctx.fillText(`-${Math.round(effect.amount ?? 0)}`, effect.x, y);
         return;
       }
 
@@ -497,7 +824,7 @@ function drawVisualEffect(ctx: CanvasRenderingContext2D, effect: VisualEffect): 
       ctx.font = 'bold 24px sans-serif';
       ctx.fillStyle = `rgba(${red}, ${green}, 0, ${fadeAlpha})`;
       ctx.textAlign = 'center';
-      ctx.fillText(`-${effect.amount}`, 0, 0);
+      ctx.fillText(`-${Math.round(effect.amount ?? 0)}`, 0, 0);
       ctx.restore();
       return;
     }
@@ -506,7 +833,7 @@ function drawVisualEffect(ctx: CanvasRenderingContext2D, effect: VisualEffect): 
       ctx.font = 'bold 15px sans-serif';
       ctx.fillStyle = `rgba(105, 240, 174, ${fadeAlpha})`;
       ctx.textAlign = 'center';
-      ctx.fillText(`+${effect.amount}`, effect.x, y);
+      ctx.fillText(`+${Math.round(effect.amount ?? 0)}`, effect.x, y);
       return;
     }
     case 'levelUp': {
@@ -638,15 +965,14 @@ function drawHero(ctx: CanvasRenderingContext2D, hero: HeroState, pulseScale: nu
     : undefined;
   const sprite = evolvedSprite ?? getImage(getHeroSpriteSrc(heroClass, animState)) ?? getImage(getHeroSpriteSrc(heroClass, 'walk'));
 
+  drawGroundShadow(ctx, hero.position.x, hero.position.y + heroRadius * 0.9, heroRadius * 0.8);
+
   if (sprite) {
     const size = heroRadius * 2;
     drawEntitySprite(ctx, sprite, animState, nowSeconds, hero.position.x, hero.position.y, size, needsFlip('hero'), true);
   } else {
-    ctx.fillStyle = heroStyle.color;
-    ctx.beginPath();
-    ctx.arc(hero.position.x, hero.position.y, heroRadius, 0, Math.PI * 2);
-    ctx.fill();
-    drawFallbackGlyph(ctx, hero.position.x, hero.position.y, heroClass.charAt(0).toUpperCase(), heroRadius * 0.9);
+    drawHeroSilhouette(ctx, heroClass, hero.position.x, hero.position.y, heroRadius, heroStyle.color);
+    drawFallbackGlyph(ctx, hero.position.x, hero.position.y, heroClass.charAt(0).toUpperCase(), heroRadius * 0.75);
   }
 
   return { x: hero.position.x, y: hero.position.y - HERO_RADIUS - 12, ratio: hero.currentHp / hero.maxHp };
@@ -671,6 +997,8 @@ function drawPet(ctx: CanvasRenderingContext2D, pet: PetState, bobSeed: number, 
   const spriteKey = getPetDefinition(pet.id).spriteId ?? pet.id;
   const sprite = getImage(getPetSpriteSrc(spriteKey));
 
+  drawGroundShadow(ctx, pet.position.x, bobY + PET_RADIUS * 0.85, PET_RADIUS * 0.75);
+
   if (sprite) {
     const size = PET_RADIUS * 2;
     // Pets never attack (PetSystem.ts - no combat AI), so this is always
@@ -680,14 +1008,11 @@ function drawPet(ctx: CanvasRenderingContext2D, pet: PetState, bobSeed: number, 
     return;
   }
 
-  ctx.fillStyle = PET_VISUAL_COLOR;
-  ctx.beginPath();
-  ctx.arc(pet.position.x, bobY, PET_RADIUS, 0, Math.PI * 2);
-  ctx.fill();
+  drawPetSilhouette(ctx, pet.position.x, bobY, PET_RADIUS, PET_VISUAL_COLOR);
   // Pets have no display name (only heroes/named monsters do) - the roster
   // number (petRosterConfig id is "pet-N") is the only stable per-pet glyph
   // available, and doubles as a duplicate-tell in a multi-pet squad.
-  drawFallbackGlyph(ctx, pet.position.x, bobY, pet.id.replace('pet-', ''), PET_RADIUS * 1.1);
+  drawFallbackGlyph(ctx, pet.position.x, bobY, pet.id.replace('pet-', ''), PET_RADIUS * 0.85);
 }
 
 // Status rings are what make an archetype's threat readable at a glance
@@ -723,17 +1048,17 @@ function drawEnemy(ctx: CanvasRenderingContext2D, enemy: EnemyState, nowSeconds:
   // demon_boss - see ENEMY_SPRITE_TYPE), not archetypeId or visualId
   // directly - hand-authoring one sheet per archetype isn't the intended art
   // budget, so several archetypes intentionally share a visual identity.
-  const sprite = getImage(getEnemySpriteSrc(ENEMY_SPRITE_TYPE[enemy.archetypeId]));
+  const spriteType = ENEMY_SPRITE_TYPE[enemy.archetypeId];
+  const sprite = getImage(getEnemySpriteSrc(spriteType));
+
+  drawGroundShadow(ctx, enemy.position.x, enemy.position.y + enemyRadius * 0.85, enemyRadius * 0.8);
 
   if (sprite) {
     const size = enemyRadius * 2;
     drawEntitySprite(ctx, sprite, getEnemyAnimationState(enemy), nowSeconds, enemy.position.x, enemy.position.y, size, needsFlip('enemy'));
   } else {
-    ctx.fillStyle = enemyStyle.color;
-    ctx.beginPath();
-    ctx.arc(enemy.position.x, enemy.position.y, enemyRadius, 0, Math.PI * 2);
-    ctx.fill();
-    drawFallbackGlyph(ctx, enemy.position.x, enemy.position.y, enemy.archetypeId.charAt(0).toUpperCase(), enemyRadius * 0.9);
+    drawProceduralEnemySilhouette(ctx, spriteType, enemy.position.x, enemy.position.y, enemyRadius, enemyStyle.color);
+    drawFallbackGlyph(ctx, enemy.position.x, enemy.position.y, enemy.archetypeId.charAt(0).toUpperCase(), enemyRadius * 0.75);
   }
 
   const isEnraged = !!archetype.berserker && enemy.currentHp / enemy.maxHp <= archetype.berserker.hpRatioThreshold;
@@ -905,6 +1230,23 @@ export function drawBackground(ctx: CanvasRenderingContext2D, canvasWidth: numbe
   }
 }
 
+// Soft radial darkening toward the viewport edges - screen-space (not
+// world-space), so BattleScreen calls this at the same untransformed
+// full-resolution pass as drawBackground rather than inside renderScene's
+// letterboxed 400x300 space. Purely atmospheric: pulls the eye toward the
+// middle of the fight without ever obscuring anything drawn there.
+export function drawVignette(ctx: CanvasRenderingContext2D, canvasWidth: number, canvasHeight: number): void {
+  const centerX = canvasWidth / 2;
+  const centerY = canvasHeight / 2;
+  const innerRadius = Math.min(canvasWidth, canvasHeight) * 0.35;
+  const outerRadius = Math.max(canvasWidth, canvasHeight) * 0.75;
+  const gradient = ctx.createRadialGradient(centerX, centerY, innerRadius, centerX, centerY, outerRadius);
+  gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
+  gradient.addColorStop(1, 'rgba(0, 0, 0, 0.45)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+}
+
 // Drawn on top of everything else, only while a roster card is actively
 // being dragged (BattleScreen decides that, this just draws whatever slot
 // list it's handed). occupiedCount slots are dimmed, the rest pulse-glow to
@@ -1008,14 +1350,14 @@ export function renderScene(
   }
 
   const towerSprite = getImage(getTowerSpriteSrc());
+  drawGroundShadow(ctx, base.position.x, base.position.y + BASE_SIZE * 0.52, BASE_SIZE * 0.62);
   if (towerSprite) {
     // Never animated (no walk/attack states for a stationary base) and never
     // flipped (no facing direction) - always the static-image tier, aspect-
     // preserved in case castle.png isn't authored perfectly square.
     drawStaticSprite(ctx, towerSprite, base.position.x, base.position.y, BASE_SIZE, false);
   } else {
-    ctx.fillStyle = '#795548';
-    ctx.fillRect(base.position.x - BASE_SIZE / 2, base.position.y - BASE_SIZE / 2, BASE_SIZE, BASE_SIZE);
+    drawProceduralCastle(ctx, base.position.x, base.position.y, BASE_SIZE);
   }
   drawHpBar(ctx, base.position.x, base.position.y - BASE_SIZE / 2 - 12, base.currentHp / base.maxHp);
 

@@ -15,6 +15,7 @@ import type { EquipmentItem } from '../engine/types';
 import { t } from '../locales/i18n';
 import { useGameStore } from '../store/useGameStore';
 import Accordion from './Accordion';
+import { IconSword, IconShield, IconDiamond, IconBoots, type IconProps } from './icons';
 
 export const SLOT_IDS: EquipmentSlot[] = ['weapon', 'armor', 'trinket', 'boots'];
 const RARITY_IDS: EquipmentRarity[] = ['white', 'green', 'blue', 'purple', 'gold', 'red', 'rainbow'];
@@ -33,11 +34,11 @@ export const SLOT_LABEL_KEYS: Record<EquipmentSlot, string> = {
   boots: 'equipment.slotBoots',
 };
 
-export const SLOT_ICON: Record<EquipmentSlot, string> = {
-  weapon: '🗡️',
-  armor: '🛡️',
-  trinket: '💍',
-  boots: '👢',
+export const SLOT_ICON: Record<EquipmentSlot, (props: IconProps) => JSX.Element> = {
+  weapon: IconSword,
+  armor: IconShield,
+  trinket: IconDiamond,
+  boots: IconBoots,
 };
 
 const RARITY_LABEL_KEYS: Record<EquipmentRarity, string> = {
@@ -94,7 +95,7 @@ function formatStatBonus(stat: UpgradeableStat, value: number): string {
 function itemTitle(item: EquipmentItem): string {
   const rarity = t(RARITY_LABEL_KEYS[item.rarity]);
   const slot = t(SLOT_LABEL_KEYS[item.slot]);
-  return `${SLOT_ICON[item.slot]} ${rarity}${slot} ★${item.starLevel}/${MAX_STAR_LEVEL}`;
+  return `${rarity}${slot} ★${item.starLevel}/${MAX_STAR_LEVEL}`;
 }
 
 // True whenever `item` describes the same equipment in the same state -
@@ -151,11 +152,13 @@ export const ItemCard = memo(function ItemCard({ item, actions, labelPrefix }: {
   const canReforge = reforgeDust >= reforgeCost;
   const mainStatValue = getEquipmentMainStatValue(item.rarity, item.value, item.starLevel);
 
+  const SlotIcon = SLOT_ICON[item.slot];
+
   return (
     <div className={`mini-card ${RARITY_BORDER_CLASS[item.rarity]}`}>
       <div className={`mini-card-name ${RARITY_CLASS[item.rarity]}`}>
         {labelPrefix}
-        {itemTitle(item)}
+        <SlotIcon /> {itemTitle(item)}
       </div>
       {item.setId && <div className="text-faint">{t(equipmentSets[item.setId].nameKey)}</div>}
 

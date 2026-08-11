@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
 import { ensureGameLoopStarted, ensureAutosaveStarted, useGameStore } from '../store/useGameStore';
-import { renderScene, drawBackground, drawDeploySlots, drawSwapHighlight, drawSwapGhost, preloadBattleSprites, HERO_RADIUS } from '../render/CanvasRenderer';
+import { renderScene, drawBackground, drawVignette, drawDeploySlots, drawSwapHighlight, drawSwapGhost, preloadBattleSprites, HERO_RADIUS } from '../render/CanvasRenderer';
 import { t } from '../locales/i18n';
 import { getNormalWaveEnemyCount } from '../data/waveConfig';
 import { getBiomeForChapter, bossMusicTracks } from '../data/biomeConfig';
@@ -234,6 +234,7 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.imageSmoothingEnabled = false;
     drawBackground(ctx, pixelWidth, pixelHeight, biome, enemies.length > 0);
+    drawVignette(ctx, pixelWidth, pixelHeight);
 
     const scale = Math.min(pixelWidth / CANVAS_WIDTH, pixelHeight / CANVAS_HEIGHT);
     const offsetX = (pixelWidth - CANVAS_WIDTH * scale) / 2;
@@ -274,6 +275,12 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
   );
   const killRatio = totalWaveEnemies > 0 ? killedCount / totalWaveEnemies : 0;
 
+  // Captured into a plain const (rather than read as wave.bossKind inline
+  // below) so TypeScript's null-narrowing survives into the JSX closure that
+  // uses it - narrowing a property access like `wave.bossKind` doesn't
+  // persist across a function boundary the way narrowing a local const does.
+  const bossKind = wave.isBossWave ? wave.bossKind : undefined;
+
   return (
     <div className="stage-column">
       {/* Combat-status readout - kept here (not lifted to App's HUD) since
@@ -285,11 +292,17 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
           <div className="hud-widget-row" style={{ justifyContent: 'space-between', fontSize: 11 }}>
             <span>
               {t('wave.stage')} {wave.chapter}-{wave.waveInChapter} · {t(biome.labelKey)}
-              {wave.isBossWave && wave.bossKind
-                ? ` · ${t(wave.bossKind === 'boss' ? 'wave.boss' : 'wave.miniboss')} ${ELEMENT_ICON[enemyArchetypes[wave.bossKind].element]}${t(
-                    ELEMENT_LABEL_KEYS[enemyArchetypes[wave.bossKind].element],
-                  )}`
-                : ''}
+              {bossKind &&
+                (() => {
+                  const element = enemyArchetypes[bossKind].element;
+                  const ElementIcon = ELEMENT_ICON[element];
+                  return (
+                    <>
+                      {' · '}
+                      {t(bossKind === 'boss' ? 'wave.boss' : 'wave.miniboss')} <ElementIcon /> {t(ELEMENT_LABEL_KEYS[element])}
+                    </>
+                  );
+                })()}
             </span>
             {wave.isBossWave && wave.timeRemaining !== undefined ? (
               <span>{Math.ceil(wave.timeRemaining)}s</span>

@@ -10,12 +10,13 @@ import {
 } from '../data/castleTypeConfig';
 import { t } from '../locales/i18n';
 import { useGameStore } from '../store/useGameStore';
+import { IconSword, IconCoin, IconShield, IconOrb, IconCastle, type IconProps } from './icons';
 
-const CASTLE_TYPE_ICON: Record<CastleTypeId, string> = {
-  military: '⚔️',
-  economic: '💰',
-  defense: '🛡️',
-  arcane: '🔮',
+const CASTLE_TYPE_ICON: Record<CastleTypeId, (props: IconProps) => JSX.Element> = {
+  military: IconSword,
+  economic: IconCoin,
+  defense: IconShield,
+  arcane: IconOrb,
 };
 
 // Each type's headline bonus at a given level, formatted for display -
@@ -48,7 +49,7 @@ function CastlePanel() {
   return (
     <div className="card">
       <div className="card-title">
-        {t('castle.title')} · {t('castle.level')} {castleLevel}
+        <IconCastle /> {t('castle.title')} · {t('castle.level')} {castleLevel}
       </div>
 
       <div className="stat-grid">
@@ -73,10 +74,11 @@ function CastlePanel() {
         {castleTypeIds.map((id) => {
           const isActive = id === castleType;
           const def = castleTypeConfig[id];
+          const TypeIcon = CASTLE_TYPE_ICON[id];
           return (
             <div key={id} className={`mini-card${isActive ? ' active' : ''}`}>
               <div className="mini-card-name" data-tooltip={t(def.descKey)}>
-                {CASTLE_TYPE_ICON[id]} {t(def.labelKey)}
+                <TypeIcon /> {t(def.labelKey)}
               </div>
               <div className="mini-card-sub">{formatCastleTypeBonus(id, castleLevel)}</div>
               <div className="item-actions" style={{ marginTop: 6 }}>

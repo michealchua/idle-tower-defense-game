@@ -5,6 +5,7 @@ import { MAX_STAR_LEVEL, gachaRarityConfig, getStarUpCost, type GachaRarity } fr
 import type { PetState } from '../engine/types';
 import { t } from '../locales/i18n';
 import { useGameStore } from '../store/useGameStore';
+import { IconPaw } from './icons';
 
 const STAT_LABEL_KEYS: Record<UpgradeableStat, string> = {
   attackDamage: 'hero.attackDamage',
@@ -66,7 +67,7 @@ function petLabel(definition: PetDefinition): string {
 // Pets don't have a bond archetype to key an icon off of (unlike heroes),
 // so every card uses the same paw glyph - rarity color already carries the
 // at-a-glance differentiation.
-const PET_ICON = '🐾';
+const PET_ICON = IconPaw;
 
 // First entry of passiveBonus, used as the row's "core combat power" stat -
 // the full breakdown (every stat) stays in the detail pane's stat-grid.
@@ -97,7 +98,7 @@ function PetDetail({ definition, gold, materials }: { definition: PetDefinition;
   return (
     <div className={`detail-card ${RARITY_BORDER_CLASS[definition.rarity]}`}>
       <div className={`detail-title ${RARITY_CLASS[definition.rarity]}`}>
-        {PET_ICON} {petLabel(definition)} <span className="text-faint">★{currentStar}/{MAX_STAR_LEVEL}</span>
+        <PET_ICON /> {petLabel(definition)} <span className="text-faint">★{currentStar}/{MAX_STAR_LEVEL}</span>
       </div>
       <div className="item-detail">{t('petRoster.active')}</div>
 
@@ -176,7 +177,7 @@ function PetPanel() {
                   onClick={() => setSelectedPetId(definition.id)}
                 >
                   <div className={`mini-card-name ${RARITY_CLASS[definition.rarity]}`}>
-                    {PET_ICON} {petLabel(definition)}
+                    <PET_ICON /> {petLabel(definition)}
                   </div>
                   <div className="mini-card-sub">★{petStars[definition.id] ?? 0}/{MAX_STAR_LEVEL}</div>
                   {corePassive && (

@@ -9,6 +9,7 @@ import {
 } from '../data/talentConfig';
 import { t } from '../locales/i18n';
 import { useGameStore } from '../store/useGameStore';
+import { IconCoin, IconStar, IconSword, IconHeart, IconShield, IconTarget, type IconProps } from './icons';
 
 const TALENT_ORDER: TalentId[] = ['goldGain', 'expGain', 'attackDamage', 'maxHp', 'criticalChance', 'damageReduction'];
 
@@ -21,13 +22,13 @@ const TALENT_LABEL_KEYS: Record<TalentId, string> = {
   criticalChance: 'talent.criticalChanceBonus',
 };
 
-const TALENT_ICON: Record<TalentId, string> = {
-  goldGain: '💰',
-  expGain: '⭐',
-  attackDamage: '⚔️',
-  maxHp: '❤️',
-  damageReduction: '🛡️',
-  criticalChance: '🎯',
+const TALENT_ICON: Record<TalentId, (props: IconProps) => JSX.Element> = {
+  goldGain: IconCoin,
+  expGain: IconStar,
+  attackDamage: IconSword,
+  maxHp: IconHeart,
+  damageReduction: IconShield,
+  criticalChance: IconTarget,
 };
 
 // criticalChance/damageReduction are flat +X per level (see
@@ -58,11 +59,12 @@ function TalentPanel() {
           const maxed = isTalentMaxed(talentLevels, id);
           const cost = getTalentCost(id, level);
           const canUpgrade = !maxed && skillPoints >= cost;
+          const TalentIcon = TALENT_ICON[id];
 
           return (
             <div key={id} className="mini-card">
               <div className="mini-card-name">
-                <span>{TALENT_ICON[id]} {t(TALENT_LABEL_KEYS[id])}</span>
+                <span><TalentIcon /> {t(TALENT_LABEL_KEYS[id])}</span>
                 <span className="text-faint">Lv.{level}/{talentConfig[id].maxLevel}</span>
               </div>
               <div className="mini-card-sub">{formatTalentBonus(id, talentLevels)}</div>

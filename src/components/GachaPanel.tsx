@@ -5,6 +5,7 @@ import { gachaPityConfig, type PityPoolId } from '../data/pityConfig';
 import { t } from '../locales/i18n';
 import { useGameStore } from '../store/useGameStore';
 import type { GachaPullResult } from '../engine/systems/GachaSystem';
+import { IconSword, IconPaw, IconDiamond, type IconProps } from './icons';
 
 const RARITY_LABEL_KEYS: Record<GachaRarity, string> = {
   white: 'rarity.white',
@@ -106,7 +107,8 @@ function formatOddsPct(pct: number): string {
 // sentence lives in a tooltip - the bar + fraction is enough for the default
 // view.
 function PullCard({
-  icon,
+  kind,
+  isPremium = false,
   label,
   costPerPull,
   currencyLabel,
@@ -119,7 +121,8 @@ function PullCard({
   showFirstTenPullBadge,
   weightField,
 }: {
-  icon: string;
+  kind: 'hero' | 'pet';
+  isPremium?: boolean;
   label: string;
   costPerPull: number;
   currencyLabel: string;
@@ -143,11 +146,14 @@ function PullCard({
   const pityRarityLabel = t(RARITY_LABEL_KEYS[pityRule.rarities[0]]);
   const pityRatio = Math.min(1, pityCurrent / pityRule.pullsUntilGuarantee);
   const oddsBreakdown = getOddsBreakdown(weightField);
+  const KindIcon: (props: IconProps) => JSX.Element = kind === 'hero' ? IconSword : IconPaw;
 
   return (
     <div className="mini-card">
       <div className="mini-card-name">
-        <span>{icon} {label}</span>
+        <span>
+          {isPremium && <IconDiamond />} <KindIcon /> {label}
+        </span>
       </div>
       <div
         className="mini-card-sub"
@@ -262,7 +268,7 @@ function GachaPanel() {
 
       <div className="card-grid">
         <PullCard
-          icon="🦸"
+          kind="hero"
           label={t('gacha.pullHero')}
           costPerPull={gachaPullConfig.pullCostGold}
           currencyLabel={t('battle.gold')}
@@ -276,7 +282,7 @@ function GachaPanel() {
           weightField="pullWeight"
         />
         <PullCard
-          icon="🐾"
+          kind="pet"
           label={t('gacha.pullPet')}
           costPerPull={gachaPullConfig.pullCostGold}
           currencyLabel={t('battle.gold')}
@@ -296,7 +302,8 @@ function GachaPanel() {
       </div>
       <div className="card-grid">
         <PullCard
-          icon="💎🦸"
+          kind="hero"
+          isPremium
           label={t('gacha.pullHeroPremium')}
           costPerPull={gachaPullConfig.pullCostDiamonds}
           currencyLabel={t('battle.diamonds')}
@@ -310,7 +317,8 @@ function GachaPanel() {
           weightField="premiumPullWeight"
         />
         <PullCard
-          icon="💎🐾"
+          kind="pet"
+          isPremium
           label={t('gacha.pullPetPremium')}
           costPerPull={gachaPullConfig.pullCostDiamonds}
           currencyLabel={t('battle.diamonds')}
