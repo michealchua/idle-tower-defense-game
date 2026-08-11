@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { memo, useMemo, useState, type ReactNode } from 'react';
 import {
   equipmentRarities,
   equipmentSets,
@@ -97,13 +97,50 @@ function itemTitle(item: EquipmentItem): string {
   return `${SLOT_ICON[item.slot]} ${rarity}${slot} ★${item.starLevel}/${MAX_STAR_LEVEL}`;
 }
 
+// True whenever `item` describes the same equipment in the same state -
+// EquipmentPanel/HeroEquipmentSection both hand ItemCard a freshly-cloned
+// `item` object every ~100ms (snapshotGameState maps the whole inventory/
+// equipment array into new objects every GameLoop tick, whether or not any
+// item actually changed), so React.memo's *default* prop comparison (a
+// reference check) would never once skip a re-render here - it always sees
+// "a new item object" even when every field is identical. Comparing fields
+// instead of the object reference is what actually lets memo work.
+// Deliberately does NOT compare `actions` (the caller-provided sell/salvage/
+// unequip buttons) - in every real call site those are pure functions of
+// `item.instanceId`/`item.rarity` alone (see EquipmentPanel/HeroPanel), so
+// once `item` itself compares equal, a fresh `actions` element every render
+// is guaranteed to render identically anyway. If a future caller ever gives
+// `actions` its own independent reactive state, this comparator needs to
+// account for that too.
+function areItemCardPropsEqual(prev: { item: EquipmentItem; labelPrefix?: string }, next: { item: EquipmentItem; labelPrefix?: string }): boolean {
+  if (prev.labelPrefix !== next.labelPrefix) {
+    return false;
+  }
+  const a = prev.item;
+  const b = next.item;
+  if (
+    a.instanceId !== b.instanceId ||
+    a.rarity !== b.rarity ||
+    a.slot !== b.slot ||
+    a.stat !== b.stat ||
+    a.value !== b.value ||
+    a.starLevel !== b.starLevel ||
+    a.setId !== b.setId ||
+    a.legendaryEffectId !== b.legendaryEffectId ||
+    a.substats.length !== b.substats.length
+  ) {
+    return false;
+  }
+  return a.substats.every((substat, index) => substat.stat === b.substats[index].stat && substat.value === b.substats[index].value);
+}
+
 // Main stat and substats (副词条) are always visible and clearly separated -
 // this is the one place a player judges "is this item worth keeping,"
 // so both need to read at a glance rather than hiding behind a fold. Only
 // the legendary-effect blurb (flavor text, doesn't affect the decision)
 // stays in the Accordion. Exported so HeroPanel's per-hero equipment slots
 // render the exact same card instead of duplicating this markup.
-export function ItemCard({ item, actions, labelPrefix }: { item: EquipmentItem; actions: ReactNode; labelPrefix?: string }) {
+export const ItemCard = memo(function ItemCard({ item, actions, labelPrefix }: { item: EquipmentItem; actions: ReactNode; labelPrefix?: string }) {
   const gold = useGameStore((state) => state.gold);
   const reforgeDust = useGameStore((state) => state.reforgeDust);
   const starUpEquipment = useGameStore((state) => state.starUpEquipment);
@@ -157,7 +194,8 @@ export function ItemCard({ item, actions, labelPrefix }: { item: EquipmentItem; 
       )}
     </div>
   );
-}
+},
+areItemCardPropsEqual);
 
 // Rarities the "batch salvage low-rarity gear" button targets - the two
 // tiers that never roll a set (see equipmentConfig.SET_ELIGIBLE_RARITIES)

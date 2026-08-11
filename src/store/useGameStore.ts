@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { subscribeWithSelector } from 'zustand/middleware';
 import { createInitialGameState } from '../engine/core/GameState';
 import { GameLoop } from '../engine/core/GameLoop';
 import { heroUpgradeConfig, type UpgradeableStat } from '../data/heroConfig';
@@ -228,7 +229,12 @@ interface GameStore {
   setDragPreviewKind: (kind: 'hero' | null) => void;
 }
 
-export const useGameStore = create<GameStore>((set) => ({
+// subscribeWithSelector adds the selector-form store.subscribe(selector, cb,
+// {equalityFn, fireImmediately}) used below by ensureAutosaveStarted -
+// doesn't change anything about how components read the store (useGameStore
+// selector hooks work exactly as before), purely additive.
+export const useGameStore = create<GameStore>()(
+  subscribeWithSelector((set) => ({
   ...snapshotGameState(gameState),
   upgradeHeroStat: (heroId, stat, count) => {
     if (applyHeroUpgrade(gameState, heroId, stat, count)) {
@@ -470,7 +476,8 @@ export const useGameStore = create<GameStore>((set) => ({
     set({ ...snapshotGameState(gameState), activeSlot: slot });
     saveGameToStorage(slot, gameState);
   },
-}));
+  })),
+);
 
 export { upgradeableStats };
 
@@ -513,6 +520,22 @@ export function ensureAutosaveStarted(): void {
 
   setInterval(persistIfActive, AUTOSAVE_INTERVAL_MS);
   window.addEventListener('beforeunload', persistIfActive);
+
+  // Closes the "just loaded/started a game, tab crashes before the first
+  // 20s interval tick" gap - an immediate save the moment activeSlot first
+  // becomes non-null. subscribeWithSelector's selector form only re-invokes
+  // this listener when the *selected* value (activeSlot) actually changes,
+  // not on every one of GameLoop's 10Hz store updates the way a plain
+  // useGameStore.subscribe(fullStateListener) would - activeSlot flips maybe
+  // once or twice a session, so this listener runs about that often too.
+  useGameStore.subscribe(
+    (state) => state.activeSlot,
+    (activeSlot) => {
+      if (activeSlot !== null) {
+        saveGameToStorage(activeSlot, gameState);
+      }
+    },
+  );
 }
 
 // --- Debug-only actions below. Not part of core gameplay - for fast

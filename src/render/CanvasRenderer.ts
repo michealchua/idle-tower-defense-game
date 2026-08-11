@@ -126,6 +126,54 @@ function drawHpBar(ctx: CanvasRenderingContext2D, x: number, y: number, ratio: n
   ctx.fillRect(barX, y, HP_BAR_WIDTH * Math.max(0, ratio), HP_BAR_HEIGHT);
 }
 
+interface HpBarRequest {
+  x: number;
+  y: number;
+  ratio: number;
+}
+
+// Batched form of drawHpBar for a same-frame group of entities (all
+// currently-drawn heroes, or all currently-drawn enemies) - every entity's
+// bar used to set ctx.fillStyle twice on its own (background, then health
+// color), interleaved with that entity's own body/sprite draw calls. Doing
+// every background fillRect first (one fillStyle assignment), then every
+// "healthy" fill, then every "danger" fill collapses that to exactly 3
+// fillStyle assignments total for the whole group, independent of how many
+// entities are in it, instead of up to 2xN.
+//
+// Trade-off, stated plainly rather than left implicit: this draws the whole
+// group's bars *after* the whole group's bodies, where the original code
+// drew each entity's own bar immediately after that same entity's body. In
+// this game's grid/lane layouts entities don't visually overlap enough for
+// that reordering to read as different on screen, but it is a real
+// (if imperceptible) change to draw order, not a byte-for-byte-identical
+// output guarantee - the standard trade-off for batching draw calls by
+// state, called out here instead of glossed over.
+function drawHpBarsBatched(ctx: CanvasRenderingContext2D, bars: HpBarRequest[]): void {
+  if (bars.length === 0) {
+    return;
+  }
+
+  ctx.fillStyle = '#333333';
+  for (const bar of bars) {
+    ctx.fillRect(bar.x - HP_BAR_WIDTH / 2, bar.y, HP_BAR_WIDTH, HP_BAR_HEIGHT);
+  }
+
+  ctx.fillStyle = '#4caf50';
+  for (const bar of bars) {
+    if (bar.ratio > 0.3) {
+      ctx.fillRect(bar.x - HP_BAR_WIDTH / 2, bar.y, HP_BAR_WIDTH * Math.max(0, bar.ratio), HP_BAR_HEIGHT);
+    }
+  }
+
+  ctx.fillStyle = '#e53935';
+  for (const bar of bars) {
+    if (bar.ratio <= 0.3) {
+      ctx.fillRect(bar.x - HP_BAR_WIDTH / 2, bar.y, HP_BAR_WIDTH * Math.max(0, bar.ratio), HP_BAR_HEIGHT);
+    }
+  }
+}
+
 // Drawn centered on top of the fallback circle/square whenever a sprite
 // hasn't loaded (missing file, still decoding, or failed) - see drawHero/
 // drawEnemy/drawPet. save/restore rather than resetting textBaseline by hand
@@ -552,7 +600,7 @@ function drawVisualEffect(ctx: CanvasRenderingContext2D, effect: VisualEffect): 
   }
 }
 
-function drawHero(ctx: CanvasRenderingContext2D, hero: HeroState, pulseScale: number, nowSeconds: number): void {
+function drawHero(ctx: CanvasRenderingContext2D, hero: HeroState, pulseScale: number, nowSeconds: number): HpBarRequest {
   const heroStyle = getHeroVisualStyle(getVisualTierForLevel(hero.level));
   const heroRadius = HERO_RADIUS * heroStyle.radiusMultiplier * pulseScale;
 
@@ -601,7 +649,7 @@ function drawHero(ctx: CanvasRenderingContext2D, hero: HeroState, pulseScale: nu
     drawFallbackGlyph(ctx, hero.position.x, hero.position.y, heroClass.charAt(0).toUpperCase(), heroRadius * 0.9);
   }
 
-  drawHpBar(ctx, hero.position.x, hero.position.y - HERO_RADIUS - 12, hero.currentHp / hero.maxHp);
+  return { x: hero.position.x, y: hero.position.y - HERO_RADIUS - 12, ratio: hero.currentHp / hero.maxHp };
 }
 
 // Pets are static-stat combatants with no evolution tier - one plain style
@@ -646,7 +694,7 @@ function drawPet(ctx: CanvasRenderingContext2D, pet: PetState, bobSeed: number, 
 // instead of just "another colored circle" - each one ties directly to the
 // condition driving the actual behavior (MovementSystem/DamageSystem read
 // the exact same archetype fields).
-function drawEnemy(ctx: CanvasRenderingContext2D, enemy: EnemyState, nowSeconds: number): void {
+function drawEnemy(ctx: CanvasRenderingContext2D, enemy: EnemyState, nowSeconds: number): HpBarRequest {
   const archetype = enemyArchetypes[enemy.archetypeId];
   const enemyStyle = getEnemyVisualStyle(enemy.visualId);
   const enemyRadius = ENEMY_RADIUS * enemyStyle.radiusMultiplier;
@@ -728,7 +776,7 @@ function drawEnemy(ctx: CanvasRenderingContext2D, enemy: EnemyState, nowSeconds:
     ctx.fillText(enemy.name, enemy.position.x, enemy.position.y - enemyRadius - 18);
   }
 
-  drawHpBar(ctx, enemy.position.x, enemy.position.y - enemyRadius - 12, enemy.currentHp / enemy.maxHp);
+  return { x: enemy.position.x, y: enemy.position.y - enemyRadius - 12, ratio: enemy.currentHp / enemy.maxHp };
 }
 
 // How fast (logical px/sec) the background pans left while the squad is
@@ -976,17 +1024,26 @@ export function renderScene(
   // slightly-off shared pulse is a fine tradeoff to avoid extending that
   // system just for this.
   const pulseScale = getHeroPulseScale(visualEffects);
+  // Bodies first, then every collected bar in one batched pass (see
+  // drawHpBarsBatched's doc comment for what this saves and the draw-order
+  // trade-off that comes with it) - heroes and enemies batch separately so
+  // this doesn't touch the hero-group-before-enemy-group ordering that
+  // already existed.
+  const heroHpBars: HpBarRequest[] = [];
   for (const hero of heroes) {
-    drawHero(ctx, hero, pulseScale, nowSeconds);
+    heroHpBars.push(drawHero(ctx, hero, pulseScale, nowSeconds));
   }
+  drawHpBarsBatched(ctx, heroHpBars);
 
   pets.forEach((pet, index) => {
     drawPet(ctx, pet, index * 1.7, nowSeconds);
   });
 
+  const enemyHpBars: HpBarRequest[] = [];
   for (const enemy of enemies) {
-    drawEnemy(ctx, enemy, nowSeconds);
+    enemyHpBars.push(drawEnemy(ctx, enemy, nowSeconds));
   }
+  drawHpBarsBatched(ctx, enemyHpBars);
 
   for (const effect of visualEffects) {
     drawVisualEffect(ctx, effect);

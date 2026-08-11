@@ -1,4 +1,5 @@
-import { useEffect, useState, type RefObject } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { heroRosterConfig, type HeroDefinition } from '../data/heroRosterConfig';
 import { skillDefinitions } from '../data/skillConfig';
 import { getMaxDeployedHeroes } from '../data/castleConfig';
@@ -14,6 +15,8 @@ import { t } from '../locales/i18n';
 import { upgradeableStats, useGameStore } from '../store/useGameStore';
 import { useDeploySlotDrag } from './useDeploySlotDrag';
 import Accordion from './Accordion';
+import PanelHeader from './PanelHeader';
+import StatTile from './StatTile';
 import { ItemCard, SLOT_ICON, SLOT_IDS, SLOT_LABEL_KEYS } from './EquipmentPanel';
 import { getActiveSetBonuses, type EquipmentSlot } from '../data/equipmentConfig';
 
@@ -462,16 +465,12 @@ function HeroDetail({
       </div>
 
       <div className="stat-grid">
-        <div className="stat-tile">
-          <div className="stat-tile-label">{t('hero.attackDamage')}</div>
-          <div className="stat-tile-value">{formatBigNumber(hero.attackDamage)}</div>
-        </div>
-        <div className="stat-tile" data-tooltip={t(BOND_EFFECT_LABEL_KEYS[definition.bondId])}>
-          <div className="stat-tile-label">{t('hero.bond')}</div>
-          <div className="stat-tile-value">
-            {t(BOND_LABEL_KEYS[definition.bondId])} ({activeBondCounts[definition.bondId] ?? 0})
-          </div>
-        </div>
+        <StatTile label={t('hero.attackDamage')} value={formatBigNumber(hero.attackDamage)} />
+        <StatTile
+          label={t('hero.bond')}
+          value={`${t(BOND_LABEL_KEYS[definition.bondId])} (${activeBondCounts[definition.bondId] ?? 0})`}
+          tooltip={t(BOND_EFFECT_LABEL_KEYS[definition.bondId])}
+        />
       </div>
 
       <button
@@ -539,12 +538,122 @@ function HeroDetail({
   );
 }
 
+interface HeroRosterListProps {
+  ownedHeroes: HeroDefinition[];
+  deployedHeroIds: string[];
+  effectiveSelectedId: string | null;
+  onPointerDown: (id: string) => (event: ReactPointerEvent<HTMLDivElement>) => void;
+  onPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  onPointerUp: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  onPointerCancel: () => void;
+}
+
+// Split out of HeroPanel so the compact roster rows (which only need
+// level/attackDamage/name/evolution/star - never live HP or exp) don't
+// re-render 10x/sec purely because HeroPanel's own `heroes` selector does
+// (see that selector's comment - it deliberately stays full-fidelity for the
+// detail pane). React.memo here only pays off because every prop above is
+// now stable across HeroPanel's frequent re-renders: ownedHeroes is
+// useMemo'd, deployedHeroIds/effectiveSelectedId are primitives-or-shallow,
+// and the pointer handlers are useCallback'd/stable - see HeroPanel's own
+// comments on each. Without that prep work this memo would silently never
+// hit (new prop references every render look "changed" to memo's shallow
+// compare regardless of whether the underlying data actually did).
+const HeroRosterList = memo(function HeroRosterList({
+  ownedHeroes,
+  deployedHeroIds,
+  effectiveSelectedId,
+  onPointerDown,
+  onPointerMove,
+  onPointerUp,
+  onPointerCancel,
+}: HeroRosterListProps) {
+  const ownedHeroIds = useMemo(() => ownedHeroes.map((definition) => definition.id), [ownedHeroes]);
+
+  // One string per owned hero ("level|attackDamage|name|evolutionBranchId|
+  // star") instead of selecting the raw HeroState objects - useShallow
+  // compares each array element with Object.is, which only does what you'd
+  // want (value equality) when the elements are primitives. An array of
+  // freshly-cloned hero *objects* (which is what a plain `state.heroes`
+  // selector would hand back every tick, per snapshotGameState) would fail
+  // that same Object.is check every time even when nothing about the hero
+  // actually changed, since it's never the same object reference twice.
+  // Encoding straight to a string sidesteps that entirely.
+  const rosterSignatures = useGameStore(
+    useShallow((state) =>
+      ownedHeroIds.map((id) => {
+        const hero = state.heroes.find((candidate) => candidate.id === id);
+        if (!hero) {
+          return '';
+        }
+        const star = state.heroStars[id] ?? 0;
+        return `${hero.level}|${Math.round(hero.attackDamage)}|${hero.name}|${hero.evolutionBranchId ?? ''}|${star}`;
+      }),
+    ),
+  );
+
+  return (
+    <div className="master-list">
+      {ownedHeroes.map((definition, index) => {
+        const signature = rosterSignatures[index];
+        if (!signature) {
+          return null;
+        }
+        const [levelStr, attackDamageStr, name, evolutionBranchId, starStr] = signature.split('|');
+        const effectiveClass = evolutionBranchId
+          ? (definition.evolutionBranches.find((branch) => branch.id === evolutionBranchId)?.resultClass ?? definition.class)
+          : definition.class;
+        const isDeployed = deployedHeroIds.includes(definition.id);
+        const isSelected = definition.id === effectiveSelectedId;
+        return (
+          <div
+            key={definition.id}
+            className={`mini-card drag-handle selectable ${RARITY_BORDER_CLASS[definition.rarity]}${isSelected ? ' active' : ''}`}
+            onPointerDown={onPointerDown(definition.id)}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onPointerCancel={onPointerCancel}
+          >
+            <div className={`mini-card-name ${RARITY_CLASS[definition.rarity]}`}>
+              <span>
+                {BOND_ICON[definition.bondId]}
+                {CLASS_ICON[effectiveClass]}
+                {ELEMENT_ICON[definition.element]} {name}
+                {evolutionBranchId ? ' ✨' : ''}
+              </span>
+              <span className={`status-dot${isDeployed ? ' on' : ''}`} title={isDeployed ? t('squad.deployed') : t('squad.benched')} />
+            </div>
+            <div className="mini-card-sub">
+              Lv.{levelStr} · ★{starStr}
+            </div>
+            <div className="mini-card-sub">
+              {t('hero.attackDamage')} {formatBigNumber(Number(attackDamageStr))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+});
+
 function HeroPanel({ gameScreenRef }: { gameScreenRef: RefObject<HTMLDivElement> }) {
+  // Full-fidelity, unshallowed - the detail pane below needs hero.currentHp/
+  // exp to actually tick up live during combat, so this one deliberately
+  // keeps re-rendering HeroPanel every GameLoop tick. useShallow wouldn't
+  // help here even if applied (its per-element comparison only pays off when
+  // elements are primitives - see HeroRosterList below, which selects a
+  // string-encoded summary specifically so it *can* use it).
   const heroes = useGameStore((state) => state.heroes);
-  const unlockedHeroIds = useGameStore((state) => state.unlockedHeroIds);
-  const deployedHeroIds = useGameStore((state) => state.deployedHeroIds);
+  // These two are arrays of *primitive* ids - useShallow's element-wise
+  // comparison means HeroPanel only re-renders when one of them actually
+  // changes (unlock, deploy/undeploy), not on every 10Hz snapshot tick the
+  // way a plain selector would (snapshotGameState always spreads these into
+  // a fresh array reference even when their contents are identical to the
+  // last tick). heroStars isn't read directly here anymore - HeroDetail and
+  // HeroRosterList below each select just their own slice of it.
+  const unlockedHeroIds = useGameStore(useShallow((state) => state.unlockedHeroIds));
+  const deployedHeroIds = useGameStore(useShallow((state) => state.deployedHeroIds));
   const castleLevel = useGameStore((state) => state.castleLevel);
-  const heroStars = useGameStore((state) => state.heroStars);
   const gold = useGameStore((state) => state.gold);
   const epicSourceStone = useGameStore((state) => state.epicSourceStone);
   const legendarySourceStone = useGameStore((state) => state.legendarySourceStone);
@@ -557,8 +666,30 @@ function HeroPanel({ gameScreenRef }: { gameScreenRef: RefObject<HTMLDivElement>
   const materials: Materials = { epicSourceStone, legendarySourceStone, diamonds };
   const maxDeployedHeroes = getMaxDeployedHeroes(castleLevel);
   const squadFull = deployedHeroIds.length >= maxDeployedHeroes;
-  const ownedHeroes = heroRosterConfig.filter((definition) => unlockedHeroIds.includes(definition.id));
+  // Memoized on unlockedHeroIds alone (now stable-by-value via useShallow
+  // above) rather than recomputed every render - heroRosterConfig.filter
+  // would otherwise hand HeroRosterList a fresh array every tick and defeat
+  // its React.memo below regardless of how stable its other props are.
+  const ownedHeroes = useMemo(
+    () => heroRosterConfig.filter((definition) => unlockedHeroIds.includes(definition.id)),
+    [unlockedHeroIds],
+  );
   const activeBondCounts = getActiveBondCounts(deployedHeroIds);
+
+  // useCallback so these stay referentially stable across HeroPanel's own
+  // frequent re-renders (see the `heroes` comment above) - handlePointerUp
+  // depends on both (see useDeploySlotDrag.ts), so an inline arrow here
+  // would silently make *that* unstable too, cascading into HeroRosterList's
+  // memo below never actually skipping a re-render.
+  const handleToggleSelect = useCallback((id: string) => setSelectedHeroId(id), []);
+  const handleDeployDrop = useCallback(
+    (id: string) => {
+      if (!deployedHeroIds.includes(id)) {
+        deployHero(id);
+      }
+    },
+    [deployedHeroIds, deployHero],
+  );
 
   const { drag, registerGameScreen, handlePointerDown, handlePointerMove, handlePointerUp, handlePointerCancel } = useDeploySlotDrag({
     // A plain tap now selects the hero into the detail pane instead of
@@ -566,12 +697,8 @@ function HeroPanel({ gameScreenRef }: { gameScreenRef: RefObject<HTMLDivElement>
     // HeroDetail (the master-detail pattern's "primary action" lives with
     // the detail, not the compact row). Dragging onto the canvas still
     // deploys directly via onDeploy below, unchanged.
-    onToggle: (id) => setSelectedHeroId(id),
-    onDeploy: (id) => {
-      if (!deployedHeroIds.includes(id)) {
-        deployHero(id);
-      }
-    },
+    onToggle: handleToggleSelect,
+    onDeploy: handleDeployDrop,
   });
 
   useEffect(() => {
@@ -608,53 +735,22 @@ function HeroPanel({ gameScreenRef }: { gameScreenRef: RefObject<HTMLDivElement>
 
   return (
     <div className="card">
-      <div className="card-title">
-        {t('heroRoster.title')} ({deployedHeroIds.length}/{maxDeployedHeroes})
-      </div>
+      <PanelHeader title={t('heroRoster.title')} trailing={`${deployedHeroIds.length}/${maxDeployedHeroes}`} />
       {ownedHeroes.length === 0 ? (
         <div className="empty-state">{t('heroRoster.empty')}</div>
       ) : (
         <>
           <div className="card-subtitle">{t('squad.dragHint')}</div>
           <div className="master-detail">
-            <div className="master-list">
-              {ownedHeroes.map((definition) => {
-                const hero = heroes.find((candidate) => candidate.id === definition.id);
-                if (!hero) {
-                  return null;
-                }
-                const isDeployed = deployedHeroIds.includes(definition.id);
-                const isSelected = definition.id === effectiveSelectedId;
-                return (
-                  <div
-                    key={definition.id}
-                    className={`mini-card drag-handle selectable ${RARITY_BORDER_CLASS[definition.rarity]}${
-                      isSelected ? ' active' : ''
-                    }`}
-                    onPointerDown={handlePointerDown(definition.id)}
-                    onPointerMove={handlePointerMove}
-                    onPointerUp={handlePointerUp}
-                    onPointerCancel={handlePointerCancel}
-                  >
-                    <div className={`mini-card-name ${RARITY_CLASS[definition.rarity]}`}>
-                      <span>
-                        {BOND_ICON[definition.bondId]}
-                        {CLASS_ICON[getEffectiveHeroClass(hero)]}
-                        {ELEMENT_ICON[definition.element]} {hero.name}
-                        {hero.evolutionBranchId ? ' ✨' : ''}
-                      </span>
-                      <span className={`status-dot${isDeployed ? ' on' : ''}`} title={isDeployed ? t('squad.deployed') : t('squad.benched')} />
-                    </div>
-                    <div className="mini-card-sub">
-                      Lv.{hero.level} · ★{heroStars[definition.id] ?? 0}
-                    </div>
-                    <div className="mini-card-sub">
-                      {t('hero.attackDamage')} {formatBigNumber(hero.attackDamage)}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <HeroRosterList
+              ownedHeroes={ownedHeroes}
+              deployedHeroIds={deployedHeroIds}
+              effectiveSelectedId={effectiveSelectedId}
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerCancel}
+            />
             <div className="detail-pane">
               {selectedDefinition && selectedHero ? (
                 <HeroDetail
