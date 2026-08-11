@@ -63,6 +63,20 @@ jobs:
           git tag "v$VERSION"
           git push origin "v$VERSION"
 
+      # electron-builder uploads the .blockmap and the .exe as two separate
+      # publish tasks; each one independently asks "does a release for this
+      # tag exist yet?" and, seeing no release object created yet, creates
+      # one - the two checks race, and both can lose, leaving two separate
+      # Release objects for the same tag (one holding only the blockmap, the
+      # other holding the real installer). Pre-creating the release here
+      # means electron-builder always finds one already there and just
+      # uploads assets to it, instead of racing to create it twice.
+      - name: Create GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "v$VERSION" --title "$VERSION" --generate-notes
+
       - name: Build web app
         run: npm run build
 
@@ -70,3 +84,21 @@ jobs:
         run: npx electron-builder --win --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Safety net on top of the pre-create above, and cleans up the
+      # existing v1.0.13/14/15 orphans from before this fix - sweeps every
+      # published (non-draft) release and removes any that ended up without
+      # an .exe asset, which only ever happens to the losing side of the
+      # race described above.
+      - name: Clean up incomplete duplicate releases
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api "repos/${{ github.repository }}/releases" --paginate --jq \
+            '.[] | select(.draft == false) | select([.assets[].name] | any(endswith(".exe")) | not) | .id' |
+          while read -r id; do
+            echo "Deleting incomplete release id=$id"
+            gh api -X DELETE "repos/${{ github.repository }}/releases/$id"
+          done
