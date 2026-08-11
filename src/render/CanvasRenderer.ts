@@ -270,10 +270,23 @@ function isFrameSheet(image: HTMLImageElement): boolean {
 // animation, but still real art instead of either a broken slice or the
 // geometric fallback - the middle rung of this file's three-tier fallback
 // (animated sheet > static image > geometric shape).
-function drawStaticSprite(ctx: CanvasRenderingContext2D, image: HTMLImageElement, x: number, y: number, size: number, flip: boolean): void {
+// smooth=true opts back into bilinear/bicubic sampling for this one draw
+// call, overriding renderScene's frame-wide imageSmoothingEnabled=false -
+// appropriate for a hi-res illustrated static sprite (hero art) being scaled
+// way down, where nearest-neighbor would alias into noise; wrong for an
+// actual 32x32 pixel-art asset (enemy/tower/pet sheets, or their static-image
+// fallback), which wants to stay crisp. Always restored before returning so
+// the smoothing flag never leaks into the next draw call.
+function drawStaticSprite(ctx: CanvasRenderingContext2D, image: HTMLImageElement, x: number, y: number, size: number, flip: boolean, smooth = false): void {
   const scale = Math.min(size / image.width, size / image.height);
   const drawWidth = image.width * scale;
   const drawHeight = image.height * scale;
+
+  if (smooth) {
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+  }
 
   if (flip) {
     ctx.save();
@@ -281,10 +294,13 @@ function drawStaticSprite(ctx: CanvasRenderingContext2D, image: HTMLImageElement
     ctx.scale(-1, 1);
     ctx.drawImage(image, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
     ctx.restore();
-    return;
+  } else {
+    ctx.drawImage(image, x - drawWidth / 2, y - drawHeight / 2, drawWidth, drawHeight);
   }
 
-  ctx.drawImage(image, x - drawWidth / 2, y - drawHeight / 2, drawWidth, drawHeight);
+  if (smooth) {
+    ctx.restore();
+  }
 }
 
 // Single entry point drawHero/drawEnemy/drawPet call once a sprite has
@@ -299,11 +315,12 @@ function drawEntitySprite(
   y: number,
   size: number,
   flip: boolean,
+  smooth = false,
 ): void {
   if (isFrameSheet(image)) {
     drawSpriteFrame(ctx, image, state, nowSeconds, x, y, size, flip);
   } else {
-    drawStaticSprite(ctx, image, x, y, size, flip);
+    drawStaticSprite(ctx, image, x, y, size, flip, smooth);
   }
 }
 
@@ -360,8 +377,8 @@ export function preloadBattleSprites(): void {
   const enemySpriteTypes = new Set(Object.values(ENEMY_SPRITE_TYPE));
 
   preloadSprites([
-    ...heroClasses.map((heroClass) => getHeroSpriteSrc(heroClass)),
-    ...getAllEvolutionBranchIds().map((branchId) => getHeroEvolvedSpriteSrc(branchId)),
+    ...heroClasses.flatMap((heroClass) => [getHeroSpriteSrc(heroClass, 'walk'), getHeroSpriteSrc(heroClass, 'attack')]),
+    ...getAllEvolutionBranchIds().flatMap((branchId) => [getHeroEvolvedSpriteSrc(branchId, 'walk'), getHeroEvolvedSpriteSrc(branchId, 'attack')]),
     ...Array.from(enemySpriteTypes).map((type) => getEnemySpriteSrc(type)),
     ...petRosterConfig.map((pet) => getPetSpriteSrc(pet.spriteId ?? pet.id)),
     getTowerSpriteSrc(),
@@ -555,16 +572,27 @@ function drawHero(ctx: CanvasRenderingContext2D, hero: HeroState, pulseScale: nu
 
   // Evolution-aware: a hero that's committed to a branch (HeroSystem.
   // evolveHero, permanent, see HeroState.evolutionBranchId) prefers its own
-  // evolved sheet over the plain class one - falls back to the base class
+  // evolved art over the plain class one - falls back to the base class
   // sprite if the evolved file isn't there yet, so evolving doesn't
   // regress a hero from "real sprite" back to "geometric shape" just because
   // its specific evolved art hasn't been dropped in.
-  const evolvedSprite = hero.evolutionBranchId ? getImage(getHeroEvolvedSpriteSrc(hero.evolutionBranchId)) : undefined;
-  const sprite = evolvedSprite ?? getImage(getHeroSpriteSrc(heroClass));
+  //
+  // Hero art is a walk/attack pair of static illustrations, not a frame
+  // sheet (see getHeroSpriteSrc's doc comment) - the animation state picks
+  // which file to load. Not every class/branch has an attack pose drawn yet,
+  // so a missing attack file falls back to that same source's walk pose
+  // rather than the geometric fallback - a hero mid-swing should still show
+  // its real art, just without the swing itself, instead of regressing to a
+  // colored circle for the ~0.2s attack window (see ATTACK_ANIM_WINDOW_SECONDS).
+  const animState = getHeroAnimationState(hero);
+  const evolvedSprite = hero.evolutionBranchId
+    ? (getImage(getHeroEvolvedSpriteSrc(hero.evolutionBranchId, animState)) ?? getImage(getHeroEvolvedSpriteSrc(hero.evolutionBranchId, 'walk')))
+    : undefined;
+  const sprite = evolvedSprite ?? getImage(getHeroSpriteSrc(heroClass, animState)) ?? getImage(getHeroSpriteSrc(heroClass, 'walk'));
 
   if (sprite) {
     const size = heroRadius * 2;
-    drawEntitySprite(ctx, sprite, getHeroAnimationState(hero), nowSeconds, hero.position.x, hero.position.y, size, needsFlip('hero'));
+    drawEntitySprite(ctx, sprite, animState, nowSeconds, hero.position.x, hero.position.y, size, needsFlip('hero'), true);
   } else {
     ctx.fillStyle = heroStyle.color;
     ctx.beginPath();

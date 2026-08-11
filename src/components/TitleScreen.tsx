@@ -83,7 +83,7 @@ function TitleScreen({ onEnterGame }: TitleScreenProps) {
   return (
     <div className="title-screen" onClick={() => !isPanelOpen && handleQuickStart()}>
       <div className="title-background" />
-      <img className="title-hero-idle" src="/sprites/heroes/paladin.png" alt="" />
+      <img className="title-hero-idle" src="/sprites/heroes/paladin_walk.png" alt="" />
 
       <div className="title-logo">
         <div className="title-name">{t('title.gameName')}</div>

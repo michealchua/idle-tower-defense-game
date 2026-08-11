@@ -1201,7 +1201,7 @@ select {
   bottom: 8%;
   width: 96px;
   height: 96px;
-  image-rendering: pixelated;
+  object-fit: contain;
   animation: title-hero-bob 2.4s ease-in-out infinite;
   filter: drop-shadow(0 0 18px rgba(91, 140, 255, 0.5));
   z-index: 1;

@@ -25,14 +25,20 @@ export function getImage(src: string): HTMLImageElement | undefined {
   return image.complete && image.naturalWidth > 0 ? image : undefined;
 }
 
+// Hero art is a pair of high-detail static illustrations per class/branch
+// (walk pose, attack pose), not a 32x32 frame sheet - see CanvasRenderer's
+// drawHeroSprite for how the two get swapped. 'state' defaults to 'walk' so
+// existing call sites that only need the idle pose don't have to pass it.
+export type HeroSpriteState = 'walk' | 'attack';
+
 // Single source of truth for the sprite directory convention - CanvasRenderer
 // calls these instead of building paths inline, so every entity type looks
 // in the same place a real asset drop would use. Sprites are keyed by class/
 // archetype/id rather than one-per-instance (100 unique hero portraits isn't
 // a realistic art budget) - see CanvasRenderer's drawHero/drawEnemy/drawPet
 // for what each falls back to when the file isn't there yet.
-export function getHeroSpriteSrc(heroClass: string): string {
-  return `/sprites/heroes/${heroClass}.png`;
+export function getHeroSpriteSrc(heroClass: string, state: HeroSpriteState = 'walk'): string {
+  return `/sprites/heroes/${heroClass}_${state}.png`;
 }
 
 // Takes a sprite "type" (e.g. 'goblin', 'slime', 'demon_boss'), not an
@@ -52,8 +58,8 @@ export function getPetSpriteSrc(petId: string): string {
 // Branch ids (heroRosterConfig.ts, e.g. "warrior-berserker") use hyphens;
 // filenames use underscores to match this project's existing sprite-file
 // convention, hence the replace.
-export function getHeroEvolvedSpriteSrc(evolutionBranchId: string): string {
-  return `/sprites/heroes/evolved/${evolutionBranchId.replace(/-/g, '_')}.png`;
+export function getHeroEvolvedSpriteSrc(evolutionBranchId: string, state: HeroSpriteState = 'walk'): string {
+  return `/sprites/heroes/evolved/${evolutionBranchId.replace(/-/g, '_')}_${state}.png`;
 }
 
 // Single tower sprite - no per-castleType variants yet, same "one file, not
