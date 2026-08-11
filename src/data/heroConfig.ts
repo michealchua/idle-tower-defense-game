@@ -1,4 +1,4 @@
-import { computeScaledValue } from './scaling';
+import { computeScaledValue } from '../utils/scaling';
 
 export const heroBaseConfig = {
   level: 1,

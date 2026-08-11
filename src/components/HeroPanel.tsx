@@ -8,7 +8,7 @@ import { getActiveBondCounts, type BondId } from '../data/bondConfig';
 import type { ElementId } from '../data/elementConfig';
 import { isHeroUpgradeMaxed, previewHeroUpgradeBulk } from '../engine/systems/UpgradeSystem';
 import { canEvolveHero, getEffectiveHeroClass } from '../engine/systems/HeroSystem';
-import { formatBigNumber } from '../data/scaling';
+import { formatBigNumber } from '../utils/scaling';
 import type { HeroState } from '../engine/types';
 import { t } from '../locales/i18n';
 import { upgradeableStats, useGameStore } from '../store/useGameStore';

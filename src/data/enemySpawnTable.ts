@@ -1,6 +1,6 @@
 import type { EnemyArchetypeId } from './enemyArchetypes';
 import type { BiomeId } from './biomeConfig';
-import { weightedPick } from './scaling';
+import { weightedPick } from '../utils/scaling';
 
 export interface SpawnWeightEntry {
   archetypeId: EnemyArchetypeId;

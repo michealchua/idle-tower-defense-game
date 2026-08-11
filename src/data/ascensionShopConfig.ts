@@ -1,4 +1,4 @@
-import { computeScaledValue } from './scaling';
+import { computeScaledValue } from '../utils/scaling';
 
 export type AscensionShopId = 'attackDamage' | 'maxHp' | 'goldGain' | 'expGain' | 'damageReduction' | 'criticalChance';
 

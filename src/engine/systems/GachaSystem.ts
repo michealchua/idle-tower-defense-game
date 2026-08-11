@@ -1,4 +1,4 @@
-import { weightedPick } from '../../data/scaling';
+import { weightedPick } from '../../utils/scaling';
 import { gachaPullConfig, gachaRarityConfig, type GachaRarity } from '../../data/gachaConfig';
 import { diamondExchangeConfig, dailyLoginRewardConfig } from '../../data/diamondConfig';
 import { gachaPityConfig, type PityPoolId } from '../../data/pityConfig';

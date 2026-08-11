@@ -1,5 +1,6 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const { autoUpdater } = require('electron-updater');
 const { devUrl } = require('./gameUrl.cjs');
 
@@ -16,11 +17,10 @@ function resolveIndexPath() {
 
 function createWindow() {
   const win = new BrowserWindow({
-    // index.html's #game-container/#build-panel/#inventory-panel are all a
-    // fixed 960px wide with no horizontal body padding - width has to clear
-    // that (plus window chrome) or the page gets a horizontal scrollbar.
-    // Height comfortably fits the 540px canvas plus the HUD message row,
-    // build panel, and inventory panel stacked underneath it.
+    // The game itself is a full-viewport responsive layout (src/index.css's
+    // .battle-layer/.hud-layer), not a fixed pixel size - these are just a
+    // reasonable default window size and a floor that keeps corner HUD
+    // widgets from overlapping each other.
     width: 1024,
     height: 900,
     minWidth: 1000,
@@ -35,6 +35,16 @@ function createWindow() {
     // the project root's build/ folder this icon lives in), so pointing at
     // it from code would just be a second, more fragile way to set
     // something the installer step already handles correctly.
+    webPreferences: {
+      // Exposes only the narrow tataKAISave API (see preload.cjs) into the
+      // page's window object - contextIsolation keeps that bridge in its
+      // own JS context so the renderer's own (untrusted-by-default) scripts
+      // can't reach Node/Electron internals directly, only what preload.cjs
+      // deliberately exposes.
+      preload: path.join(__dirname, 'preload.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
   });
 
   if (devUrl) {
@@ -59,6 +69,67 @@ function createWindow() {
     }
   });
 }
+
+// --- Checkpoint save IPC ---------------------------------------------------
+// Backs src/engine/core/SaveSystem.ts's IPC path (used whenever
+// window.tataKAISave exists, i.e. the packaged/dev Electron shell - the web
+// build has no preload script and falls back to localStorage there instead).
+// Saves land as real JSON files under the OS-appropriate per-app data
+// directory instead of the renderer's localStorage - survives storage-
+// partition eviction, is a real file the user can back up or copy between
+// machines, and isn't subject to any per-origin storage cap.
+//
+// Every handler here is registered with ipcMain.on (not .handle) and replies
+// via event.returnValue, pairing with preload.cjs's ipcRenderer.sendSync -
+// see that file's comment for why synchronous. Because the whole call is
+// already blocking the renderer until this returns, there's no benefit to
+// async fs here either - plain sync fs calls are the natural match and keep
+// each handler a single straight-line function.
+const SAVE_SLOTS = [1, 2, 3];
+const savesDir = path.join(app.getPath('userData'), 'saves');
+
+function saveFilePath(slot) {
+  return path.join(savesDir, `slot-${slot}.json`);
+}
+
+function readSaveFile(slot) {
+  try {
+    return JSON.parse(fs.readFileSync(saveFilePath(slot), 'utf8'));
+  } catch {
+    // Missing file (never saved to this slot) or corrupt JSON both read as
+    // "empty slot" - same contract SaveSystem.ts's localStorage backend
+    // already has (readSaveFile there does the same for a missing/corrupt
+    // localStorage key).
+    return null;
+  }
+}
+
+ipcMain.on('save:write', (event, slot, data) => {
+  fs.mkdirSync(savesDir, { recursive: true });
+  fs.writeFileSync(saveFilePath(slot), JSON.stringify(data));
+  event.returnValue = true;
+});
+
+ipcMain.on('save:read', (event, slot) => {
+  event.returnValue = readSaveFile(slot);
+});
+
+ipcMain.on('save:delete', (event, slot) => {
+  try {
+    fs.unlinkSync(saveFilePath(slot));
+  } catch {
+    // Already gone - deleting an empty slot is a no-op, not an error.
+  }
+  event.returnValue = true;
+});
+
+ipcMain.on('save:list', (event) => {
+  // Metadata only (not the full save, which also carries the whole
+  // GameState) - this backs TitleScreen's slot picker, which never needs
+  // more than that to render, and SaveSystem.getMostRecentSlot, which only
+  // needs each slot's savedAt.
+  event.returnValue = SAVE_SLOTS.map((slot) => ({ slot, metadata: readSaveFile(slot)?.metadata ?? null }));
+});
 
 app.whenReady().then(() => {
   createWindow();

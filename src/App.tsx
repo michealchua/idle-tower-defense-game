@@ -15,7 +15,7 @@ import AscensionPanel from './components/AscensionPanel';
 import AscensionShopPanel from './components/AscensionShopPanel';
 import RecordsPanel from './components/RecordsPanel';
 import { getBiomeForChapter } from './data/biomeConfig';
-import { formatBigNumber } from './data/scaling';
+import { formatBigNumber } from './utils/scaling';
 import { isPanelUnlocked, type PanelId } from './data/unlockConditionConfig';
 import { getActiveTutorialStep } from './data/tutorialConfig';
 import { getGlobalWaveNumber } from './engine/systems/WaveSystem';

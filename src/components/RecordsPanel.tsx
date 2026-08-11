@@ -1,5 +1,5 @@
 import { dailyQuestConfig, dailyQuestIds, type DailyQuestId } from '../data/dailyQuestConfig';
-import { formatBigNumber } from '../data/scaling';
+import { formatBigNumber } from '../utils/scaling';
 import { t } from '../locales/i18n';
 import { useGameStore } from '../store/useGameStore';
 

@@ -6,7 +6,7 @@ import { getNormalWaveEnemyCount } from '../data/waveConfig';
 import { getBiomeForChapter, bossMusicTracks } from '../data/biomeConfig';
 import { layoutHeroPositions } from '../data/mapConfig';
 import { getMaxDeployedHeroes } from '../data/castleConfig';
-import { formatBigNumber } from '../data/scaling';
+import { formatBigNumber } from '../utils/scaling';
 import { audioManager } from '../audio/AudioManager';
 import { enemyArchetypes } from '../data/enemyArchetypes';
 import { ELEMENT_ICON, ELEMENT_LABEL_KEYS } from './HeroPanel';

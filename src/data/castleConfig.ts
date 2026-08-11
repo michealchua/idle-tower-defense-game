@@ -1,4 +1,4 @@
-import { computeScaledValue } from './scaling';
+import { computeScaledValue } from '../utils/scaling';
 import { baseConfig } from './baseConfig';
 import { squadConfig } from './squadConfig';
 

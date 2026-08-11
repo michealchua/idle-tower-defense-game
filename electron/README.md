@@ -20,7 +20,10 @@ project root/
                             Windows .ico from this automatically
   electron/
     main.cjs             <- creates the BrowserWindow, loads dist/ (or a dev
-                              URL), triggers electron-updater on startup
+                              URL), triggers electron-updater on startup,
+                              hosts the save:* IPC handlers (see below)
+    preload.cjs            <- contextBridge surface (window.tataKAISave) the
+                                renderer's save system talks to
     gameUrl.cjs           <- resolves the dev-server URL, if any, from argv
     package.json           <- the *packaged app's* manifest (name/main/version
                               + electron-updater dependency - this is what
@@ -75,6 +78,43 @@ builds, and runs `electron-builder --win --publish always` to upload the
 installer + update metadata (`latest.yml`) as a new GitHub Release. That's
 the actual "push to GitHub -> installed app updates itself" pipeline - no
 manual packaging/upload step needed day to day.
+
+## Checkpoint saves (IPC, not localStorage)
+
+Save slots land as real JSON files under `app.getPath('userData')/saves/
+slot-<N>.json` in the packaged/dev Electron shell, instead of the renderer's
+localStorage. Three pieces:
+
+1. **`preload.cjs`** - runs in an isolated context with `contextIsolation:
+   true` (set on the `BrowserWindow` in `main.cjs`) and uses
+   `contextBridge.exposeInMainWorld` to put a narrow `window.tataKAISave`
+   object (`save`/`load`/`del`/`list`) into the page - the renderer's own
+   script never gets direct access to `ipcRenderer`, `fs`, or anything else
+   Node-flavored, only these four methods.
+2. Those four methods are backed by `ipcRenderer.sendSync`, not `invoke` -
+   deliberately synchronous/blocking, because `src/engine/core/SaveSystem.ts`
+   (the renderer-side client) has always had a synchronous API (including
+   `TitleScreen.tsx` calling `getSaveMetadata`/`hasSave` inline during
+   render, which can't `await`), and keeping that contract meant the IPC
+   layer had to match it rather than the other way around. Save/load/delete/
+   list are rare, small-JSON calls - never per-frame - so blocking the
+   renderer for the few milliseconds a local file read/write takes is a
+   non-issue here; this would be the wrong call for anything hot-path.
+3. **`main.cjs`**'s `ipcMain.on('save:*', ...)` handlers pair with
+   `sendSync` (handlers registered with `.handle` only pair with `invoke`,
+   the two don't mix) and reply via `event.returnValue`. Since the whole
+   call is already blocking the renderer until it returns, the handlers use
+   plain synchronous `fs` calls - no benefit to async fs when nothing can
+   proceed until the reply is sent anyway.
+
+`SaveSystem.ts` picks between this IPC backend and the original localStorage
+backend once, at module load, based on whether `window.tataKAISave` exists -
+undefined in the plain web build (no preload script there), so that build
+keeps using localStorage exactly as before. It also migrates any old
+localStorage saves into the new file-backed store the first time the IPC
+backend runs and finds a slot with legacy data but no new-backend copy yet -
+one-way, non-destructive (the localStorage copy is left in place as a
+backup, not deleted).
 
 ## The electron-builder config (root `package.json`'s `"build"` key)
 

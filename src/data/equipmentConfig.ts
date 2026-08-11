@@ -1,5 +1,5 @@
 import type { UpgradeableStat } from './heroConfig';
-import { weightedPick } from './scaling';
+import { weightedPick } from '../utils/scaling';
 import { MAX_STAR_LEVEL, type GachaRarity } from './gachaConfig';
 
 export type EquipmentSlot = 'weapon' | 'armor' | 'trinket' | 'boots';

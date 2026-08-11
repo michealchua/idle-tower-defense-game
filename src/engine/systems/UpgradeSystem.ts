@@ -1,5 +1,5 @@
 import { heroUpgradeConfig, type UpgradeableStat } from '../../data/heroConfig';
-import { computeScaledValue } from '../../data/scaling';
+import { computeScaledValue } from '../../utils/scaling';
 import { recomputeHeroStats } from './HeroStatsSystem';
 import type { GameState, HeroState } from '../types';
 

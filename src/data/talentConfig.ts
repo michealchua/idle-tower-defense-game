@@ -1,4 +1,4 @@
-import { computeScaledValue } from './scaling';
+import { computeScaledValue } from '../utils/scaling';
 import type { BossKind } from './waveConfig';
 
 export type TalentId = 'goldGain' | 'expGain' | 'attackDamage' | 'maxHp' | 'damageReduction' | 'criticalChance';
