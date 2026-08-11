@@ -125,8 +125,19 @@ export type HeroSpriteState = 'walk' | 'attack';
 // archetype/id rather than one-per-instance (100 unique hero portraits isn't
 // a realistic art budget) - see CanvasRenderer's drawHero/drawEnemy/drawPet
 // for what each falls back to when the file isn't there yet.
+// Relative (no leading "/"), not root-absolute - the packaged desktop app
+// loads index.html via file:// (see electron/main.cjs's win.loadFile), where
+// a root-absolute "/sprites/..." resolves against the filesystem root
+// instead of the dist/ folder next to index.html and 404s outright, exactly
+// the failure mode vite.config.ts's `base: './'` comment already documents
+// for Vite's own bundled JS/CSS output. That setting only rewrites URLs
+// Vite's own build pipeline sees (imports, CSS url(), the HTML template) -
+// it has no visibility into these plain runtime strings, so every one of
+// them needed the same fix applied by hand. Resolves identically to the old
+// absolute form under the dev server (document is already served from root
+// there), so this is a no-op for `npm run dev`.
 export function getHeroSpriteSrc(heroClass: string, state: HeroSpriteState = 'walk'): string {
-  return `/sprites/heroes/${heroClass}_${state}.png`;
+  return `sprites/heroes/${heroClass}_${state}.png`;
 }
 
 // Takes a sprite "type" (e.g. 'goblin', 'slime', 'demon_boss'), not an
@@ -134,11 +145,11 @@ export function getHeroSpriteSrc(heroClass: string, state: HeroSpriteState = 'wa
 // gameplay archetypes onto this small set of shared visual identities, since
 // hand-authoring 14 unique enemy sheets isn't the intended art budget.
 export function getEnemySpriteSrc(type: string): string {
-  return `/sprites/enemies/${type}.png`;
+  return `sprites/enemies/${type}.png`;
 }
 
 export function getPetSpriteSrc(petId: string): string {
-  return `/sprites/pets/${petId}.png`;
+  return `sprites/pets/${petId}.png`;
 }
 
 // A hero that's committed to an evolutionBranchId (HeroSystem.evolveHero)
@@ -147,13 +158,13 @@ export function getPetSpriteSrc(petId: string): string {
 // filenames use underscores to match this project's existing sprite-file
 // convention, hence the replace.
 export function getHeroEvolvedSpriteSrc(evolutionBranchId: string, state: HeroSpriteState = 'walk'): string {
-  return `/sprites/heroes/evolved/${evolutionBranchId.replace(/-/g, '_')}_${state}.png`;
+  return `sprites/heroes/evolved/${evolutionBranchId.replace(/-/g, '_')}_${state}.png`;
 }
 
 // Single tower sprite - no per-castleType variants yet, same "one file, not
 // one per instance" reasoning as the others above.
 export function getTowerSpriteSrc(): string {
-  return `/sprites/towers/castle.png`;
+  return `sprites/towers/castle.png`;
 }
 
 // Fire-and-forget, same as getImage itself - just kicks off a load for every
