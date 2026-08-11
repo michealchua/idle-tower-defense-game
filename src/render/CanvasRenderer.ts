@@ -969,7 +969,11 @@ function drawHero(ctx: CanvasRenderingContext2D, hero: HeroState, pulseScale: nu
 
   if (sprite) {
     const size = heroRadius * 2;
-    drawEntitySprite(ctx, sprite, animState, nowSeconds, hero.position.x, hero.position.y, size, needsFlip('hero'), true);
+    // smooth=false (not true) - hero art is pixel art now (see
+    // scripts/pixel_sprites.py), so it wants the same crisp nearest-
+    // neighbor scaling as every other sprite category, not the bilinear
+    // smoothing a hi-res illustration would've wanted.
+    drawEntitySprite(ctx, sprite, animState, nowSeconds, hero.position.x, hero.position.y, size, needsFlip('hero'), false);
   } else {
     drawHeroSilhouette(ctx, heroClass, hero.position.x, hero.position.y, heroRadius, heroStyle.color);
     drawFallbackGlyph(ctx, hero.position.x, hero.position.y, heroClass.charAt(0).toUpperCase(), heroRadius * 0.75);
