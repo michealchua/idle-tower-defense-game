@@ -3,7 +3,6 @@ import BattleScreen from './components/BattleScreen';
 import TitleScreen from './components/TitleScreen';
 import StoryDialog from './components/StoryDialog';
 import TutorialOverlay from './components/TutorialOverlay';
-import DebugPanel from './components/DebugPanel';
 import HeroPanel from './components/HeroPanel';
 import EquipmentPanel from './components/EquipmentPanel';
 import TalentPanel from './components/TalentPanel';
@@ -257,8 +256,6 @@ function App() {
       <StoryDialog />
       <TutorialOverlay />
       <UpdateBanner />
-
-      <DebugPanel />
     </div>
   );
 }
