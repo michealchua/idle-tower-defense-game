@@ -19,17 +19,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # electron-builder's unpack step (and @electron/rebuild before it)
-      # extracts/renames a lot of files in quick succession - Defender's
-      # real-time scanner on windows-latest runners intermittently wins the
-      # race and holds a lock, which surfaces as "EPERM: operation not
-      # permitted, rename ... win-unpacked.tmp -> win-unpacked" and fails the
-      # whole job. This runner is a throwaway VM destroyed after the job, so
-      # disabling its real-time protection has no effect on anything else.
-      - name: Disable Windows Defender real-time protection
-        shell: powershell
-        run: Set-MpPreference -DisableRealtimeMonitoring $true
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -50,13 +39,29 @@ jobs:
         # workflow). Both package.json files are set: the root one is only
         # build metadata, but electron/package.json's version is what
         # app.getVersion()/electron-updater actually compare against, since
-        # build.directories.app points at electron/.
+        # build.directories.app points at electron/. Exported to
+        # GITHUB_ENV so the tag-push step below (and anything else that
+        # needs it) doesn't recompute it separately.
         shell: bash
         run: |
           VERSION="1.0.${{ github.run_number }}"
           npm pkg set version="$VERSION"
           npm pkg set version="$VERSION" --prefix electron
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "Releasing version $VERSION"
+
+      # package.json's publish.releaseType is "release" (published
+      # immediately, not draft) - GitHub's API rejects creating an
+      # already-published release whose tag doesn't exist yet ("Published
+      # releases must have a valid tag", a 422), and nothing else in this
+      # workflow ever created that tag. A draft release can reference a
+      # not-yet-existing tag (GitHub creates it on publish), but going
+      # straight to draft:false cannot - so the tag has to exist first.
+      - name: Push release tag
+        shell: bash
+        run: |
+          git tag "v$VERSION"
+          git push origin "v$VERSION"
 
       - name: Build web app
         run: npm run build
