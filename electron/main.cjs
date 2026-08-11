@@ -15,6 +15,10 @@ function resolveIndexPath() {
   return path.join(__dirname, '..', 'dist', 'index.html');
 }
 
+// Set by createWindow, read by the autoUpdater event handlers below to push
+// status to the renderer - see the "Auto-update IPC" section.
+let mainWindow = null;
+
 function createWindow() {
   const win = new BrowserWindow({
     // The game itself is a full-viewport responsive layout (src/index.css's
@@ -45,6 +49,13 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
     },
+  });
+
+  mainWindow = win;
+  win.on('closed', () => {
+    if (mainWindow === win) {
+      mainWindow = null;
+    }
   });
 
   if (devUrl) {
@@ -131,15 +142,42 @@ ipcMain.on('save:list', (event) => {
   event.returnValue = SAVE_SLOTS.map((slot) => ({ slot, metadata: readSaveFile(slot)?.metadata ?? null }));
 });
 
+// --- Auto-update IPC --------------------------------------------------
+// Surfaces electron-updater's progress as a real in-app banner (see
+// src/components/UpdateBanner.tsx) instead of relying on the bare OS
+// notification checkForUpdatesAndNotify() used to show - a player who
+// never re-launches the app (idle games are exactly the kind left running
+// for a long session) would never see that notification at all, and even
+// when they did it explained nothing about what to do next. Every event
+// autoUpdater emits gets forwarded to whichever window is currently open;
+// update:install-now is the only thing the renderer can trigger back.
+function sendUpdateStatus(status) {
+  mainWindow?.webContents.send('update:status', status);
+}
+
+autoUpdater.on('update-available', (info) => sendUpdateStatus({ state: 'available', version: info.version }));
+autoUpdater.on('download-progress', (progress) => sendUpdateStatus({ state: 'downloading', percent: Math.round(progress.percent) }));
+autoUpdater.on('update-downloaded', (info) => sendUpdateStatus({ state: 'downloaded', version: info.version }));
+autoUpdater.on('error', (err) => sendUpdateStatus({ state: 'error', message: err.message }));
+
+ipcMain.on('update:install-now', () => {
+  // Quits and relaunches under the newly-downloaded version - only ever
+  // called from the banner's "restart now" button, which only renders once
+  // state is already 'downloaded', so there's always something to install
+  // by the time this fires.
+  autoUpdater.quitAndInstall();
+});
+
 app.whenReady().then(() => {
   createWindow();
 
   if (app.isPackaged) {
     // Checks GitHub Releases (see package.json's build.publish) for a newer
-    // version, downloads it in the background, and installs it on the next
-    // app restart. Not run in dev builds - there is no publish feed to
-    // check, and app.isPackaged is false there anyway.
-    autoUpdater.checkForUpdatesAndNotify().catch((err) => {
+    // version and downloads it in the background (autoDownload defaults to
+    // true) - progress/completion surface through the events wired above.
+    // Not run in dev builds - there is no publish feed to check, and
+    // app.isPackaged is false there anyway.
+    autoUpdater.checkForUpdates().catch((err) => {
       console.error('Auto-update check failed:', err);
     });
   }

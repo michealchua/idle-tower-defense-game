@@ -23,6 +23,12 @@ const zhCN = {
     saveButton: '存档',
     saved: '已保存',
   },
+  update: {
+    downloading: '正在下载新版本',
+    downloaded: '新版本已下载',
+    restartNow: '立即重启更新',
+    checkFailed: '检查更新失败,稍后会自动重试',
+  },
   records: {
     title: '记录',
     statsTitle: '生涯记录',

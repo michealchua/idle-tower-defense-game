@@ -254,6 +254,33 @@ select {
   background: var(--accent-strong);
 }
 
+/* UpdateBanner.tsx - a real in-app "downloading update"/"restart to
+   update" toast (see that component's doc comment for why this replaces
+   relying on electron-updater's bare OS notification). Fixed bottom-center,
+   above the HUD layer's own z-index (15) and clear of both bottom-corner
+   HUD groups - visible from the title screen too since App.tsx mounts it
+   outside the title/game screen split. */
+.update-banner {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface-hover);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--accent-strong);
+  border-radius: var(--radius);
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
 /* Fills the entire battle layer (i.e. the entire viewport) edge-to-edge - no
    aspect-ratio constraint here anymore. The game world is still authored
    against a fixed 4:3 logical resolution (CANVAS_WIDTH/HEIGHT in

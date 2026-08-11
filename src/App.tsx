@@ -14,6 +14,7 @@ import CastlePanel from './components/CastlePanel';
 import AscensionPanel from './components/AscensionPanel';
 import AscensionShopPanel from './components/AscensionShopPanel';
 import RecordsPanel from './components/RecordsPanel';
+import UpdateBanner from './components/UpdateBanner';
 import { getBiomeForChapter } from './data/biomeConfig';
 import { formatBigNumber } from './utils/scaling';
 import { isPanelUnlocked, type PanelId } from './data/unlockConditionConfig';
@@ -129,7 +130,12 @@ function App() {
   }
 
   if (screen === 'title') {
-    return <TitleScreen onEnterGame={() => setScreen('game')} />;
+    return (
+      <>
+        <TitleScreen onEnterGame={() => setScreen('game')} />
+        <UpdateBanner />
+      </>
+    );
   }
 
   function renderPanel(id: PanelId) {
@@ -250,6 +256,7 @@ function App() {
 
       <StoryDialog />
       <TutorialOverlay />
+      <UpdateBanner />
 
       <DebugPanel />
     </div>
