@@ -1187,13 +1187,13 @@ select {
 }
 
 /* Slow ken-burns pan/zoom on the title's biome art (plan section 18's
-   "Pixel 动态背景") - reuses forest.jpg (already shipped for chapter 1)
+   "Pixel 动态背景") - reuses forest.png (already shipped for chapter 1)
    instead of a dedicated title asset, darkened so the logo/text stay
    legible over it without a separate scrim element. */
 .title-background {
   position: absolute;
   inset: -6%;
-  background-image: linear-gradient(180deg, rgba(6, 10, 20, 0.55), rgba(6, 10, 20, 0.85)), url('/backgrounds/forest.jpg');
+  background-image: linear-gradient(180deg, rgba(6, 10, 20, 0.55), rgba(6, 10, 20, 0.85)), url('/backgrounds/forest.png');
   background-size: cover;
   background-position: center;
   image-rendering: pixelated;
