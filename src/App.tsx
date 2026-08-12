@@ -21,6 +21,7 @@ import { isPanelUnlocked, type PanelId } from './data/unlockConditionConfig';
 import { getActiveTutorialStep } from './data/tutorialConfig';
 import { getGlobalWaveNumber } from './engine/systems/WaveSystem';
 import { getMaxDeployedHeroes } from './data/squadConfig';
+import { setDisplayScale, MIN_DISPLAY_SCALE, MAX_DISPLAY_SCALE } from './utils/displayScale';
 import { t } from './locales/i18n';
 import { useGameStore } from './store/useGameStore';
 import {
@@ -35,6 +36,8 @@ import {
   IconCoin,
   IconSave,
   IconGear,
+  IconEye,
+  IconEyeOff,
   type IconProps,
 } from './components/icons';
 
@@ -87,6 +90,8 @@ function App() {
   const wave = useGameStore((state) => state.wave);
   const activeTutorialStep = useGameStore((state) => getActiveTutorialStep(state));
   const completeTutorialStep = useGameStore((state) => state.completeTutorialStep);
+  const isStealthMode = useGameStore((state) => state.isStealthMode);
+  const setStealthMode = useGameStore((state) => state.setStealthMode);
   const biome = getBiomeForChapter(wave.chapter);
   // "剥洋葱" pacing (unlockConditionConfig.panelUnlockWave) - only render tab
   // buttons for panels the run has actually reached, instead of exposing
@@ -96,15 +101,22 @@ function App() {
   const visibleGrowthTabs = GROWTH_TABS.filter((tab) => isPanelUnlocked(tab.id, globalWave));
   const visibleCoreTabs = CORE_TABS.filter((tab) => isPanelUnlocked(tab.id, globalWave));
 
-  // Esc backs out one level at a time: closes a growth/core panel modal if
-  // one's open, otherwise toggles the settings panel itself - same "esc
-  // always does something sensible" convention as any pause menu.
+  // Esc backs out one level at a time: exits stealth mode first if that's
+  // active (its whole point is hiding every button, so a keyboard escape
+  // hatch matters more here than anywhere else), then closes a growth/core
+  // panel modal if one's open, otherwise toggles the settings panel itself -
+  // same "esc always does something sensible" convention as any pause menu.
   useEffect(() => {
     if (screen !== 'game') {
       return;
     }
     function handleKeyDown(event: KeyboardEvent): void {
       if (event.key !== 'Escape') {
+        return;
+      }
+      if (isStealthMode) {
+        setStealthMode(false);
+        setDisplayScale(MAX_DISPLAY_SCALE);
         return;
       }
       if (activePanel !== null) {
@@ -115,7 +127,19 @@ function App() {
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [screen, activePanel]);
+  }, [screen, activePanel, isStealthMode, setStealthMode]);
+
+  function handleToggleStealthMode(): void {
+    const next = !isStealthMode;
+    if (next) {
+      // Nothing left to show it - entering stealth hides every button that
+      // could have opened one of these.
+      setActivePanel(null);
+      setIsSettingsOpen(false);
+    }
+    setStealthMode(next);
+    setDisplayScale(next ? MIN_DISPLAY_SCALE : MAX_DISPLAY_SCALE);
+  }
 
 // Opening the exact panel a tutorial step is pointing at counts as having
   // acted on it - dismisses the bubble the same as its own "知道了" button,
@@ -177,6 +201,15 @@ function App() {
         <BattleScreen stageRef={stageRef} />
       </div>
 
+      <button
+        className="stealth-toggle-btn"
+        onClick={handleToggleStealthMode}
+        title={t(isStealthMode ? 'battle.stealthModeOff' : 'battle.stealthModeOn')}
+      >
+        {isStealthMode ? <IconEyeOff /> : <IconEye />}
+      </button>
+
+      {!isStealthMode && (
       <div className="hud-layer">
         {/* Base/progress identity - squad size and current chapter/biome,
             not a fabricated player name or power score (this game has
@@ -238,6 +271,7 @@ function App() {
           </div>
         </div>
       </div>
+      )}
 
       {activeTab && (
         <div className="modal-backdrop" onClick={() => setActivePanel(null)}>

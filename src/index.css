@@ -634,6 +634,38 @@ select {
   line-height: 1;
 }
 
+/* Stealth-mode toggle (App.tsx) - deliberately outside .hud-layer so it
+   survives that whole layer being hidden; this is the one button that never
+   goes away, since it's also the only way back once everything else has.
+   Small/low-contrast on purpose - it's meant to stay out of the way during
+   normal play, not compete with the HUD widgets for attention. */
+.stealth-toggle-btn {
+  position: fixed;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  color: var(--text-faint);
+  font-size: 13px;
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 0.15s ease;
+}
+
+.stealth-toggle-btn:hover {
+  opacity: 1;
+  color: var(--text);
+}
+
 /* Forms */
 .select {
   background: var(--bg-alt);
@@ -1652,9 +1684,4 @@ select {
   font-weight: 700;
   font-size: 13px;
   opacity: 0.8;
-}
-
-.settings-scale-slider {
-  width: 100%;
-  accent-color: var(--accent);
 }

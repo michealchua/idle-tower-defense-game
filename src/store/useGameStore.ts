@@ -232,6 +232,10 @@ interface GameStore {
   // hero-only now.
   dragPreviewKind: 'hero' | null;
   setDragPreviewKind: (kind: 'hero' | null) => void;
+  // UI-only, not part of gameState/saved - see App.tsx's stealth-mode toggle
+  // button. Never persisted; every launch starts back at normal size/HUD.
+  isStealthMode: boolean;
+  setStealthMode: (value: boolean) => void;
 }
 
 // subscribeWithSelector adds the selector-form store.subscribe(selector, cb,
@@ -422,6 +426,8 @@ export const useGameStore = create<GameStore>()(
   },
   dragPreviewKind: null,
   setDragPreviewKind: (kind) => set({ dragPreviewKind: kind }),
+  isStealthMode: false,
+  setStealthMode: (value) => set({ isStealthMode: value }),
   dismissStory: () => {
     gameState.pendingStoryId = null;
     set({ pendingStoryId: null });

@@ -80,6 +80,7 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
   const recommendedPower = useGameStore((state) => state.recommendedPower);
   const speedMultiplier = useGameStore((state) => state.speedMultiplier);
   const setSpeedMultiplier = useGameStore((state) => state.setSpeedMultiplier);
+  const isStealthMode = useGameStore((state) => state.isStealthMode);
   const swapDeployedHeroes = useGameStore((state) => state.swapDeployedHeroes);
   // Dragging an already-deployed hero directly on the canvas to swap its
   // slot with another - separate from dragPreviewKind, which is for
@@ -290,7 +291,10 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
       {/* Combat-status readout - kept here (not lifted to App's HUD) since
           it's derived from enemies/wave state this component already
           computes for its own render loop. Uses the same .hud-corner/
-          .hud-widget classes as App's chrome so it reads as one system. */}
+          .hud-widget classes as App's chrome so it reads as one system.
+          Hidden in stealth mode along with the rest of App's HUD - see
+          App.tsx's stealth-toggle-btn. */}
+      {!isStealthMode && (
       <div className="hud-corner top-center">
         <div className="hud-widget" style={{ width: '100%' }}>
           <div className="hud-widget-row" style={{ justifyContent: 'space-between', fontSize: 11 }}>
@@ -347,6 +351,7 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
           </div>
         </div>
       </div>
+      )}
 
       <div className="canvas-stage" ref={stageRef}>
         <canvas

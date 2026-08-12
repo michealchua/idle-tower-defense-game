@@ -85,12 +85,13 @@ const zhCN = {
   battle: {
     gold: '金币',
     diamonds: '钻石',
-    buildMaterials: '建材',
     upgrade: '升级',
     maxed: '已满级',
     gameOver: '游戏结束',
     selectPanel: '选择左侧标签查看详情',
     speedLocked: '需要波次',
+    stealthModeOn: '摸鱼模式',
+    stealthModeOff: '退出摸鱼模式',
   },
   settings: {
     title: '设置',
@@ -100,8 +101,6 @@ const zhCN = {
     neverSaved: '尚未保存',
     returnToTitle: '返回主菜单',
     returnToTitleConfirm: '确认返回主菜单?请先保存进度,未保存的内容将会丢失',
-    displaySection: '画面',
-    displayScale: '画面缩放',
     updateSection: '更新',
     checkUpdate: '检查更新',
     exitSection: '退出',

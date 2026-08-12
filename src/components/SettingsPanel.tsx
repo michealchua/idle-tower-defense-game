@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { t } from '../locales/i18n';
 import { useGameStore } from '../store/useGameStore';
 import { getSaveMetadata } from '../engine/core/SaveSystem';
-import { getDisplayScale, setDisplayScale, MIN_DISPLAY_SCALE, MAX_DISPLAY_SCALE } from '../utils/displayScale';
 import type { UpdateStatus } from '../utils/updater';
 
 function formatSavedAt(iso: string): string {
@@ -22,15 +21,16 @@ interface SettingsPanelProps {
 
 // ESC-triggered pause/settings modal (see App.tsx's keydown handler) -
 // bundles the things that were previously scattered one-offs (the HUD save
-// icon, no exit path at all) plus the new display-scale control, rather than
-// adding more permanent icons to the already-busy HUD corners.
+// icon, no exit path at all) instead of adding more permanent icons to the
+// already-busy HUD corners. The display-scale control used to live here too
+// (a free slider) - now a single always-visible stealth-mode toggle button
+// in App.tsx instead, see its own doc comment for why.
 function SettingsPanel({ onClose, onReturnToTitle }: SettingsPanelProps) {
   const activeSlot = useGameStore((state) => state.activeSlot);
   const saveGame = useGameStore((state) => state.saveGame);
   const [justSaved, setJustSaved] = useState(false);
   const [confirmingReturn, setConfirmingReturn] = useState(false);
   const [confirmingExit, setConfirmingExit] = useState(false);
-  const [scale, setScale] = useState(() => getDisplayScale());
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
 
   const metadata = activeSlot !== null ? getSaveMetadata(activeSlot) : null;
@@ -50,11 +50,6 @@ function SettingsPanel({ onClose, onReturnToTitle }: SettingsPanelProps) {
     saveGame(activeSlot);
     setJustSaved(true);
     window.setTimeout(() => setJustSaved(false), 1500);
-  }
-
-  function handleScaleChange(next: number): void {
-    setScale(next);
-    setDisplayScale(next);
   }
 
   function handleCheckUpdate(): void {
@@ -97,22 +92,6 @@ function SettingsPanel({ onClose, onReturnToTitle }: SettingsPanelProps) {
                 {t('settings.returnToTitle')}
               </button>
             )}
-          </div>
-
-          <div className="settings-section">
-            <div className="settings-section-title">{t('settings.displaySection')}</div>
-            <div className="item-detail">
-              {t('settings.displayScale')} {Math.round(scale * 100)}%
-            </div>
-            <input
-              type="range"
-              min={MIN_DISPLAY_SCALE}
-              max={MAX_DISPLAY_SCALE}
-              step={0.05}
-              value={scale}
-              onChange={(event) => handleScaleChange(Number(event.target.value))}
-              className="settings-scale-slider"
-            />
           </div>
 
           <div className="settings-section">

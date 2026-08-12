@@ -167,6 +167,27 @@ export function IconGear(props: IconProps) {
   );
 }
 
+// Classic lens-shaped eye - App.tsx's stealth-mode toggle button uses this
+// (visible) plus IconEyeOff (stealth active) as a matched pair, same "the
+// icon shows what one more click does" convention IconMute* used to.
+export function IconEye(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path d="M12 5C6.5 5 2.7 8.6 1 12C2.7 15.4 6.5 19 12 19S21.3 15.4 23 12C21.3 8.6 17.5 5 12 5ZM12 16.5A4.5 4.5 0 1 1 12 7.5A4.5 4.5 0 0 1 12 16.5Z" />
+      <circle cx="12" cy="12" r="2.5" />
+    </Base>
+  );
+}
+
+export function IconEyeOff(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path d="M12 5C6.5 5 2.7 8.6 1 12C1.8 13.7 3 15.2 4.5 16.4L2.6 18.3L4 19.7L20 3.7L18.6 2.3L15.8 5.1C14.6 4.7 13.3 5 12 5ZM12 16.5C11.1 16.5 10.3 16.2 9.7 15.7L15.7 9.7C16.2 10.3 16.5 11.1 16.5 12A4.5 4.5 0 0 1 12 16.5Z" />
+      <path d="M23 12C22.1 10.2 20.7 8.6 19 7.4L13.4 13C13.9 13.6 14.6 14 15.5 14C15.7 14 15.9 14 16 13.9L11 18.9C11.3 18.9 11.6 19 12 19C17.5 19 21.3 15.4 23 12Z" opacity="0.55" />
+    </Base>
+  );
+}
+
 // Floppy-disk silhouette - still the universal "save" glyph despite the
 // literal object being long obsolete. Two punched-out "windows" (write-
 // protect tab, label area) via evenodd holes rather than a second color, so

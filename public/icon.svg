@@ -1,12 +1,40 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
-  <rect width="256" height="256" fill="rgb(11,11,22)"/>
-  <g fill="#facc15">
-    <rect x="46" y="184" width="164" height="36" />
-    <rect x="87" y="97" width="82" height="87" />
-    <circle cx="128" cy="77" r="41" />
-    <rect x="46" y="169" width="21" height="15" fill="rgb(11,11,22)"/>
-    <rect x="88" y="169" width="21" height="15" fill="rgb(11,11,22)"/>
-    <rect x="130" y="169" width="21" height="15" fill="rgb(11,11,22)"/>
-    <rect x="172" y="169" width="21" height="15" fill="rgb(11,11,22)"/>
+  <defs>
+    <linearGradient id="blade" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#f59e0b" />
+      <stop offset="55%" stop-color="#ffd54a" />
+      <stop offset="100%" stop-color="#fff6d6" />
+    </linearGradient>
+    <linearGradient id="guard" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#e8edf5" />
+      <stop offset="100%" stop-color="#8a97ab" />
+    </linearGradient>
+    <linearGradient id="grip" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#6b4226" />
+      <stop offset="100%" stop-color="#41260f" />
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="42%" r="60%">
+      <stop offset="0%" stop-color="#3a4a7a" stop-opacity="0.55" />
+      <stop offset="100%" stop-color="#3a4a7a" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+
+  <rect width="256" height="256" fill="#0b0b16" />
+  <circle cx="128" cy="118" r="118" fill="url(#glow)" />
+
+  <g transform="rotate(45 128 128)">
+    <!-- blade -->
+    <polygon points="128,26 142,52 142,158 114,158 114,52" fill="url(#blade)" />
+    <rect x="124" y="52" width="8" height="100" fill="#fff6d6" opacity="0.65" />
+    <!-- crossguard -->
+    <rect x="86" y="158" width="84" height="16" rx="3" fill="url(#guard)" />
+    <!-- grip -->
+    <rect x="118" y="174" width="20" height="42" fill="url(#grip)" />
+    <rect x="118" y="182" width="20" height="4" fill="#2c1708" opacity="0.7" />
+    <rect x="118" y="196" width="20" height="4" fill="#2c1708" opacity="0.7" />
+    <!-- pommel gem -->
+    <circle cx="128" cy="228" r="15" fill="#3a6bff" />
+    <circle cx="128" cy="228" r="15" fill="none" stroke="#c9d3e0" stroke-width="2" />
+    <circle cx="123" cy="223" r="4" fill="#bcd0ff" opacity="0.85" />
   </g>
 </svg>
