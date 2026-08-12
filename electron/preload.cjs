@@ -34,6 +34,6 @@ contextBridge.exposeInMainWorld('tataKAIUpdater', {
 // Backs src/components/SettingsPanel.tsx - see main.cjs's "App chrome IPC"
 // section for what these two fire-and-forget sends do.
 contextBridge.exposeInMainWorld('tataKAIApp', {
-  setZoomFactor: (factor) => ipcRenderer.send('app:set-zoom-factor', factor),
+  setWindowScale: (factor) => ipcRenderer.send('app:set-window-scale', factor),
   quit: () => ipcRenderer.send('app:quit'),
 });

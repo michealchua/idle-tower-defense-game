@@ -1599,13 +1599,10 @@ select {
 }
 
 .drop-toast {
-  background: rgba(10, 10, 14, 0.82);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 4px 10px;
   font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
   animation: modal-fade-in 0.15s ease-out;
 }
 

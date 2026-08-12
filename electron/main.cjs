@@ -19,16 +19,22 @@ function resolveIndexPath() {
 // status to the renderer - see the "Auto-update IPC" section.
 let mainWindow = null;
 
+// The window's own default/100% size - src/utils/displayScale.ts's slider
+// scales the actual OS window down from this (see "App chrome IPC" below),
+// not a CSS zoom that would leave the window itself full-size with smaller
+// content floating inside it. minWidth/minHeight is deliberately much
+// smaller than this default - low enough to sit as a small corner window
+// (the "keep this out of the way while I work" use case the slider was
+// built for) while still roughly matching this aspect ratio.
+const BASE_WINDOW_WIDTH = 1024;
+const BASE_WINDOW_HEIGHT = 900;
+
 function createWindow() {
   const win = new BrowserWindow({
-    // The game itself is a full-viewport responsive layout (src/index.css's
-    // .battle-layer/.hud-layer), not a fixed pixel size - these are just a
-    // reasonable default window size and a floor that keeps corner HUD
-    // widgets from overlapping each other.
-    width: 1024,
-    height: 900,
-    minWidth: 1000,
-    minHeight: 700,
+    width: BASE_WINDOW_WIDTH,
+    height: BASE_WINDOW_HEIGHT,
+    minWidth: 320,
+    minHeight: 280,
     title: 'tataKAI',
     autoHideMenuBar: true,
     // No `icon` option here on purpose: on Windows the taskbar/title-bar
@@ -52,6 +58,10 @@ function createWindow() {
   });
 
   mainWindow = win;
+  // Locks manual OS-level resizing (dragging an edge/corner) to this same
+  // ratio, so "free resize but fixed aspect ratio" holds however the window
+  // gets resized - not just through the in-app scale slider below.
+  win.setAspectRatio(BASE_WINDOW_WIDTH / BASE_WINDOW_HEIGHT);
   win.on('closed', () => {
     if (mainWindow === win) {
       mainWindow = null;
@@ -170,12 +180,14 @@ ipcMain.on('update:install-now', () => {
 
 // --- App chrome IPC (settings panel) ---------------------------------------
 // Backs src/components/SettingsPanel.tsx: an in-page display-scale slider
-// (webContents.setZoomFactor is the same mechanism Ctrl+/- uses in any
-// Chromium window - it reflows layout, not just a visual CSS transform, so
-// the existing ResizeObserver-driven canvas fit in BattleScreen.tsx adapts
-// to it for free) and a real "quit the app" button for the exit-game action.
-ipcMain.on('app:set-zoom-factor', (_event, factor) => {
-  mainWindow?.webContents.setZoomFactor(factor);
+// and a real "quit the app" button for the exit-game action. The slider
+// resizes the actual OS window (setSize), not a CSS/webContents zoom - a
+// zoom leaves the window itself full-size with smaller content floating
+// inside it, which isn't a smaller window at all. setAspectRatio (see
+// createWindow) is already locked, so this always keeps the same shape;
+// BattleScreen.tsx's own ResizeObserver picks up the new size for free.
+ipcMain.on('app:set-window-scale', (_event, factor) => {
+  mainWindow?.setSize(Math.round(BASE_WINDOW_WIDTH * factor), Math.round(BASE_WINDOW_HEIGHT * factor));
 });
 
 ipcMain.on('app:quit', () => {
