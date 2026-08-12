@@ -4,7 +4,6 @@ import type { EquipmentRarity, EquipmentSetId, EquipmentSlot, EquipmentSubstat }
 import type { BossKind } from '../data/waveConfig';
 import type { AscensionShopId } from '../data/ascensionShopConfig';
 import type { PityPoolId } from '../data/pityConfig';
-import type { CastleTypeId } from '../data/castleTypeConfig';
 import type { DailyQuestId } from '../data/dailyQuestConfig';
 
 export interface Position {
@@ -236,17 +235,6 @@ export interface GameState {
   unlockedHeroIds: string[];
   unlockedPetIds: string[];
   deployedHeroIds: string[];
-  // Gold-purchased castle upgrade level (see castleConfig.ts/CastleSystem.ts)
-  // - grows base maxHp and unlocks more hero/pet deploy slots over
-  // squadConfig's level-1 baseline, and scales whichever castleType bonus is
-  // currently selected below. Survives ascension, same as unlocked
-  // heroes/pets/equipment (it's collection/structure progress, not a
-  // run-scoped stat).
-  castleLevel: number;
-  // Which single passive bonus castleLevel currently feeds - see
-  // castleTypeConfig.ts. Free/instant to switch (CastleSystem.setCastleType),
-  // doesn't reset castleLevel.
-  castleType: CastleTypeId;
   // Resource for the talent tree (talentConfig.ts/TalentSystem.ts) - earned
   // only by killing a wave's miniboss/boss (see DamageSystem.handleDeath),
   // never accrues passively. Spent on permanent percentage bonuses that
@@ -302,13 +290,6 @@ export interface GameState {
   enemies: EnemyState[];
   base: BaseState;
   gold: number;
-  // Castle's own currency - produced only by the economic castle type's
-  // passive income (castleTypeConfig.getCastleBuildMaterialsPerSecond) and
-  // spent only on castle upgrades (castleConfig.getCastleUpgradeCost). Kept
-  // isolated from gold so castle progression doesn't compete with hero
-  // upgrades for the same pool - see the resource-isolation doc comment at
-  // the top of resourceConfig.ts.
-  buildMaterials: number;
   nextEnemyInstanceId: number;
   isGameOver: boolean;
   visualEffects: VisualEffect[];

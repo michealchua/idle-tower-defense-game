@@ -1,10 +1,11 @@
 import { createHero } from '../entities/Hero';
 import { layoutHeroPositions } from '../../data/mapConfig';
-import { getMaxDeployedHeroes } from '../../data/castleConfig';
+import { getMaxDeployedHeroes } from '../../data/squadConfig';
 import { equipmentSlots, getEquipmentScore, type EquipmentSlot } from '../../data/equipmentConfig';
 import { heroEvolutionConfig, type HeroClass } from '../../data/heroConfig';
 import { getHeroDefinition } from '../../data/heroRosterConfig';
 import { recomputeHeroStats } from './HeroStatsSystem';
+import { getGlobalWaveNumber } from './WaveSystem';
 import type { GameState, HeroState } from '../types';
 
 // Repositions every currently-deployed hero across the row anchor so the
@@ -38,7 +39,7 @@ export function unlockHero(state: GameState, heroId: string): boolean {
   state.unlockedHeroIds.push(heroId);
   state.heroes.push(createHero(heroId, { x: 0, y: 0 }));
 
-  if (state.deployedHeroIds.length < getMaxDeployedHeroes(state.castleLevel)) {
+  if (state.deployedHeroIds.length < getMaxDeployedHeroes(getGlobalWaveNumber(state.wave))) {
     state.deployedHeroIds.push(heroId);
     relayoutDeployedHeroes(state);
   }
@@ -55,7 +56,7 @@ export function deployHero(state: GameState, heroId: string): boolean {
   if (!state.unlockedHeroIds.includes(heroId) || state.deployedHeroIds.includes(heroId)) {
     return false;
   }
-  if (state.deployedHeroIds.length >= getMaxDeployedHeroes(state.castleLevel)) {
+  if (state.deployedHeroIds.length >= getMaxDeployedHeroes(getGlobalWaveNumber(state.wave))) {
     return false;
   }
 

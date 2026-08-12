@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
 // Pure display atom for the ".stat-grid > .stat-tile" pattern repeated
-// across HeroPanel/RecordsPanel/CastlePanel/AscensionPanel/etc - every class
+// across HeroPanel/RecordsPanel/AscensionPanel/etc - every class
 // here (stat-tile/-label/-value) already exists in index.css, this just
 // stops each panel from re-authoring the same 3-line JSX shape by hand.
 // Consumes the project's existing CSS variables only via those classes, no

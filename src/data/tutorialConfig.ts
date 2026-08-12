@@ -14,7 +14,6 @@ export interface TutorialContext {
   completedTutorialStepIds: string[];
   unlockedHeroIds: string[];
   unlockedPetIds: string[];
-  castleLevel: number;
   inventory: unknown[];
   heroes: { level: number; evolutionBranchId: string | null; equipment: Partial<Record<EquipmentSlot, unknown | null>> }[];
   wave: { chapter: number; waveInChapter: number; isBossWave: boolean; bossKind?: string };
@@ -85,12 +84,6 @@ export const tutorialSteps: TutorialStep[] = [
     messageKey: 'tutorialStep.petUnlocked',
     targetSelector: 'nav-pet',
     isEligible: (ctx) => globalWaveOf(ctx.wave) >= (panelUnlockWave.pet ?? Infinity) && ctx.unlockedPetIds.length === 0,
-  },
-  {
-    id: 'castleUnlocked',
-    messageKey: 'tutorialStep.castleUnlocked',
-    targetSelector: 'nav-castle',
-    isEligible: (ctx) => globalWaveOf(ctx.wave) >= (panelUnlockWave.castle ?? Infinity) && ctx.castleLevel <= 1,
   },
 ];
 

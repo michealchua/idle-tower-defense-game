@@ -7,7 +7,7 @@ export const heroBaseConfig = {
   attackSpeed: 1,
   // Fixed, non-upgradeable - not part of UpgradeableStat below, so it can
   // never be rolled on equipment, bought as a hero upgrade, or granted by a
-  // talent/ascension/castle bonus. Every hero/pet/tower still needs *some*
+  // talent/ascension-shop bonus. Every hero/pet/tower still needs *some*
   // engagement range for TargetingSystem.getEnemiesInRange, this is just no
   // longer a player-facing stat.
   attackRange: 100,

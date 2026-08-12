@@ -120,8 +120,7 @@ function TitleScreen({ onEnterGame }: TitleScreenProps) {
                   </div>
                   {metadata ? (
                     <div className="save-slot-detail">
-                      {t('title.savedAt')} {formatSavedAt(metadata.savedAt)} · {t('castle.title')} {metadata.castleLevel} ·{' '}
-                      {metadata.globalWaveLabel}
+                      {t('title.savedAt')} {formatSavedAt(metadata.savedAt)} · {metadata.globalWaveLabel}
                     </div>
                   ) : (
                     <div className="save-slot-detail text-faint">{t('title.slotEmpty')}</div>

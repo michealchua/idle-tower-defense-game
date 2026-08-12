@@ -2,7 +2,8 @@ import { memo, useCallback, useEffect, useMemo, useState, type PointerEvent as R
 import { useShallow } from 'zustand/react/shallow';
 import { heroRosterConfig, type HeroDefinition } from '../data/heroRosterConfig';
 import { skillDefinitions } from '../data/skillConfig';
-import { getMaxDeployedHeroes } from '../data/castleConfig';
+import { getMaxDeployedHeroes } from '../data/squadConfig';
+import { getGlobalWaveNumber } from '../engine/systems/WaveSystem';
 import { heroEvolutionConfig, heroUpgradeConfig, type HeroClass, type UpgradeableStat } from '../data/heroConfig';
 import { MAX_STAR_LEVEL, gachaRarityConfig, getStarUpCost, type GachaRarity } from '../data/gachaConfig';
 import { getActiveBondCounts, type BondId } from '../data/bondConfig';
@@ -662,7 +663,7 @@ function HeroPanel({ gameScreenRef }: { gameScreenRef: RefObject<HTMLDivElement>
   // HeroRosterList below each select just their own slice of it.
   const unlockedHeroIds = useGameStore(useShallow((state) => state.unlockedHeroIds));
   const deployedHeroIds = useGameStore(useShallow((state) => state.deployedHeroIds));
-  const castleLevel = useGameStore((state) => state.castleLevel);
+  const wave = useGameStore((state) => state.wave);
   const gold = useGameStore((state) => state.gold);
   const epicSourceStone = useGameStore((state) => state.epicSourceStone);
   const legendarySourceStone = useGameStore((state) => state.legendarySourceStone);
@@ -673,7 +674,7 @@ function HeroPanel({ gameScreenRef }: { gameScreenRef: RefObject<HTMLDivElement>
   const [selectedHeroId, setSelectedHeroId] = useState<string | null>(null);
 
   const materials: Materials = { epicSourceStone, legendarySourceStone, diamonds };
-  const maxDeployedHeroes = getMaxDeployedHeroes(castleLevel);
+  const maxDeployedHeroes = getMaxDeployedHeroes(getGlobalWaveNumber(wave));
   const squadFull = deployedHeroIds.length >= maxDeployedHeroes;
   // Memoized on unlockedHeroIds alone (now stable-by-value via useShallow
   // above) rather than recomputed every render - heroRosterConfig.filter

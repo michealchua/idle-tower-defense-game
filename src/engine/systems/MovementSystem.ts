@@ -2,7 +2,6 @@ import { mapConfig } from '../../data/mapConfig';
 import { enemyArchetypes } from '../../data/enemyArchetypes';
 import { getTalentFlatBonus } from '../../data/talentConfig';
 import { getAscensionShopFlatBonus } from '../../data/ascensionShopConfig';
-import { getCastleDamageReductionBonus } from '../../data/castleTypeConfig';
 import { retryCurrentWave } from './WaveSystem';
 import type { GameState } from '../types';
 
@@ -25,8 +24,7 @@ export function tickMovement(state: GameState, deltaSeconds: number): void {
   const survivors: GameState['enemies'] = [];
   const damageReduction =
     getTalentFlatBonus(state.talentLevels, 'damageReduction') +
-    getAscensionShopFlatBonus(state.ascensionShopLevels, 'damageReduction') +
-    getCastleDamageReductionBonus(state.castleType, state.castleLevel);
+    getAscensionShopFlatBonus(state.ascensionShopLevels, 'damageReduction');
 
   for (const enemy of state.enemies) {
     if (enemy.slowRemaining > 0) {

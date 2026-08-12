@@ -16,7 +16,6 @@ export const SAVE_SLOTS: SaveSlot[] = [1, 2, 3];
 
 export interface SaveMetadata {
   savedAt: string;
-  castleLevel: number;
   globalWaveLabel: string;
   gold: number;
 }
@@ -139,7 +138,6 @@ export function saveGame(slot: SaveSlot, state: GameState): void {
     version: SAVE_FILE_VERSION,
     metadata: {
       savedAt: new Date().toISOString(),
-      castleLevel: state.castleLevel,
       globalWaveLabel: `${state.wave.chapter}-${state.wave.waveInChapter}`,
       gold: state.gold,
     },

@@ -1,4 +1,5 @@
 import { getBossKindForWave, getBossTimeLimit, getNormalWaveEnemyCount, waveConfig } from '../../data/waveConfig';
+import { getBaseMaxHpForWave } from '../../data/baseConfig';
 import { effectLifetimes } from '../../data/effectConfig';
 import { getDiamondChapterClearReward } from '../../data/diamondConfig';
 import { getBiomeForChapter } from '../../data/biomeConfig';
@@ -45,6 +46,7 @@ export function createInitialWaveState(): WaveState {
 // the same treatment - chip damage from CombatSystem.tickEnemyAttacksOnHeroes
 // doesn't carry across waves, only within one.
 function resetBattlefieldForWave(state: GameState): void {
+  state.base.maxHp = getBaseMaxHpForWave(getGlobalWaveNumber(state.wave));
   state.base.currentHp = state.base.maxHp;
   for (const hero of state.heroes) {
     hero.currentHp = hero.maxHp;

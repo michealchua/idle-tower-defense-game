@@ -6,9 +6,9 @@ export const mapConfig = {
   heroPosition: { x: 150, y: 150 },
   baseArrivalDistance: 10,
   heroRowSpacing: 40,
-  // 3-wide grid instead of a single column, so a growing squad (castle
-  // upgrades unlock more hero slots) wraps into more rows instead of one
-  // ever-taller column. See layoutHeroPositions.
+  // 3-wide grid instead of a single column, so a growing squad
+  // (squadConfig's wave-gated slot unlocks) wraps into more rows instead of
+  // one ever-taller column. See layoutHeroPositions.
   heroColumns: 3,
   heroColSpacing: 44,
   // Pets trail the hero GRID's left edge toward the base (smaller x =

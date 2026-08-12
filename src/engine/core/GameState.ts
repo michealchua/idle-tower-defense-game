@@ -7,7 +7,6 @@ import { talentConfig, type TalentId } from '../../data/talentConfig';
 import { ascensionShopConfig, type AscensionShopId } from '../../data/ascensionShopConfig';
 import { gachaPityConfig, type PityPoolId } from '../../data/pityConfig';
 import { dailyQuestIds, type DailyQuestId } from '../../data/dailyQuestConfig';
-import { defaultCastleTypeId } from '../../data/castleTypeConfig';
 import { recomputeHeroStats } from '../systems/HeroStatsSystem';
 import { createInitialWaveState } from '../systems/WaveSystem';
 import type { GameState } from '../types';
@@ -49,8 +48,6 @@ export function createInitialGameState(): GameState {
     unlockedHeroIds: [starterHeroId],
     unlockedPetIds: [],
     deployedHeroIds: [starterHeroId],
-    castleLevel: 1,
-    castleType: defaultCastleTypeId,
     skillPoints: 0,
     talentLevels: createInitialTalentLevels(),
     ascensionLevel: 0,
@@ -71,7 +68,6 @@ export function createInitialGameState(): GameState {
     enemies: [],
     base: createBase(),
     gold: 0,
-    buildMaterials: 0,
     nextEnemyInstanceId: 1,
     isGameOver: false,
     visualEffects: [],

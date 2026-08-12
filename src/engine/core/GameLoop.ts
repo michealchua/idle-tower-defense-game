@@ -7,7 +7,6 @@ import { tickLevelUp } from '../systems/LevelSystem';
 import { tickEffects, tickScreenShake } from '../systems/EffectsSystem';
 import { tickEquipmentDropFeed } from '../systems/EquipmentSystem';
 import { tickWaveProgress, tickTutorialStoryTrigger } from '../systems/WaveSystem';
-import { tickCastleIncome } from '../systems/CastleSystem';
 import { tickGachaWelcomeBonus, tickDailyLoginReward } from '../systems/GachaSystem';
 import { tickDailyQuestReset } from '../systems/DailyQuestSystem';
 import type { GameState } from '../types';
@@ -76,7 +75,6 @@ export class GameLoop {
         tickSkills(this.state, FIXED_TIMESTEP_SECONDS);
         tickLevelUp(this.state);
         tickWaveProgress(this.state, FIXED_TIMESTEP_SECONDS);
-        tickCastleIncome(this.state, FIXED_TIMESTEP_SECONDS);
         tickGachaWelcomeBonus(this.state);
         tickDailyLoginReward(this.state);
         tickDailyQuestReset(this.state);

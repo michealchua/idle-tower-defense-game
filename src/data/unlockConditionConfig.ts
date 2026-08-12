@@ -31,20 +31,19 @@ export type UnlockCondition =
 //   wave 1-10  -> only HeroPanel (pure tower-defense/upgrade loop)
 //   wave 11    -> first chapter's boss (wave 10) just died -> EquipmentPanel
 //   wave 20    -> second chapter's boss down -> GachaPanel
-//   wave 50    -> fifth chapter's boss down -> PetPanel + CastlePanel
+//   wave 50    -> fifth chapter's boss down -> PetPanel
 //   wave 100   -> mid-fight against the tenth chapter's boss -> AscensionPanel
 //                 reveals itself, and the ascend button inside is already
 //                 pressable (ascensionConfig.requiredWave is the same 100 -
 //                 "所见即所得", see AscensionSystem.canAscend). Panels not
 //                 listed here (talent/ascensionShop/codex) are ungated - out
 //                 of scope for this pass.
-export type PanelId = 'hero' | 'equipment' | 'gacha' | 'pet' | 'castle' | 'ascension' | 'talent' | 'ascensionShop' | 'codex' | 'records';
+export type PanelId = 'hero' | 'equipment' | 'gacha' | 'pet' | 'ascension' | 'talent' | 'ascensionShop' | 'codex' | 'records';
 
 export const panelUnlockWave: Partial<Record<PanelId, number>> = {
   equipment: 11,
   gacha: 20,
   pet: 50,
-  castle: 50,
   ascension: 100,
 };
 

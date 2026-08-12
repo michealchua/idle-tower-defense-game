@@ -9,7 +9,6 @@ import TalentPanel from './components/TalentPanel';
 import PetPanel from './components/PetPanel';
 import GachaPanel from './components/GachaPanel';
 import CodexPanel from './components/CodexPanel';
-import CastlePanel from './components/CastlePanel';
 import AscensionPanel from './components/AscensionPanel';
 import AscensionShopPanel from './components/AscensionShopPanel';
 import RecordsPanel from './components/RecordsPanel';
@@ -21,10 +20,10 @@ import { formatBigNumber } from './utils/scaling';
 import { isPanelUnlocked, type PanelId } from './data/unlockConditionConfig';
 import { getActiveTutorialStep } from './data/tutorialConfig';
 import { getGlobalWaveNumber } from './engine/systems/WaveSystem';
+import { getMaxDeployedHeroes } from './data/squadConfig';
 import { t } from './locales/i18n';
 import { useGameStore } from './store/useGameStore';
 import {
-  IconCastle,
   IconStar,
   IconDiamond,
   IconBook,
@@ -34,7 +33,6 @@ import {
   IconBag,
   IconSword,
   IconCoin,
-  IconBrick,
   IconSave,
   IconGear,
   type IconProps,
@@ -50,7 +48,6 @@ interface TabDef {
 // long-term base building bottom-left, high-frequency roster/gacha upkeep
 // bottom-right. Every id here must have a case in renderPanel below.
 const GROWTH_TABS: TabDef[] = [
-  { id: 'castle', labelKey: 'castle.title', Icon: IconCastle },
   { id: 'ascension', labelKey: 'ascension.title', Icon: IconStar },
   { id: 'ascensionShop', labelKey: 'ascensionShop.title', Icon: IconDiamond },
   { id: 'codex', labelKey: 'codex.title', Icon: IconBook },
@@ -85,9 +82,8 @@ function App() {
   const saveGame = useGameStore((state) => state.saveGame);
   const gold = useGameStore((state) => state.gold);
   const diamonds = useGameStore((state) => state.diamonds);
-  const buildMaterials = useGameStore((state) => state.buildMaterials);
   const teamPower = useGameStore((state) => state.teamPower);
-  const castleLevel = useGameStore((state) => state.castleLevel);
+  const deployedHeroIds = useGameStore((state) => state.deployedHeroIds);
   const wave = useGameStore((state) => state.wave);
   const activeTutorialStep = useGameStore((state) => getActiveTutorialStep(state));
   const completeTutorialStep = useGameStore((state) => state.completeTutorialStep);
@@ -96,6 +92,7 @@ function App() {
   // buttons for panels the run has actually reached, instead of exposing
   // every system from wave 1.
   const globalWave = getGlobalWaveNumber(wave);
+  const maxDeployedHeroes = getMaxDeployedHeroes(globalWave);
   const visibleGrowthTabs = GROWTH_TABS.filter((tab) => isPanelUnlocked(tab.id, globalWave));
   const visibleCoreTabs = CORE_TABS.filter((tab) => isPanelUnlocked(tab.id, globalWave));
 
@@ -151,8 +148,6 @@ function App() {
 
   function renderPanel(id: PanelId) {
     switch (id) {
-      case 'castle':
-        return <CastlePanel />;
       case 'hero':
         return <HeroPanel gameScreenRef={stageRef} />;
       case 'pet':
@@ -183,14 +178,13 @@ function App() {
       </div>
 
       <div className="hud-layer">
-        {/* Base/progress identity - real castle level and current
-            chapter/biome, not a fabricated player name or power score
-            (this game has neither concept). */}
+        {/* Base/progress identity - squad size and current chapter/biome,
+            not a fabricated player name or power score (this game has
+            neither concept). */}
         <div className="hud-corner top-left">
           <div className="hud-widget">
             <div className="hud-widget-row">
-              <span><IconCastle /> {t('castle.level')} {castleLevel}</span>
-              <span><IconBrick /> {formatBigNumber(buildMaterials)}</span>
+              <span><IconSword /> {deployedHeroIds.length}/{maxDeployedHeroes}</span>
             </div>
             <div className="hud-label">
               {t('wave.stage')} {wave.chapter}-{wave.waveInChapter} · {t(biome.labelKey)}

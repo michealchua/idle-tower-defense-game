@@ -17,9 +17,9 @@ export function canAscend(state: GameState): boolean {
 // Resets the run (level/exp/per-hero upgrades/gold/stage progress) in
 // exchange for ascensionPoints, spent in the ascension shop
 // (ascensionShopConfig.ts/AscensionShopSystem.ts) for a permanent stat
-// bonus - unlocked heroes/pets, the equipment inventory, castle level/type,
-// the talent tree, and the ascension shop levels themselves are all
-// collection/permanent progress and are deliberately left untouched.
+// bonus - unlocked heroes/pets, the equipment inventory, the talent tree,
+// and the ascension shop levels themselves are all collection/permanent
+// progress and are deliberately left untouched.
 export function ascend(state: GameState): boolean {
   if (!canAscend(state)) {
     return false;

@@ -12,9 +12,6 @@
 // | diamonds         | Ascension (ascensionConfig/AscensionSystem)| Gacha only - GachaSystem's premium pool pulls |
 // |                  | + chapter-clear rewards (diamondConfig)    | (diamondConfig.diamondExchangeConfig is the   |
 // |                  |                                             | one deliberate bridge back to gold)           |
-// | buildMaterials   | Castle passive income, economic type only  | Castle level-ups only                         |
-// |                  | (castleTypeConfig.getCastleBuildMaterials  | (castleConfig.getCastleUpgradeCost via        |
-// |                  | PerSecond, ticked by CastleSystem)         | CastleSystem.upgradeCastle)                   |
 // | ascensionPoints  | Ascending (ascensionConfig.pointsPerAscend)| Ascension shop only (ascensionShopConfig)     |
 // | reforgeDust      | Salvaging unequipped gear                  | Reforging an item's substats                  |
 // |                  | (EquipmentSystem.salvageEquipment)         | (EquipmentSystem.reforgeEquipment)            |
@@ -23,4 +20,4 @@
 // gachaConfig.pullCostGold) predates this isolation pass and is left as-is
 // for now - the gacha rate/pity rework is explicitly a separate, later step
 // (see the conversation this file was scoped from), not touched here.
-export type ResourceId = 'gold' | 'diamonds' | 'buildMaterials' | 'ascensionPoints' | 'reforgeDust';
+export type ResourceId = 'gold' | 'diamonds' | 'ascensionPoints' | 'reforgeDust';

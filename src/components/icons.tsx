@@ -43,23 +43,6 @@ function Base({ size = '1em', className, children }: IconProps & { children: SVG
 
 // --- Nav / HUD -----------------------------------------------------------
 
-export function IconCastle(props: IconProps) {
-  return (
-    <Base {...props}>
-      <rect x="3" y="9" width="5" height="12" />
-      <rect x="16" y="9" width="5" height="12" />
-      <rect x="5" y="13" width="14" height="8" />
-      <rect x="4" y="6.5" width="1.6" height="2.5" />
-      <rect x="6.4" y="6.5" width="1.6" height="2.5" />
-      <rect x="16" y="6.5" width="1.6" height="2.5" />
-      <rect x="18.4" y="6.5" width="1.6" height="2.5" />
-      <rect x="9" y="9.5" width="2" height="3.5" />
-      <rect x="13" y="9.5" width="2" height="3.5" />
-      <rect x="10.3" y="16" width="3.4" height="5" opacity="0.55" />
-    </Base>
-  );
-}
-
 // Four-point sparkle rather than a five-point star - stays crisp at small
 // HUD sizes where a five-point star tends to blur into a blob. Shared by
 // every "star/sparkle" context (ascension nav, special class, evolve
@@ -168,17 +151,6 @@ export function IconCoin(props: IconProps) {
   );
 }
 
-export function IconBrick(props: IconProps) {
-  return (
-    <Base {...props}>
-      <rect x="3" y="6" width="8" height="5" />
-      <rect x="13" y="6" width="8" height="5" />
-      <rect x="3" y="13" width="4" height="5" />
-      <rect x="9" y="13" width="6" height="5" />
-      <rect x="17" y="13" width="4" height="5" />
-    </Base>
-  );
-}
 
 // Six-tooth gearwheel silhouette (hollow center via evenodd) - standard
 // "settings" glyph, matches the flat-silhouette treatment every other icon

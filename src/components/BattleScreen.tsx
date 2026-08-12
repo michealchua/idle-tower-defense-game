@@ -5,7 +5,7 @@ import { t } from '../locales/i18n';
 import { getNormalWaveEnemyCount } from '../data/waveConfig';
 import { getBiomeForChapter, bossMusicTracks } from '../data/biomeConfig';
 import { layoutHeroPositions } from '../data/mapConfig';
-import { getMaxDeployedHeroes } from '../data/castleConfig';
+import { getMaxDeployedHeroes } from '../data/squadConfig';
 import { formatBigNumber } from '../utils/scaling';
 import { audioManager } from '../audio/AudioManager';
 import { speedTiers } from '../data/speedConfig';
@@ -75,7 +75,6 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
   const screenShakeIntensity = useGameStore((state) => state.screenShakeIntensity);
   const isGameOver = useGameStore((state) => state.isGameOver);
   const wave = useGameStore((state) => state.wave);
-  const castleLevel = useGameStore((state) => state.castleLevel);
   const dragPreviewKind = useGameStore((state) => state.dragPreviewKind);
   const teamPower = useGameStore((state) => state.teamPower);
   const recommendedPower = useGameStore((state) => state.recommendedPower);
@@ -248,7 +247,7 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
     renderScene(ctx, heroes, pets, enemies, base, visualEffects, screenShakeIntensity);
 
     if (dragPreviewKind === 'hero') {
-      drawDeploySlots(ctx, layoutHeroPositions(getMaxDeployedHeroes(castleLevel)), heroes.length);
+      drawDeploySlots(ctx, layoutHeroPositions(getMaxDeployedHeroes(getGlobalWaveNumber(wave))), heroes.length);
     }
 
     if (canvasDrag) {
@@ -264,7 +263,7 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
       }
       drawSwapGhost(ctx, canvasDrag.kind, canvasDrag.pointerX, canvasDrag.pointerY);
     }
-  }, [heroes, pets, enemies, base, visualEffects, screenShakeIntensity, displaySize, biome, dragPreviewKind, castleLevel, canvasDrag]);
+  }, [heroes, pets, enemies, base, visualEffects, screenShakeIntensity, displaySize, biome, dragPreviewKind, wave, canvasDrag]);
 
   const hpRatio = base.maxHp > 0 ? Math.max(0, Math.min(1, base.currentHp / base.maxHp)) : 0;
 

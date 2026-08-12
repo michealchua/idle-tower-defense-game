@@ -29,7 +29,7 @@ export interface BondThreshold {
 //   warrior  -> attackDamage%      (HeroStatsSystem)
 //   guardian -> maxHp%             (HeroStatsSystem) - 圣骑士/坦克 tankiness
 //   mage     -> skill damage%      (SkillSystem aoeDamage/chainDamage)
-//   archer   -> criticalChance+    (HeroStatsSystem, flat like talent/castle)
+//   archer   -> criticalChance+    (HeroStatsSystem, flat like talent/ascension shop)
 //   assassin -> attackSpeed%       (HeroStatsSystem)
 //   support  -> heal power%        (SkillSystem healAlly) - 牧师阵营强化治疗
 //   summoner -> pet attackDamage%  (HeroStatsSystem.recomputePetStats) - 召唤军团强化召唤物
@@ -53,7 +53,7 @@ export interface BondDefinition {
 // the tuning surface small, same "tune later" precedent as every other curve
 // in this project. Only counts deployed heroes (see getBondEffects), so it's
 // a real squad-composition choice bounded by the 9-slot deploy cap
-// (castleConfig.getMaxDeployedHeroes).
+// (squadConfig.getMaxDeployedHeroes).
 const sharedThresholds: BondThreshold[] = [
   { count: 2, bonus: 0.04 },
   { count: 4, bonus: 0.09 },
@@ -118,7 +118,7 @@ export interface BondEffects {
 // mapped to a given effect rather than assuming a 1:1 relationship, so a
 // future bond added to an existing effect just works. Multiplier fields are
 // "1 + sum" (neutral when no bond is active); criticalChanceBonus is a raw
-// sum, added the same way talent/ascension/castle crit bonuses already are
+// sum, added the same way talent/ascension-shop crit bonuses already are
 // in HeroStatsSystem.
 export function getBondEffects(deployedHeroIds: string[]): BondEffects {
   const counts = countDeployedByBond(deployedHeroIds);

@@ -29,7 +29,6 @@ import {
   evolveHero as evolveHeroInEngine,
 } from '../engine/systems/HeroSystem';
 import { unlockPet as unlockPetInEngine } from '../engine/systems/PetSystem';
-import { upgradeCastle as upgradeCastleInEngine, setCastleType as setCastleTypeInEngine } from '../engine/systems/CastleSystem';
 import { upgradeTalent as upgradeTalentInEngine } from '../engine/systems/TalentSystem';
 import { upgradeAscensionShopNode as upgradeAscensionShopNodeInEngine } from '../engine/systems/AscensionShopSystem';
 import { ascend as ascendInEngine, canAscend } from '../engine/systems/AscensionSystem';
@@ -66,7 +65,6 @@ import type { EnemyArchetypeId } from '../data/enemyArchetypes';
 import type { EquipmentSlot } from '../data/equipmentConfig';
 import type { TalentId } from '../data/talentConfig';
 import type { AscensionShopId } from '../data/ascensionShopConfig';
-import type { CastleTypeId } from '../data/castleTypeConfig';
 import type { PityPoolId } from '../data/pityConfig';
 import type { BaseState, EnemyState, EquipmentDropEvent, EquipmentItem, GameState, HeroState, PetState, VisualEffect, WaveState } from '../engine/types';
 
@@ -95,8 +93,6 @@ function snapshotGameState(state: GameState) {
     // render. Every pet is always active, so `pets` above already is that
     // view for pets.
     deployedHeroes: getDeployedHeroes(state).map((hero) => ({ ...hero })),
-    castleLevel: state.castleLevel,
-    castleType: state.castleType,
     skillPoints: state.skillPoints,
     talentLevels: { ...state.talentLevels },
     ascensionLevel: state.ascensionLevel,
@@ -119,7 +115,6 @@ function snapshotGameState(state: GameState) {
     visualEffects: state.visualEffects.map((effect) => ({ ...effect })),
     screenShakeIntensity: state.screenShakeIntensity,
     gold: state.gold,
-    buildMaterials: state.buildMaterials,
     isGameOver: state.isGameOver,
     difficultyScore: getDifficultyScore(state),
     teamPower: getTeamPower(state),
@@ -145,12 +140,8 @@ interface GameStore {
   unlockedPetIds: string[];
   deployedHeroIds: string[];
   deployedHeroes: HeroState[];
-  castleLevel: number;
-  castleType: CastleTypeId;
   skillPoints: number;
   talentLevels: Record<string, number>;
-  upgradeCastle: () => void;
-  setCastleType: (castleType: CastleTypeId) => void;
   upgradeTalent: (talentId: TalentId) => void;
   ascensionLevel: number;
   ascensionPoints: number;
@@ -173,7 +164,6 @@ interface GameStore {
   visualEffects: VisualEffect[];
   screenShakeIntensity: number;
   gold: number;
-  buildMaterials: number;
   isGameOver: boolean;
   difficultyScore: number;
   teamPower: number;
@@ -327,16 +317,6 @@ export const useGameStore = create<GameStore>()(
       set(snapshotGameState(gameState));
     }
     return didEvolve;
-  },
-  upgradeCastle: () => {
-    if (upgradeCastleInEngine(gameState)) {
-      set(snapshotGameState(gameState));
-    }
-  },
-  setCastleType: (castleType) => {
-    if (setCastleTypeInEngine(gameState, castleType)) {
-      set(snapshotGameState(gameState));
-    }
   },
   upgradeTalent: (talentId) => {
     if (upgradeTalentInEngine(gameState, talentId)) {
@@ -622,11 +602,6 @@ export function debugUnlockAllPets(): void {
 
 export function debugGrantGold(amount: number): void {
   gameState.gold += amount;
-  useGameStore.setState(snapshotGameState(gameState));
-}
-
-export function debugGrantBuildMaterials(amount: number): void {
-  gameState.buildMaterials += amount;
   useGameStore.setState(snapshotGameState(gameState));
 }
 

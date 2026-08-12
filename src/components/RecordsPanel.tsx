@@ -19,7 +19,6 @@ const DAILY_QUEST_ICON: Record<DailyQuestId, (props: IconProps) => JSX.Element> 
 function RecordsPanel() {
   const highestGlobalWaveReached = useGameStore((state) => state.highestGlobalWaveReached);
   const totalBossKills = useGameStore((state) => state.totalBossKills);
-  const castleLevel = useGameStore((state) => state.castleLevel);
   const ascensionLevel = useGameStore((state) => state.ascensionLevel);
   const dailyQuestProgress = useGameStore((state) => state.dailyQuestProgress);
   const dailyQuestClaimed = useGameStore((state) => state.dailyQuestClaimed);
@@ -38,10 +37,6 @@ function RecordsPanel() {
           <div className="stat-tile">
             <div className="stat-tile-label">{t('records.totalBossKills')}</div>
             <div className="stat-tile-value">{formatBigNumber(totalBossKills)}</div>
-          </div>
-          <div className="stat-tile">
-            <div className="stat-tile-label">{t('castle.level')}</div>
-            <div className="stat-tile-value">{castleLevel}</div>
           </div>
           <div className="stat-tile">
             <div className="stat-tile-label">{t('ascension.title')}</div>
