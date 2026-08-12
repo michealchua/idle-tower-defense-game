@@ -119,7 +119,17 @@ function SettingsPanel({ onClose, onReturnToTitle }: SettingsPanelProps) {
                 </button>
               </div>
             )}
-            {updateStatus?.state === 'error' && <div className="item-detail">{t('update.checkFailed')}</div>}
+            {updateStatus?.state === 'error' && (
+              <div className="item-detail">
+                {t('update.checkFailed')}
+                {updateStatus.message && (
+                  <>
+                    <br />
+                    <span className="text-faint">{updateStatus.message}</span>
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="settings-section">
