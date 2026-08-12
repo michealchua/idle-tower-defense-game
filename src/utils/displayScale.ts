@@ -1,14 +1,18 @@
 // Whole-window shrink for "keep this in the corner while I work" play -
 // separate from BattleScreen's own letterbox fit, which just keeps the 4:3
 // game world undistorted inside whatever box it's given. electron/main.cjs's
-// "App chrome IPC" section does two things together for this one factor:
-// BrowserWindow.setSize actually resizes the OS window (a zoom alone would
-// leave the window full-size with smaller content floating inside it, which
-// doesn't read as a smaller window at all), and webContents.setZoomFactor
-// compresses the whole rendered page - fixed-px HUD buttons/text included,
-// not just the canvas world BattleScreen's ResizeObserver already
-// rescales - so everything shrinks together instead of overlapping once the
-// window gets small. The window's aspect ratio is locked at creation
+// 'app:set-window-scale' handler resizes the actual OS window
+// (BrowserWindow.setSize); its 'resize' listener (see createWindow) then
+// rescales the whole rendered page - HUD buttons/text included, not just
+// the canvas world BattleScreen's own ResizeObserver already rescales - to
+// match, using webContents.setZoomFactor computed from the window's real
+// resulting content size. Both happen in the main process so this file only
+// needs to ask for the resize; a plain CSS zoom on the page from here
+// wouldn't do the same job (it scales an element's own rendering, not the
+// document's effective layout viewport the way page-level zoom does, so
+// percentage/vw-vh-sized layout wouldn't actually compress with it - this
+// was tried and confirmed not to work before landing on the main-process
+// approach above). The window's aspect ratio is locked at creation
 // (win.setAspectRatio), so every scale keeps the same shape.
 //
 // Shrink-only (never zooms past 100%) per the ask this was built for - down

@@ -62,6 +62,20 @@ function createWindow() {
   // ratio, so "free resize but fixed aspect ratio" holds however the window
   // gets resized - not just through the in-app scale slider below.
   win.setAspectRatio(BASE_WINDOW_WIDTH / BASE_WINDOW_HEIGHT);
+  // Single source of truth for "keep the whole rendered page - HUD buttons/
+  // text included, not just the canvas world BattleScreen.tsx's own
+  // ResizeObserver already rescales - shrunk in lockstep with the window":
+  // fires for BOTH the settings slider's setSize call below AND the player
+  // manually dragging an edge, so either path ends up here instead of
+  // duplicating this computation in two places. Reads the window's REAL
+  // resulting content-view size (getContentSize, title-bar/border chrome
+  // excluded) rather than assuming it equals whatever width/height was
+  // requested, since that chrome doesn't shrink at the same rate as the
+  // window itself and would otherwise throw the zoom off.
+  win.on('resize', () => {
+    const [contentWidth] = win.getContentSize();
+    win.webContents.setZoomFactor(contentWidth / BASE_WINDOW_WIDTH);
+  });
   win.on('closed', () => {
     if (mainWindow === win) {
       mainWindow = null;
@@ -198,23 +212,12 @@ ipcMain.on('update:check-now', () => {
 
 // --- App chrome IPC (settings panel) ---------------------------------------
 // Backs src/components/SettingsPanel.tsx: an in-page display-scale slider
-// and a real "quit the app" button for the exit-game action. Two things
-// happen together here, not one or the other:
-//   1. setSize actually resizes the OS window - a webContents zoom alone
-//      would leave the window itself full-size with smaller content
-//      floating inside it, which isn't a smaller window at all.
-//   2. setZoomFactor compresses the whole rendered page (HUD buttons/text
-//      included, not just the canvas world BattleScreen.tsx's own
-//      ResizeObserver already rescales) by that same factor, so the fixed-px
-//      HUD chrome shrinks in lockstep with the window instead of staying
-//      full-size and overlapping once the window gets small. setAspectRatio
-//      (see createWindow) keeps the window's shape locked throughout.
+// and a real "quit the app" button for the exit-game action. Just resizes
+// the OS window - the 'resize' listener in createWindow (which this
+// triggers) is what actually rescales the page's zoom to match, so both
+// this slider and a manual edge-drag get the same treatment from one place.
 ipcMain.on('app:set-window-scale', (_event, factor) => {
-  if (!mainWindow) {
-    return;
-  }
-  mainWindow.setSize(Math.round(BASE_WINDOW_WIDTH * factor), Math.round(BASE_WINDOW_HEIGHT * factor));
-  mainWindow.webContents.setZoomFactor(factor);
+  mainWindow?.setSize(Math.round(BASE_WINDOW_WIDTH * factor), Math.round(BASE_WINDOW_HEIGHT * factor));
 });
 
 ipcMain.on('app:quit', () => {
