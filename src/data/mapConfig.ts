@@ -11,10 +11,14 @@ export const mapConfig = {
   // ever-taller column. See layoutHeroPositions.
   heroColumns: 3,
   heroColSpacing: 44,
-  // Pets trail the hero line toward the base (smaller x = further from the
-  // spawn side enemies march in from), not just below it - reads as
-  // "following the squad" instead of "parked under it".
-  petTrailOffset: 46,
+  // Pets trail the hero GRID's left edge toward the base (smaller x =
+  // further from the spawn side enemies march in from), not just below it -
+  // reads as "following the squad" instead of "parked under it". 36 sits
+  // the pet column roughly midway in the ~65-74 gap between the base
+  // sprite's right edge and the hero grid's own left edge (see
+  // layoutPetPositions), clearing both without a large empty gap either
+  // side in this game's tight ~340px-wide lane.
+  petTrailOffset: 36,
   petRowSpacing: 24,
 };
 
@@ -37,12 +41,21 @@ export function layoutHeroPositions(count: number): Position[] {
   });
 }
 
-// Pets sit behind the hero anchor (toward the base, away from the spawn
-// side) so they read as following the squad rather than parked under it.
+// Pets sit behind the hero GRID's actual left edge (toward the base, away
+// from the spawn side) so they read as following the squad rather than
+// parked under it. Previously offset from the grid's center anchor instead
+// of its edge - petTrailOffset (46) landed the pet column at x=104 while a
+// 3-wide grid's own leftmost column already sits at x=106
+// (heroPosition.x - (heroColumns-1)/2 * heroColSpacing = 150 - 44), a ~2px
+// gap that read as pets and heroes overlapping. petTrailOffset is now the
+// clearance gap beyond that edge, not from the center, so it scales
+// correctly if heroColumns/heroColSpacing ever change.
 export function layoutPetPositions(count: number): Position[] {
   const { x, y } = mapConfig.heroPosition;
+  const heroGridLeftEdge = x - ((mapConfig.heroColumns - 1) / 2) * mapConfig.heroColSpacing;
+  const petX = heroGridLeftEdge - mapConfig.petTrailOffset;
   return Array.from({ length: count }, (_, index) => ({
-    x: x - mapConfig.petTrailOffset,
+    x: petX,
     y: y + (index - (count - 1) / 2) * mapConfig.petRowSpacing,
   }));
 }
