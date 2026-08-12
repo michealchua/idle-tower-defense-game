@@ -77,6 +77,8 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
   const wave = useGameStore((state) => state.wave);
   const castleLevel = useGameStore((state) => state.castleLevel);
   const dragPreviewKind = useGameStore((state) => state.dragPreviewKind);
+  const teamPower = useGameStore((state) => state.teamPower);
+  const recommendedPower = useGameStore((state) => state.recommendedPower);
   const swapDeployedHeroes = useGameStore((state) => state.swapDeployedHeroes);
   // Dragging an already-deployed hero directly on the canvas to swap its
   // slot with another - separate from dragPreviewKind, which is for
@@ -317,6 +319,13 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
               <div className="bar-fill bar-fill-kill" style={{ width: `${killRatio * 100}%` }} />
             </div>
           )}
+          <div className="hud-label" style={{ marginTop: 4 }}>
+            {t('power.recommended')} {formatBigNumber(recommendedPower)}
+            {' · '}
+            <span className={teamPower >= recommendedPower ? 'text-power-ok' : 'text-power-low'}>
+              {t('power.team')} {formatBigNumber(teamPower)}
+            </span>
+          </div>
           <div className="hud-label" style={{ marginTop: 4 }}>
             {t('base.hp')} {formatBigNumber(base.currentHp)}/{formatBigNumber(base.maxHp)}
           </div>

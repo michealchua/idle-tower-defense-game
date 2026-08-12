@@ -1,3 +1,7 @@
+// BGM is off for now - no real tracks have been dropped in yet, so
+// setTrack/unlock below just no-op until this flips back to true.
+const BGM_ENABLED = false;
+
 // Thin wrapper around a single looping <audio> element for the biome BGM.
 // Plain class (not store state) because playback is imperative browser
 // state, not app state - React only ever needs to call methods on it and,
@@ -21,7 +25,7 @@ class AudioManager {
   // Switches the loop target. No-ops if it's already the current track, so
   // re-entering the same biome's waves doesn't restart the loop from 0.
   setTrack(src: string): void {
-    if (this.currentTrack === src) {
+    if (!BGM_ENABLED || this.currentTrack === src) {
       return;
     }
     this.currentTrack = src;
@@ -39,7 +43,7 @@ class AudioManager {
   // the page - call this from the first pointerdown/click and it retries
   // playback of whatever track is already set.
   unlock(): void {
-    if (this.unlocked) {
+    if (!BGM_ENABLED || this.unlocked) {
       return;
     }
     this.unlocked = true;

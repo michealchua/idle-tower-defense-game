@@ -83,6 +83,80 @@ function getBestCelebrationRarity(results: GachaPullResult[]): GachaRarity | nul
   return CELEBRATION_RARITIES.find((rarity) => counts[rarity] > 0) ?? null;
 }
 
+// Solid accent color per rarity for the reveal card's front-face border/glow
+// - CSS var references (not raw hex) so this stays in sync with whatever
+// index.css's :root rarity palette is. Rainbow has no single solid color
+// (see .rarity-rainbow's gradient text treatment), so it borrows its
+// brightest gradient stop as a stand-in solid accent.
+const RARITY_ACCENT_VAR: Record<GachaRarity, string> = {
+  white: 'var(--rarity-white)',
+  green: 'var(--rarity-green)',
+  blue: 'var(--rarity-blue)',
+  purple: 'var(--rarity-purple)',
+  gold: 'var(--rarity-gold)',
+  red: 'var(--rarity-red)',
+  rainbow: 'var(--rarity-rainbow-3)',
+};
+
+// Whole reveal sequence never takes longer than this to finish flipping
+// every card on its own, regardless of how many were pulled (x100 still
+// finishes in ~3s, not 100x the per-card delay) - the skip button exists for
+// anyone who doesn't want to wait even that long.
+const REVEAL_TOTAL_BUDGET_MS = 3200;
+const REVEAL_STAGGER_MS_MIN = 90;
+const REVEAL_STAGGER_MS_MAX = 400;
+
+// Full card-by-card reveal sequence shown before a pull's result text/
+// celebration flash - each result starts face-down and flips over on its own
+// stagger, tap-anywhere/skip button instantly reveals the rest, and the
+// confirm button (only enabled once every card is face-up) hands control
+// back to GachaPanel via onDone.
+function GachaRevealOverlay({ results, onDone }: { results: GachaPullResult[]; onDone: () => void }) {
+  const [revealedCount, setRevealedCount] = useState(0);
+  const staggerMs = Math.min(REVEAL_STAGGER_MS_MAX, Math.max(REVEAL_STAGGER_MS_MIN, REVEAL_TOTAL_BUDGET_MS / results.length));
+  const allRevealed = revealedCount >= results.length;
+
+  useEffect(() => {
+    if (allRevealed) {
+      return;
+    }
+    const timer = setTimeout(() => setRevealedCount((count) => count + 1), staggerMs);
+    return () => clearTimeout(timer);
+  }, [revealedCount, allRevealed, staggerMs]);
+
+  return (
+    <div className="gacha-reveal-backdrop" onClick={() => !allRevealed && setRevealedCount(results.length)}>
+      <div className="gacha-reveal-grid">
+        {results.map((result, index) => {
+          const accent = RARITY_ACCENT_VAR[result.rarity];
+          return (
+            <div key={index} className={`gacha-reveal-card${index < revealedCount ? ' is-revealed' : ''}`}>
+              <div className="gacha-reveal-card-inner">
+                <div className="gacha-reveal-card-back">?</div>
+                <div className="gacha-reveal-card-front" style={{ borderColor: accent, boxShadow: `0 0 10px ${accent}` }}>
+                  <div className={`gacha-reveal-card-label rarity-${result.rarity}`}>{formatRosterLabel(result.rarity, result.id)}</div>
+                  {result.isNewUnlock && <div className="gacha-reveal-card-new">{t('gacha.multiResultNew')}</div>}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="gacha-reveal-actions">
+        {allRevealed ? (
+          <button className="btn btn-primary" onClick={onDone}>
+            {t('gacha.revealConfirm')}
+          </button>
+        ) : (
+          <button className="btn btn-sm" onClick={() => setRevealedCount(results.length)}>
+            {t('gacha.revealSkip')}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // Odds actually used by the given pool (gold pool = pullWeight, premium pool
 // = premiumPullWeight - see gachaConfig.ts) as player-facing percentages -
 // plan section 17's "显示概率明细". Normalizes against the sum of every
@@ -115,7 +189,7 @@ function PullCard({
   balance,
   pullOne,
   pullMulti,
-  onResult,
+  onResults,
   pityPoolId,
   pityCurrent,
   showFirstTenPullBadge,
@@ -129,7 +203,7 @@ function PullCard({
   balance: number;
   pullOne: () => GachaPullResult | null;
   pullMulti: (count: number) => GachaPullResult[];
-  onResult: (text: string, results: GachaPullResult[]) => void;
+  onResults: (results: GachaPullResult[]) => void;
   pityPoolId: PityPoolId;
   pityCurrent: number;
   // "新手绝对福利" - true until the player's very first ever 10-pull (on
@@ -184,7 +258,7 @@ function PullCard({
           onClick={() => {
             const result = pullOne();
             if (result) {
-              onResult(formatResult(result), [result]);
+              onResults([result]);
             }
           }}
         >
@@ -196,7 +270,7 @@ function PullCard({
           onClick={() => {
             const results = pullMulti(10);
             if (results.length > 0) {
-              onResult(formatMultiResult(results), results);
+              onResults(results);
             }
           }}
         >
@@ -209,7 +283,7 @@ function PullCard({
             onClick={() => {
               const results = pullMulti(100);
               if (results.length > 0) {
-                onResult(formatMultiResult(results), results);
+                onResults(results);
               }
             }}
           >
@@ -237,6 +311,11 @@ function GachaPanel() {
   const exchangeDiamondsForGold = useGameStore((state) => state.exchangeDiamondsForGold);
   const [lastResult, setLastResult] = useState<string | null>(null);
   const [celebration, setCelebration] = useState<{ rarity: GachaRarity; key: number } | null>(null);
+  // Holds the raw pull results while GachaRevealOverlay plays out its
+  // card-by-card flip sequence - lastResult/celebration only get set once
+  // that finishes (see handleRevealDone), so the flash/text never appear
+  // before the player has actually seen every card revealed.
+  const [pendingReveal, setPendingReveal] = useState<GachaPullResult[] | null>(null);
 
   // Auto-dismiss the celebration overlay - no explicit close action needed,
   // it's a brief flourish, not a modal the player has to acknowledge.
@@ -248,17 +327,28 @@ function GachaPanel() {
     return () => clearTimeout(timer);
   }, [celebration]);
 
-  function handleResult(text: string, results: GachaPullResult[]): void {
+  function handlePullResults(results: GachaPullResult[]): void {
+    setPendingReveal(results);
+  }
+
+  function handleRevealDone(): void {
+    if (!pendingReveal) {
+      return;
+    }
+    const text = pendingReveal.length === 1 ? formatResult(pendingReveal[0]) : formatMultiResult(pendingReveal);
     setLastResult(text);
-    const bestRarity = getBestCelebrationRarity(results);
+    const bestRarity = getBestCelebrationRarity(pendingReveal);
     if (bestRarity) {
       setCelebration({ rarity: bestRarity, key: Date.now() });
     }
+    setPendingReveal(null);
   }
 
   return (
     <div className="card">
       <div className="card-title">{t('gacha.title')}</div>
+
+      {pendingReveal && <GachaRevealOverlay results={pendingReveal} onDone={handleRevealDone} />}
 
       {celebration && (
         <div key={celebration.key} className={`gacha-celebration gacha-celebration-${celebration.rarity}`}>
@@ -275,7 +365,7 @@ function GachaPanel() {
           balance={gold}
           pullOne={pullHero}
           pullMulti={pullHeroMulti}
-          onResult={handleResult}
+          onResults={handlePullResults}
           pityPoolId="heroGold"
           pityCurrent={pityCounters.heroGold}
           showFirstTenPullBadge={!isFirstTenPullDone}
@@ -289,7 +379,7 @@ function GachaPanel() {
           balance={gold}
           pullOne={pullPet}
           pullMulti={pullPetMulti}
-          onResult={handleResult}
+          onResults={handlePullResults}
           pityPoolId="petGold"
           pityCurrent={pityCounters.petGold}
           showFirstTenPullBadge={!isFirstTenPullDone}
@@ -310,7 +400,7 @@ function GachaPanel() {
           balance={diamonds}
           pullOne={pullHeroPremium}
           pullMulti={pullHeroPremiumMulti}
-          onResult={handleResult}
+          onResults={handlePullResults}
           pityPoolId="heroPremium"
           pityCurrent={pityCounters.heroPremium}
           showFirstTenPullBadge={!isFirstTenPullDone}
@@ -325,7 +415,7 @@ function GachaPanel() {
           balance={diamonds}
           pullOne={pullPetPremium}
           pullMulti={pullPetPremiumMulti}
-          onResult={handleResult}
+          onResults={handlePullResults}
           pityPoolId="petPremium"
           pityCurrent={pityCounters.petPremium}
           showFirstTenPullBadge={!isFirstTenPullDone}

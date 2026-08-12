@@ -837,6 +837,95 @@ select {
   gap: 8px;
 }
 
+/* Full card-by-card reveal sequence (GachaPanel's GachaRevealOverlay) -
+   shown before the plain result text/celebration flash below, so every pull
+   (not just the rare-hit celebration) gets a moment of its own. */
+.gacha-reveal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 65;
+  background: rgba(5, 5, 8, 0.88);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px;
+  animation: modal-fade-in 0.15s ease-out;
+}
+
+.gacha-reveal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 8px;
+  max-width: 720px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.gacha-reveal-card {
+  width: 64px;
+  height: 88px;
+  perspective: 600px;
+}
+
+.gacha-reveal-card-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.gacha-reveal-card.is-revealed .gacha-reveal-card-inner {
+  transform: rotateY(180deg);
+}
+
+.gacha-reveal-card-back,
+.gacha-reveal-card-front {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  border-radius: 8px;
+  border: 2px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 4px;
+}
+
+.gacha-reveal-card-back {
+  background: var(--surface-hover);
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--text-faint);
+}
+
+.gacha-reveal-card-front {
+  background: var(--bg);
+  transform: rotateY(180deg);
+  font-size: 10px;
+  font-weight: 700;
+  gap: 2px;
+}
+
+.gacha-reveal-card-label {
+  line-height: 1.3;
+}
+
+.gacha-reveal-card-new {
+  color: var(--rarity-gold);
+  font-size: 9px;
+}
+
+.gacha-reveal-actions {
+  display: flex;
+  gap: 8px;
+}
+
 /* Plan section 17's "高品质抽卡拥有独特演出" - a brief full-panel flourish
    that only fires for gold/red/rainbow hits (see GachaPanel's
    CELEBRATION_RARITIES), so it reads as a genuinely rare moment instead of
@@ -1163,6 +1252,18 @@ select {
   font-size: 11px;
 }
 
+/* Team-power-vs-recommended-power readout (BattleScreen.tsx) - green when
+   the squad already meets the stage's recommended power, amber as a soft
+   warning (not --danger's red) when it's under, since being under isn't a
+   failure state, just a heads-up. */
+.text-power-ok {
+  color: #4caf50;
+}
+
+.text-power-low {
+  color: #ffb300;
+}
+
 /* Debug panel */
 .debug-toggle {
   position: fixed;
@@ -1477,4 +1578,67 @@ select {
   font-weight: 700;
   color: var(--text-faint);
   animation: title-blink 1.2s ease-in-out infinite;
+}
+
+/* Equipment drop toasts (EquipmentDropToast.tsx) - stacked bottom-center,
+   above the HUD corners but below any modal, so a drop never blocks a panel
+   the player already has open. Each entry's own lifetime is tracked
+   engine-side (EquipmentSystem.tickEquipmentDropFeed) - this is pure
+   presentation. */
+.drop-toast-stack {
+  position: fixed;
+  bottom: 90px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 25;
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.drop-toast {
+  background: rgba(10, 10, 14, 0.82);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  animation: modal-fade-in 0.15s ease-out;
+}
+
+/* Settings modal (App.tsx's Esc-triggered pause menu) - reuses .modal-*
+   from the panel modals above but is content-sized (not the fixed 85vh
+   panel box) since its content is a handful of short sections, not a
+   scrolling list. */
+.settings-modal {
+  width: min(360px, 90vw);
+  height: auto;
+}
+
+.settings-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.settings-section-title {
+  font-weight: 700;
+  font-size: 13px;
+  opacity: 0.8;
+}
+
+.settings-scale-slider {
+  width: 100%;
+  accent-color: var(--accent);
 }

@@ -314,6 +314,24 @@ export function getEquipmentMainStatValue(rarity: EquipmentRarity, baseValue: nu
   return baseValue * (1 + starLevel * def.starGrowthRate);
 }
 
+// Rarity ladder in ascending power order - same ordering EquipmentPanel's
+// own RARITY_RANK sort already uses, kept here too since HeroSystem's
+// equip-strongest needs it without importing a component file.
+const RARITY_ORDER: EquipmentRarity[] = ['white', 'green', 'blue', 'purple', 'gold', 'red', 'rainbow'];
+
+// Single comparable "how good is this item" number backing HeroSystem.
+// equipStrongestForHero - no in-game currency/stat concept unifies items
+// across different main stats (attackDamage vs maxHp aren't directly
+// comparable), so this leans on the same signal a player judges gear by at a
+// glance: rarity first (dominant term), then star level, then the item's own
+// scaled main-stat value as a same-rarity/same-star tiebreaker only (its
+// range - a few dozen at most - is deliberately far too small to ever
+// outweigh a rarity or star difference).
+export function getEquipmentScore(item: { rarity: EquipmentRarity; stat: UpgradeableStat; value: number; starLevel: number }): number {
+  const mainStatValue = getEquipmentMainStatValue(item.rarity, item.value, item.starLevel);
+  return RARITY_ORDER.indexOf(item.rarity) * 10000 + item.starLevel * 1000 + mainStatValue;
+}
+
 // Exported for EquipmentSystem.reforgeEquipment, which re-rolls just an
 // existing item's substats (kind/value) without touching its slot/rarity/
 // main stat/set/legendary effect.

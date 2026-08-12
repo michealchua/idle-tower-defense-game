@@ -41,7 +41,7 @@ export const SLOT_ICON: Record<EquipmentSlot, (props: IconProps) => JSX.Element>
   boots: IconBoots,
 };
 
-const RARITY_LABEL_KEYS: Record<EquipmentRarity, string> = {
+export const RARITY_LABEL_KEYS: Record<EquipmentRarity, string> = {
   white: 'rarity.white',
   green: 'rarity.green',
   blue: 'rarity.blue',
@@ -51,7 +51,7 @@ const RARITY_LABEL_KEYS: Record<EquipmentRarity, string> = {
   rainbow: 'rarity.rainbow',
 };
 
-const RARITY_CLASS: Record<EquipmentRarity, string> = {
+export const RARITY_CLASS: Record<EquipmentRarity, string> = {
   white: 'rarity-white',
   green: 'rarity-green',
   blue: 'rarity-blue',

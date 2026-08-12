@@ -14,13 +14,14 @@ import AscensionPanel from './components/AscensionPanel';
 import AscensionShopPanel from './components/AscensionShopPanel';
 import RecordsPanel from './components/RecordsPanel';
 import UpdateBanner from './components/UpdateBanner';
+import SettingsPanel from './components/SettingsPanel';
+import EquipmentDropToast from './components/EquipmentDropToast';
 import { getBiomeForChapter } from './data/biomeConfig';
 import { formatBigNumber } from './utils/scaling';
 import { isPanelUnlocked, type PanelId } from './data/unlockConditionConfig';
 import { getActiveTutorialStep } from './data/tutorialConfig';
 import { getGlobalWaveNumber } from './engine/systems/WaveSystem';
 import { t } from './locales/i18n';
-import { audioManager } from './audio/AudioManager';
 import { useGameStore } from './store/useGameStore';
 import {
   IconCastle,
@@ -34,9 +35,8 @@ import {
   IconSword,
   IconCoin,
   IconBrick,
-  IconMuteOn,
-  IconMuteOff,
   IconSave,
+  IconGear,
   type IconProps,
 } from './components/icons';
 
@@ -73,7 +73,7 @@ function App() {
   // app shell below only mounts once a slot has been loaded/started.
   const [screen, setScreen] = useState<'title' | 'game'>('title');
   const [activePanel, setActivePanel] = useState<PanelId | null>(null);
-  const [isMuted, setIsMuted] = useState(() => audioManager.isMuted());
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
   // Owned here (not by BattleScreen) because HeroPanel now renders inside
   // this component's modal - a sibling of BattleScreen, not a child - but
@@ -86,7 +86,7 @@ function App() {
   const gold = useGameStore((state) => state.gold);
   const diamonds = useGameStore((state) => state.diamonds);
   const buildMaterials = useGameStore((state) => state.buildMaterials);
-  const difficultyScore = useGameStore((state) => state.difficultyScore);
+  const teamPower = useGameStore((state) => state.teamPower);
   const castleLevel = useGameStore((state) => state.castleLevel);
   const wave = useGameStore((state) => state.wave);
   const activeTutorialStep = useGameStore((state) => getActiveTutorialStep(state));
@@ -99,16 +99,28 @@ function App() {
   const visibleGrowthTabs = GROWTH_TABS.filter((tab) => isPanelUnlocked(tab.id, globalWave));
   const visibleCoreTabs = CORE_TABS.filter((tab) => isPanelUnlocked(tab.id, globalWave));
 
-  // Browsers block audio.play() until a user gesture happens anywhere on the
-  // page - this listens once for the first pointer interaction and unlocks
-  // whatever biome track is already loaded.
+  // Esc backs out one level at a time: closes a growth/core panel modal if
+  // one's open, otherwise toggles the settings panel itself - same "esc
+  // always does something sensible" convention as any pause menu.
   useEffect(() => {
-    const unlock = () => audioManager.unlock();
-    window.addEventListener('pointerdown', unlock, { once: true });
-    return () => window.removeEventListener('pointerdown', unlock);
-  }, []);
+    if (screen !== 'game') {
+      return;
+    }
+    function handleKeyDown(event: KeyboardEvent): void {
+      if (event.key !== 'Escape') {
+        return;
+      }
+      if (activePanel !== null) {
+        setActivePanel(null);
+        return;
+      }
+      setIsSettingsOpen((open) => !open);
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [screen, activePanel]);
 
-  // Opening the exact panel a tutorial step is pointing at counts as having
+// Opening the exact panel a tutorial step is pointing at counts as having
   // acted on it - dismisses the bubble the same as its own "知道了" button,
   // so the player isn't left with a stale spotlight ring around a nav
   // button they already clicked.
@@ -196,16 +208,12 @@ function App() {
                   {justSaved ? '✓' : <IconSave />}
                 </button>
               )}
-              <button
-                className="btn btn-sm mute-toggle-btn"
-                onClick={() => setIsMuted(audioManager.toggleMute())}
-                title={t(isMuted ? 'battle.unmuteMusic' : 'battle.muteMusic')}
-              >
-                {isMuted ? <IconMuteOn /> : <IconMuteOff />}
+              <button className="btn btn-sm mute-toggle-btn" onClick={() => setIsSettingsOpen(true)} title={t('settings.title')}>
+                <IconGear />
               </button>
             </div>
             <div className="hud-label">
-              {t('difficulty.tier')}: {Math.floor(difficultyScore)}
+              {t('power.team')}: {formatBigNumber(teamPower)}
             </div>
           </div>
         </div>
@@ -253,6 +261,18 @@ function App() {
         </div>
       )}
 
+      {isSettingsOpen && (
+        <SettingsPanel
+          onClose={() => setIsSettingsOpen(false)}
+          onReturnToTitle={() => {
+            setIsSettingsOpen(false);
+            setActivePanel(null);
+            setScreen('title');
+          }}
+        />
+      )}
+
+      <EquipmentDropToast />
       <StoryDialog />
       <TutorialOverlay />
       <UpdateBanner />

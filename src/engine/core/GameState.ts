@@ -81,6 +81,8 @@ export function createInitialGameState(): GameState {
     hitStopRemaining: 0,
     inventory: [],
     nextEquipmentInstanceId: 1,
+    equipmentDropFeed: [],
+    nextEquipmentDropEventId: 1,
     reforgeDust: 0,
     lastLoginDate: null,
     hasSeenTutorialStory: false,

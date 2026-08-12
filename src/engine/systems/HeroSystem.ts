@@ -1,7 +1,7 @@
 import { createHero } from '../entities/Hero';
 import { layoutHeroPositions } from '../../data/mapConfig';
 import { getMaxDeployedHeroes } from '../../data/castleConfig';
-import type { EquipmentSlot } from '../../data/equipmentConfig';
+import { equipmentSlots, getEquipmentScore, type EquipmentSlot } from '../../data/equipmentConfig';
 import { heroEvolutionConfig, type HeroClass } from '../../data/heroConfig';
 import { getHeroDefinition } from '../../data/heroRosterConfig';
 import { recomputeHeroStats } from './HeroStatsSystem';
@@ -138,6 +138,76 @@ export function unequipHeroSlot(state: GameState, heroId: string, slot: Equipmen
 
   recomputeHeroStats(state);
   return true;
+}
+
+const EQUIPMENT_SLOT_IDS = Object.keys(equipmentSlots) as EquipmentSlot[];
+
+// One-click "give this hero the best gear available" - per slot, compares
+// whatever's currently worn against every same-slot inventory item by
+// getEquipmentScore and swaps in the highest-scoring one, exactly like
+// equipItemToHero would if the player picked that item themselves. A slot
+// whose currently-equipped item already scores highest (including an empty
+// inventory) is left untouched.
+export function equipStrongestForHero(state: GameState, heroId: string): boolean {
+  const hero = state.heroes.find((candidate) => candidate.id === heroId);
+  if (!hero) {
+    return false;
+  }
+
+  let changed = false;
+  for (const slot of EQUIPMENT_SLOT_IDS) {
+    const current = hero.equipment[slot];
+    let best = current;
+    let bestScore = current ? getEquipmentScore(current) : -Infinity;
+    for (const item of state.inventory) {
+      if (item.slot !== slot) {
+        continue;
+      }
+      const score = getEquipmentScore(item);
+      if (score > bestScore) {
+        best = item;
+        bestScore = score;
+      }
+    }
+    if (best && best !== current) {
+      const index = state.inventory.findIndex((item) => item.instanceId === best!.instanceId);
+      state.inventory.splice(index, 1);
+      if (current) {
+        state.inventory.push(current);
+      }
+      hero.equipment[slot] = best;
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    recomputeHeroStats(state);
+  }
+  return changed;
+}
+
+// Unequips every slot at once - same effect as calling unequipHeroSlot four
+// times, just one recomputeHeroStats instead of four.
+export function unequipAllForHero(state: GameState, heroId: string): boolean {
+  const hero = state.heroes.find((candidate) => candidate.id === heroId);
+  if (!hero) {
+    return false;
+  }
+
+  let changed = false;
+  for (const slot of EQUIPMENT_SLOT_IDS) {
+    const item = hero.equipment[slot];
+    if (item) {
+      hero.equipment[slot] = null;
+      state.inventory.push(item);
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    recomputeHeroStats(state);
+  }
+  return changed;
 }
 
 // 分支进化 gate - level-only (no gold/material cost, same precedent as the

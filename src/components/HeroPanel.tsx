@@ -241,15 +241,26 @@ function HeroEquipmentSection({ heroId }: { heroId: string }) {
   const inventory = useGameStore((state) => state.inventory);
   const equipItemToHero = useGameStore((state) => state.equipItemToHero);
   const unequipHeroSlot = useGameStore((state) => state.unequipHeroSlot);
+  const equipStrongestForHero = useGameStore((state) => state.equipStrongestForHero);
+  const unequipAllForHero = useGameStore((state) => state.unequipAllForHero);
 
   if (!hero) {
     return null;
   }
 
   const activeSetBonuses = getActiveSetBonuses(hero.equipment);
+  const hasAnyEquipped = SLOT_IDS.some((slot) => hero.equipment[slot]);
 
   return (
     <div>
+      <div className="item-actions" style={{ marginBottom: 8 }}>
+        <button className="btn btn-sm btn-primary" onClick={() => equipStrongestForHero(heroId)} disabled={inventory.length === 0}>
+          {t('equipment.equipStrongest')}
+        </button>
+        <button className="btn btn-sm" onClick={() => unequipAllForHero(heroId)} disabled={!hasAnyEquipped}>
+          {t('equipment.unequipAll')}
+        </button>
+      </div>
       <div className="card-grid-sm">
         {SLOT_IDS.map((slot: EquipmentSlot) => {
           const item = hero.equipment[slot];

@@ -967,6 +967,11 @@ function drawHero(ctx: CanvasRenderingContext2D, hero: HeroState, pulseScale: nu
 
   drawGroundShadow(ctx, hero.position.x, hero.position.y + heroRadius * 0.9, heroRadius * 0.8);
 
+  ctx.font = '10px sans-serif';
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+  ctx.textAlign = 'center';
+  ctx.fillText(hero.name, hero.position.x, hero.position.y - heroRadius - 18);
+
   if (sprite) {
     const size = heroRadius * 2;
     // smooth=false (not true) - hero art is pixel art now (see

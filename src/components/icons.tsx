@@ -180,21 +180,17 @@ export function IconBrick(props: IconProps) {
   );
 }
 
-export function IconMuteOff(props: IconProps) {
+// Six-tooth gearwheel silhouette (hollow center via evenodd) - standard
+// "settings" glyph, matches the flat-silhouette treatment every other icon
+// here uses instead of a thin-stroke cog.
+export function IconGear(props: IconProps) {
   return (
     <Base {...props}>
-      <path d="M3 9H7L12 5V19L7 15H3Z" />
-      <path d="M15.5 9a5 5 0 010 6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <path d="M18.3 6.3a9 9 0 010 11.4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </Base>
-  );
-}
-
-export function IconMuteOn(props: IconProps) {
-  return (
-    <Base {...props}>
-      <path d="M3 9H7L12 5V19L7 15H3Z" />
-      <path d="M15.5 9L20.5 15M20.5 9L15.5 15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M10.5 2H13.5L14 4.6C14.6 4.8 15.2 5.1 15.7 5.4L18.1 4.3L20.4 6.6L19.3 9C19.6 9.5 19.9 10.1 20.1 10.7L22.7 11.2V14.2L20.1 14.7C19.9 15.3 19.6 15.9 19.3 16.4L20.4 18.8L18.1 21.1L15.7 20C15.2 20.3 14.6 20.6 14 20.8L13.5 23.4H10.5L10 20.8C9.4 20.6 8.8 20.3 8.3 20L5.9 21.1L3.6 18.8L4.7 16.4C4.4 15.9 4.1 15.3 3.9 14.7L1.3 14.2V11.2L3.9 10.7C4.1 10.1 4.4 9.5 4.7 9L3.6 6.6L5.9 4.3L8.3 5.4C8.8 5.1 9.4 4.8 10 4.6L10.5 2ZM12 8.7C10.2 8.7 8.7 10.2 8.7 12S10.2 15.3 12 15.3S15.3 13.8 15.3 12S13.8 8.7 12 8.7Z"
+      />
     </Base>
   );
 }

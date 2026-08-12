@@ -10,11 +10,36 @@ import { MAX_STAR_LEVEL } from '../../data/gachaConfig';
 import { recomputeHeroStats } from './HeroStatsSystem';
 import type { EquipmentItem, GameState } from '../types';
 
+// How long a "found X" toast stays on screen before EquipmentDropUI removes
+// it - see EquipmentDropEvent's doc comment on types.ts and this file's
+// tickEquipmentDropFeed.
+const DROP_TOAST_LIFETIME_SECONDS = 3;
+
 function createEquipmentItem(state: GameState): EquipmentItem {
   const roll = rollEquipment();
   const item: EquipmentItem = { instanceId: state.nextEquipmentInstanceId, starLevel: 0, ...roll };
   state.nextEquipmentInstanceId += 1;
   return item;
+}
+
+function pushEquipmentDropEvent(state: GameState, item: EquipmentItem): void {
+  state.equipmentDropFeed.push({
+    id: state.nextEquipmentDropEventId,
+    slot: item.slot,
+    rarity: item.rarity,
+    age: 0,
+    lifetime: DROP_TOAST_LIFETIME_SECONDS,
+  });
+  state.nextEquipmentDropEventId += 1;
+}
+
+// Ages/prunes equipmentDropFeed - same shape as EffectsSystem.tickEffects,
+// called from GameLoop.step alongside it.
+export function tickEquipmentDropFeed(state: GameState, deltaSeconds: number): void {
+  for (const event of state.equipmentDropFeed) {
+    event.age += deltaSeconds;
+  }
+  state.equipmentDropFeed = state.equipmentDropFeed.filter((event) => event.age < event.lifetime);
 }
 
 // Chance-gated - the debug panel's "force drop" button bypasses this by
@@ -26,12 +51,14 @@ export function rollEquipmentDrop(state: GameState): EquipmentItem | null {
 
   const item = createEquipmentItem(state);
   state.inventory.push(item);
+  pushEquipmentDropEvent(state, item);
   return item;
 }
 
 export function debugForceDropEquipment(state: GameState): EquipmentItem {
   const item = createEquipmentItem(state);
   state.inventory.push(item);
+  pushEquipmentDropEvent(state, item);
   return item;
 }
 

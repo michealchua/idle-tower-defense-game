@@ -180,6 +180,21 @@ export interface EquipmentItem {
   setId?: EquipmentSetId;
 }
 
+// Transient toast-feed entry for EquipmentSystem.rollEquipmentDrop - only
+// carries what the UI needs to render a "you found X" line (slot/rarity,
+// same fields ItemCard's itemTitle already formats from), not the item
+// object itself, so a sold/equipped item's toast still reads correctly even
+// after the real EquipmentItem it referred to is gone. Same age/lifetime
+// tick-and-prune lifecycle as VisualEffect, see EquipmentSystem.
+// tickEquipmentDropFeed.
+export interface EquipmentDropEvent {
+  id: number;
+  slot: EquipmentSlot;
+  rarity: EquipmentRarity;
+  age: number;
+  lifetime: number;
+}
+
 export type VisualEffectKind =
   | 'attackFlash'
   | 'deathBurst'
@@ -313,6 +328,9 @@ export interface GameState {
   // HeroState.equipment instead (see EquipmentSystem.ts/HeroSystem.ts).
   inventory: EquipmentItem[];
   nextEquipmentInstanceId: number;
+  // Toast feed for equipment drops - see EquipmentDropEvent's doc comment.
+  equipmentDropFeed: EquipmentDropEvent[];
+  nextEquipmentDropEventId: number;
   // 洗练尘 - salvaging an unequipped item (EquipmentSystem.salvageEquipment)
   // is its only source, reforging an item's substats
   // (EquipmentSystem.reforgeEquipment) its only sink. See resourceConfig.ts.

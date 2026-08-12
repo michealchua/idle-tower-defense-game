@@ -7,6 +7,7 @@ import { heroRosterConfig, getHeroDefinition } from '../data/heroRosterConfig';
 import { petRosterConfig } from '../data/petRosterConfig';
 import { applyHeroUpgrade } from '../engine/systems/UpgradeSystem';
 import { getDifficultyScore } from '../engine/systems/DifficultySystem';
+import { getTeamPower, getRecommendedPowerForStage } from '../engine/systems/PowerSystem';
 import { spawnEnemyNow } from '../engine/systems/SpawnSystem';
 import { handleDeath } from '../engine/systems/DamageSystem';
 import {
@@ -23,6 +24,8 @@ import {
   swapDeployedHeroes as swapDeployedHeroesInEngine,
   equipItemToHero as equipItemToHeroInEngine,
   unequipHeroSlot as unequipHeroSlotInEngine,
+  equipStrongestForHero as equipStrongestForHeroInEngine,
+  unequipAllForHero as unequipAllForHeroInEngine,
   evolveHero as evolveHeroInEngine,
 } from '../engine/systems/HeroSystem';
 import { unlockPet as unlockPetInEngine } from '../engine/systems/PetSystem';
@@ -65,7 +68,7 @@ import type { TalentId } from '../data/talentConfig';
 import type { AscensionShopId } from '../data/ascensionShopConfig';
 import type { CastleTypeId } from '../data/castleTypeConfig';
 import type { PityPoolId } from '../data/pityConfig';
-import type { BaseState, EnemyState, EquipmentItem, GameState, HeroState, PetState, VisualEffect, WaveState } from '../engine/types';
+import type { BaseState, EnemyState, EquipmentDropEvent, EquipmentItem, GameState, HeroState, PetState, VisualEffect, WaveState } from '../engine/types';
 
 // Single mutable simulation state, shared by the GameLoop and by upgrade
 // actions. The store below only ever holds read-only snapshots copied from
@@ -119,7 +122,10 @@ function snapshotGameState(state: GameState) {
     buildMaterials: state.buildMaterials,
     isGameOver: state.isGameOver,
     difficultyScore: getDifficultyScore(state),
+    teamPower: getTeamPower(state),
+    recommendedPower: getRecommendedPowerForStage(state.wave),
     inventory: state.inventory.map((item) => ({ ...item })),
+    equipmentDropFeed: state.equipmentDropFeed.map((event) => ({ ...event })),
     reforgeDust: state.reforgeDust,
     lastLoginDate: state.lastLoginDate,
     pendingStoryId: state.pendingStoryId,
@@ -170,8 +176,11 @@ interface GameStore {
   buildMaterials: number;
   isGameOver: boolean;
   difficultyScore: number;
+  teamPower: number;
+  recommendedPower: number;
   upgradeHeroStat: (heroId: string, stat: UpgradeableStat, count: number) => void;
   inventory: EquipmentItem[];
+  equipmentDropFeed: EquipmentDropEvent[];
   reforgeDust: number;
   lastLoginDate: string | null;
   pendingStoryId: string | null;
@@ -194,6 +203,8 @@ interface GameStore {
   startNewGame: (slot: SaveSlot) => void;
   equipItemToHero: (heroId: string, instanceId: number) => void;
   unequipHeroSlot: (heroId: string, slot: EquipmentSlot) => void;
+  equipStrongestForHero: (heroId: string) => void;
+  unequipAllForHero: (heroId: string) => void;
   sellItem: (instanceId: number) => void;
   salvageEquipment: (instanceId: number) => void;
   starUpEquipment: (instanceId: number) => void;
@@ -248,6 +259,16 @@ export const useGameStore = create<GameStore>()(
   },
   unequipHeroSlot: (heroId, slot) => {
     if (unequipHeroSlotInEngine(gameState, heroId, slot)) {
+      set(snapshotGameState(gameState));
+    }
+  },
+  equipStrongestForHero: (heroId) => {
+    if (equipStrongestForHeroInEngine(gameState, heroId)) {
+      set(snapshotGameState(gameState));
+    }
+  },
+  unequipAllForHero: (heroId) => {
+    if (unequipAllForHeroInEngine(gameState, heroId)) {
       set(snapshotGameState(gameState));
     }
   },
@@ -460,6 +481,8 @@ export const useGameStore = create<GameStore>()(
     retryCurrentWave(gameState);
     gameState.visualEffects = [];
     gameState.nextVisualEffectId = 1;
+    gameState.equipmentDropFeed = [];
+    gameState.nextEquipmentDropEventId = gameState.nextEquipmentDropEventId ?? 1;
     gameState.screenShakeIntensity = 0;
     gameState.hitStopRemaining = 0;
     gameState.isGameOver = false;

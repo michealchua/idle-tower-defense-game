@@ -168,6 +168,20 @@ ipcMain.on('update:install-now', () => {
   autoUpdater.quitAndInstall();
 });
 
+// --- App chrome IPC (settings panel) ---------------------------------------
+// Backs src/components/SettingsPanel.tsx: an in-page display-scale slider
+// (webContents.setZoomFactor is the same mechanism Ctrl+/- uses in any
+// Chromium window - it reflows layout, not just a visual CSS transform, so
+// the existing ResizeObserver-driven canvas fit in BattleScreen.tsx adapts
+// to it for free) and a real "quit the app" button for the exit-game action.
+ipcMain.on('app:set-zoom-factor', (_event, factor) => {
+  mainWindow?.webContents.setZoomFactor(factor);
+});
+
+ipcMain.on('app:quit', () => {
+  app.quit();
+});
+
 app.whenReady().then(() => {
   createWindow();
 
