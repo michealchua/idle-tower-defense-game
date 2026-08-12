@@ -45,6 +45,21 @@ export interface TutorialStep {
 // sequential anyway.
 export const tutorialSteps: TutorialStep[] = [
   {
+    id: 'battlefieldOverview',
+    messageKey: 'tutorialStep.battlefieldOverview',
+    targetSelector: 'battle-hud',
+    // First real step of the opening walkthrough - waits for the intro story
+    // dialog (WaveSystem.tickTutorialStoryTrigger) to finish so the two never
+    // overlap, same gate as every other step below.
+    isEligible: (ctx) => ctx.hasSeenTutorialStory && ctx.pendingStoryId === null,
+  },
+  {
+    id: 'saveReminder',
+    messageKey: 'tutorialStep.saveReminder',
+    targetSelector: 'save-button',
+    isEligible: (ctx) => ctx.hasSeenTutorialStory && ctx.pendingStoryId === null,
+  },
+  {
     id: 'openHeroPanel',
     messageKey: 'tutorialStep.openHeroPanel',
     targetSelector: 'nav-hero',

@@ -49,6 +49,8 @@ const zhCN = {
   },
   tutorialStep: {
     dismiss: '知道了',
+    battlefieldOverview: '这里显示关卡进度、城墙血量和战斗倍速——英雄会自动索敌应战,你只需要按需切换倍速',
+    saveReminder: '记得点这里存档,你的进度不会丢失',
     openHeroPanel: '点击这里查看你的英雄——属性、技能、升级和分支进化都在这里',
     firstGacha: '用金币或钻石抽取更多英雄,组建你的最强战队吧',
     firstEquipment: '英雄掉落的装备会进入背包,记得来这里给他们穿戴上',
@@ -92,6 +94,8 @@ const zhCN = {
     speedLocked: '需要波次',
     stealthModeOn: '摸鱼模式',
     stealthModeOff: '退出摸鱼模式',
+    fullscreenOn: '全屏',
+    fullscreenOff: '退出全屏',
   },
   settings: {
     title: '设置',

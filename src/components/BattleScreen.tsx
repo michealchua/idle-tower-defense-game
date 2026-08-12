@@ -80,7 +80,7 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
   const recommendedPower = useGameStore((state) => state.recommendedPower);
   const speedMultiplier = useGameStore((state) => state.speedMultiplier);
   const setSpeedMultiplier = useGameStore((state) => state.setSpeedMultiplier);
-  const isStealthMode = useGameStore((state) => state.isStealthMode);
+  const isStealthMode = useGameStore((state) => state.windowMode === 'stealth');
   const swapDeployedHeroes = useGameStore((state) => state.swapDeployedHeroes);
   // Dragging an already-deployed hero directly on the canvas to swap its
   // slot with another - separate from dragPreviewKind, which is for
@@ -295,7 +295,7 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
           Hidden in stealth mode along with the rest of App's HUD - see
           App.tsx's stealth-toggle-btn. */}
       {!isStealthMode && (
-      <div className="hud-corner top-center">
+      <div className="hud-corner top-center" data-tutorial="battle-hud">
         <div className="hud-widget" style={{ width: '100%' }}>
           <div className="hud-widget-row" style={{ justifyContent: 'space-between', fontSize: 11 }}>
             <span>

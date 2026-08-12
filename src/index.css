@@ -634,17 +634,25 @@ select {
   line-height: 1;
 }
 
-/* Stealth-mode toggle (App.tsx) - deliberately outside .hud-layer so it
-   survives that whole layer being hidden; this is the one button that never
-   goes away, since it's also the only way back once everything else has.
-   Small/low-contrast on purpose - it's meant to stay out of the way during
-   normal play, not compete with the HUD widgets for attention. */
-.stealth-toggle-btn {
+/* Window-mode toggle cluster (App.tsx) - deliberately outside .hud-layer so
+   it survives that whole layer being hidden; in stealth mode this is the
+   one button that never goes away, since it's also the only way back once
+   everything else has. Small/low-contrast on purpose - it's meant to stay
+   out of the way during normal play, not compete with the HUD widgets for
+   attention. Always exactly one fixed-position element (holding either one
+   button in stealth, or two - fullscreen + stealth - otherwise) rather than
+   each button positioning itself, so they never stack on top of each other. */
+.window-mode-cluster {
   position: fixed;
   bottom: 12px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 20;
+  display: flex;
+  gap: 6px;
+}
+
+.window-mode-btn {
   width: 26px;
   height: 26px;
   padding: 0;
@@ -661,7 +669,7 @@ select {
   transition: opacity 0.15s ease;
 }
 
-.stealth-toggle-btn:hover {
+.window-mode-btn:hover {
   opacity: 1;
   color: var(--text);
 }

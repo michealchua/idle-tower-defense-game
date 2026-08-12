@@ -21,7 +21,7 @@ import { isPanelUnlocked, type PanelId } from './data/unlockConditionConfig';
 import { getActiveTutorialStep } from './data/tutorialConfig';
 import { getGlobalWaveNumber } from './engine/systems/WaveSystem';
 import { getMaxDeployedHeroes } from './data/squadConfig';
-import { setDisplayScale, MIN_DISPLAY_SCALE, MAX_DISPLAY_SCALE } from './utils/displayScale';
+import { setWindowMode as applyWindowMode } from './utils/windowMode';
 import { t } from './locales/i18n';
 import { useGameStore } from './store/useGameStore';
 import {
@@ -38,6 +38,8 @@ import {
   IconGear,
   IconEye,
   IconEyeOff,
+  IconExpand,
+  IconCollapse,
   type IconProps,
 } from './components/icons';
 
@@ -90,8 +92,8 @@ function App() {
   const wave = useGameStore((state) => state.wave);
   const activeTutorialStep = useGameStore((state) => getActiveTutorialStep(state));
   const completeTutorialStep = useGameStore((state) => state.completeTutorialStep);
-  const isStealthMode = useGameStore((state) => state.isStealthMode);
-  const setStealthMode = useGameStore((state) => state.setStealthMode);
+  const windowMode = useGameStore((state) => state.windowMode);
+  const setWindowModeState = useGameStore((state) => state.setWindowMode);
   const biome = getBiomeForChapter(wave.chapter);
   // "剥洋葱" pacing (unlockConditionConfig.panelUnlockWave) - only render tab
   // buttons for panels the run has actually reached, instead of exposing
@@ -103,9 +105,10 @@ function App() {
 
   // Esc backs out one level at a time: exits stealth mode first if that's
   // active (its whole point is hiding every button, so a keyboard escape
-  // hatch matters more here than anywhere else), then closes a growth/core
-  // panel modal if one's open, otherwise toggles the settings panel itself -
-  // same "esc always does something sensible" convention as any pause menu.
+  // hatch matters more here than anywhere else), then fullscreen (the usual
+  // OS convention), then closes a growth/core panel modal if one's open,
+  // otherwise toggles the settings panel itself - same "esc always does
+  // something sensible" convention as any pause menu.
   useEffect(() => {
     if (screen !== 'game') {
       return;
@@ -114,9 +117,9 @@ function App() {
       if (event.key !== 'Escape') {
         return;
       }
-      if (isStealthMode) {
-        setStealthMode(false);
-        setDisplayScale(MAX_DISPLAY_SCALE);
+      if (windowMode !== 'default') {
+        setWindowModeState('default');
+        applyWindowMode('default');
         return;
       }
       if (activePanel !== null) {
@@ -127,18 +130,18 @@ function App() {
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [screen, activePanel, isStealthMode, setStealthMode]);
+  }, [screen, activePanel, windowMode, setWindowModeState]);
 
-  function handleToggleStealthMode(): void {
-    const next = !isStealthMode;
-    if (next) {
-      // Nothing left to show it - entering stealth hides every button that
-      // could have opened one of these.
+  // Entering stealth force-closes any open panel/settings first - nothing
+  // would be left to show it, since stealth hides every button that could
+  // have opened one of these. Fullscreen<->default has no such concern.
+  function handleSetWindowMode(mode: 'default' | 'fullscreen' | 'stealth'): void {
+    if (mode === 'stealth') {
       setActivePanel(null);
       setIsSettingsOpen(false);
     }
-    setStealthMode(next);
-    setDisplayScale(next ? MIN_DISPLAY_SCALE : MAX_DISPLAY_SCALE);
+    setWindowModeState(mode);
+    applyWindowMode(mode);
   }
 
 // Opening the exact panel a tutorial step is pointing at counts as having
@@ -159,6 +162,9 @@ function App() {
     saveGame(activeSlot);
     setJustSaved(true);
     window.setTimeout(() => setJustSaved(false), 1500);
+    if (activeTutorialStep?.targetSelector === 'save-button') {
+      completeTutorialStep(activeTutorialStep.id);
+    }
   }
 
   if (screen === 'title') {
@@ -201,15 +207,28 @@ function App() {
         <BattleScreen stageRef={stageRef} />
       </div>
 
-      <button
-        className="stealth-toggle-btn"
-        onClick={handleToggleStealthMode}
-        title={t(isStealthMode ? 'battle.stealthModeOff' : 'battle.stealthModeOn')}
-      >
-        {isStealthMode ? <IconEyeOff /> : <IconEye />}
-      </button>
+      <div className="window-mode-cluster">
+        {windowMode === 'stealth' ? (
+          <button className="window-mode-btn" onClick={() => handleSetWindowMode('default')} title={t('battle.stealthModeOff')}>
+            <IconEyeOff />
+          </button>
+        ) : (
+          <>
+            <button
+              className="window-mode-btn"
+              onClick={() => handleSetWindowMode(windowMode === 'fullscreen' ? 'default' : 'fullscreen')}
+              title={t(windowMode === 'fullscreen' ? 'battle.fullscreenOff' : 'battle.fullscreenOn')}
+            >
+              {windowMode === 'fullscreen' ? <IconCollapse /> : <IconExpand />}
+            </button>
+            <button className="window-mode-btn" onClick={() => handleSetWindowMode('stealth')} title={t('battle.stealthModeOn')}>
+              <IconEye />
+            </button>
+          </>
+        )}
+      </div>
 
-      {!isStealthMode && (
+      {windowMode !== 'stealth' && (
       <div className="hud-layer">
         {/* Base/progress identity - squad size and current chapter/biome,
             not a fabricated player name or power score (this game has
@@ -231,7 +250,7 @@ function App() {
               <span className="hud-gold"><IconCoin /> {formatBigNumber(gold)}</span>
               <span className="hud-diamond"><IconDiamond /> {formatBigNumber(diamonds)}</span>
               {activeSlot !== null && (
-                <button className="btn btn-sm mute-toggle-btn" onClick={handleSaveClick} title={t('save.saveButton')}>
+                <button className="btn btn-sm mute-toggle-btn" data-tutorial="save-button" onClick={handleSaveClick} title={t('save.saveButton')}>
                   {justSaved ? '✓' : <IconSave />}
                 </button>
               )}
@@ -302,7 +321,7 @@ function App() {
 
       <EquipmentDropToast />
       <StoryDialog />
-      <TutorialOverlay />
+      {activePanel === null && !isSettingsOpen && <TutorialOverlay />}
       <UpdateBanner />
     </div>
   );

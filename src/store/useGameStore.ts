@@ -67,6 +67,7 @@ import type { TalentId } from '../data/talentConfig';
 import type { AscensionShopId } from '../data/ascensionShopConfig';
 import type { PityPoolId } from '../data/pityConfig';
 import type { BaseState, EnemyState, EquipmentDropEvent, EquipmentItem, GameState, HeroState, PetState, VisualEffect, WaveState } from '../engine/types';
+import type { WindowMode } from '../utils/windowMode';
 
 // Single mutable simulation state, shared by the GameLoop and by upgrade
 // actions. The store below only ever holds read-only snapshots copied from
@@ -232,10 +233,10 @@ interface GameStore {
   // hero-only now.
   dragPreviewKind: 'hero' | null;
   setDragPreviewKind: (kind: 'hero' | null) => void;
-  // UI-only, not part of gameState/saved - see App.tsx's stealth-mode toggle
-  // button. Never persisted; every launch starts back at normal size/HUD.
-  isStealthMode: boolean;
-  setStealthMode: (value: boolean) => void;
+  // UI-only, not part of gameState/saved - see App.tsx's window-mode toggle
+  // buttons. Never persisted; every launch starts back at 'default'.
+  windowMode: WindowMode;
+  setWindowMode: (mode: WindowMode) => void;
 }
 
 // subscribeWithSelector adds the selector-form store.subscribe(selector, cb,
@@ -426,8 +427,8 @@ export const useGameStore = create<GameStore>()(
   },
   dragPreviewKind: null,
   setDragPreviewKind: (kind) => set({ dragPreviewKind: kind }),
-  isStealthMode: false,
-  setStealthMode: (value) => set({ isStealthMode: value }),
+  windowMode: 'default',
+  setWindowMode: (mode) => set({ windowMode: mode }),
   dismissStory: () => {
     gameState.pendingStoryId = null;
     set({ pendingStoryId: null });

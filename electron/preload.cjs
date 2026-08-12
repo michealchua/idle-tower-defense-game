@@ -32,9 +32,10 @@ contextBridge.exposeInMainWorld('tataKAIUpdater', {
   checkNow: () => ipcRenderer.send('update:check-now'),
 });
 
-// Backs src/components/SettingsPanel.tsx - see main.cjs's "App chrome IPC"
-// section for what these two fire-and-forget sends do.
+// Backs App.tsx's window-mode toggle buttons and SettingsPanel.tsx's exit
+// button - see main.cjs's "App chrome IPC" section for what these
+// fire-and-forget sends do.
 contextBridge.exposeInMainWorld('tataKAIApp', {
-  setWindowScale: (factor) => ipcRenderer.send('app:set-window-scale', factor),
+  setWindowMode: (mode) => ipcRenderer.send('app:set-window-mode', mode),
   quit: () => ipcRenderer.send('app:quit'),
 });

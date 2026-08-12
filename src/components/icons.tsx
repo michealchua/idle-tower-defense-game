@@ -188,6 +188,41 @@ export function IconEyeOff(props: IconProps) {
   );
 }
 
+// Four corner brackets pointing outward/inward - App.tsx's fullscreen toggle
+// uses this pair the same "icon shows what one more click does" way
+// IconEye/IconEyeOff do for stealth mode. Built from stroke corners (not a
+// filled silhouette like most of this set) since that's the only way this
+// specific glyph reads correctly at small sizes.
+export function IconExpand(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path
+        d="M4 9V4H9M15 4H20V9M20 15V20H15M9 20H4V15"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Base>
+  );
+}
+
+export function IconCollapse(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path
+        d="M9 4V9H4M15 4V9H20M20 15H15V20M4 15H9V20"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Base>
+  );
+}
+
 // Floppy-disk silhouette - still the universal "save" glyph despite the
 // literal object being long obsolete. Two punched-out "windows" (write-
 // protect tab, label area) via evenodd holes rather than a second color, so

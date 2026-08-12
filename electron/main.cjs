@@ -19,22 +19,24 @@ function resolveIndexPath() {
 // status to the renderer - see the "Auto-update IPC" section.
 let mainWindow = null;
 
-// The window's own default/100% size - src/utils/displayScale.ts's slider
-// scales the actual OS window down from this (see "App chrome IPC" below),
-// not a CSS zoom that would leave the window itself full-size with smaller
-// content floating inside it. minWidth/minHeight is deliberately much
-// smaller than this default - low enough to sit as a small corner window
-// (the "keep this out of the way while I work" use case the slider was
-// built for) while still roughly matching this aspect ratio.
+// Exactly three window sizes exist - the player can no longer freely drag-
+// resize (see `resizable: false` below). "default" is the app's normal
+// size; "stealth" is a fixed fraction of it (src/components's stealth-mode
+// toggle - see "App chrome IPC" below); "fullscreen" is real OS-level
+// fullscreen (win.setFullScreen), not just a third fixed pixel size.
 const BASE_WINDOW_WIDTH = 1024;
 const BASE_WINDOW_HEIGHT = 900;
+const STEALTH_SCALE = 0.3;
+const STEALTH_WINDOW_WIDTH = Math.round(BASE_WINDOW_WIDTH * STEALTH_SCALE);
+const STEALTH_WINDOW_HEIGHT = Math.round(BASE_WINDOW_HEIGHT * STEALTH_SCALE);
 
 function createWindow() {
   const win = new BrowserWindow({
     width: BASE_WINDOW_WIDTH,
     height: BASE_WINDOW_HEIGHT,
-    minWidth: 320,
-    minHeight: 280,
+    // No user drag-resize and no maximize button - size only ever changes
+    // through the three setWindowMode transitions below.
+    resizable: false,
     title: 'tataKAI',
     autoHideMenuBar: true,
     // No `icon` option here on purpose: on Windows the taskbar/title-bar
@@ -58,20 +60,20 @@ function createWindow() {
   });
 
   mainWindow = win;
-  // Locks manual OS-level resizing (dragging an edge/corner) to this same
-  // ratio, so "free resize but fixed aspect ratio" holds however the window
-  // gets resized - not just through the in-app scale slider below.
-  win.setAspectRatio(BASE_WINDOW_WIDTH / BASE_WINDOW_HEIGHT);
   // Single source of truth for "keep the whole rendered page - HUD buttons/
   // text included, not just the canvas world BattleScreen.tsx's own
-  // ResizeObserver already rescales - shrunk in lockstep with the window":
-  // fires for BOTH the settings slider's setSize call below AND the player
-  // manually dragging an edge, so either path ends up here instead of
-  // duplicating this computation in two places. Reads the window's REAL
+  // ResizeObserver already rescales - proportional to the window": fires for
+  // every one of the three setWindowMode transitions below (setSize AND
+  // setFullScreen both trigger it), so all three end up here instead of
+  // duplicating this computation three times. Reads the window's REAL
   // resulting content-view size (getContentSize, title-bar/border chrome
   // excluded) rather than assuming it equals whatever width/height was
-  // requested, since that chrome doesn't shrink at the same rate as the
-  // window itself and would otherwise throw the zoom off.
+  // requested, since that chrome doesn't shrink/grow at the same rate as the
+  // window itself and would otherwise throw the zoom off. This is also what
+  // makes fullscreen work for free: on a screen bigger than
+  // BASE_WINDOW_WIDTH/HEIGHT, the resulting zoom factor comes out above 1x,
+  // scaling the whole UI up to fill the screen instead of leaving it pinned
+  // at its normal size with empty space around it.
   win.on('resize', () => {
     const [contentWidth] = win.getContentSize();
     win.webContents.setZoomFactor(contentWidth / BASE_WINDOW_WIDTH);
@@ -210,14 +212,28 @@ ipcMain.on('update:check-now', () => {
   autoUpdater.checkForUpdates().catch((err) => sendUpdateStatus({ state: 'error', message: err.message }));
 });
 
-// --- App chrome IPC (settings panel) ---------------------------------------
-// Backs src/components/SettingsPanel.tsx: an in-page display-scale slider
-// and a real "quit the app" button for the exit-game action. Just resizes
-// the OS window - the 'resize' listener in createWindow (which this
-// triggers) is what actually rescales the page's zoom to match, so both
-// this slider and a manual edge-drag get the same treatment from one place.
-ipcMain.on('app:set-window-scale', (_event, factor) => {
-  mainWindow?.setSize(Math.round(BASE_WINDOW_WIDTH * factor), Math.round(BASE_WINDOW_HEIGHT * factor));
+// --- App chrome IPC (window mode + settings panel) --------------------------
+// Backs App.tsx's fullscreen/stealth-mode toggle buttons and
+// SettingsPanel.tsx's "quit the app" button. Exactly three modes - see
+// STEALTH_WINDOW_WIDTH/HEIGHT's doc comment above. Always drops out of
+// fullscreen before resizing to 'default'/'stealth' - setSize while still
+// fullscreen doesn't reliably take effect on Windows.
+ipcMain.on('app:set-window-mode', (_event, mode) => {
+  if (!mainWindow) {
+    return;
+  }
+  if (mode === 'fullscreen') {
+    mainWindow.setFullScreen(true);
+    return;
+  }
+  if (mainWindow.isFullScreen()) {
+    mainWindow.setFullScreen(false);
+  }
+  if (mode === 'stealth') {
+    mainWindow.setSize(STEALTH_WINDOW_WIDTH, STEALTH_WINDOW_HEIGHT);
+  } else {
+    mainWindow.setSize(BASE_WINDOW_WIDTH, BASE_WINDOW_HEIGHT);
+  }
 });
 
 ipcMain.on('app:quit', () => {
