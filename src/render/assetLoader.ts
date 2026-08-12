@@ -113,6 +113,47 @@ export function getImage(src: string): SpriteImage | undefined {
   return undefined;
 }
 
+// Separate cache from getImage's - deliberately skips stripCheckerboardBackground
+// entirely. That flood fill exists for sprites (a character silhouette that
+// needs real edge-to-edge transparency around it), not full-bleed biome
+// background art. isCheckerboardTone's "near-grey, low-saturation" test
+// isn't sprite-specific though - it also matches plenty of ordinary
+// background art (a pale sky gradient, a snowy ground) with no checkerboard
+// involved at all, and the flood fill was doing exactly that: eating large
+// reachable-from-the-edge regions of backgrounds/snow-mountain.png (and any
+// other pale/desaturated biome art) down to alpha 0. drawBackground would
+// then draw an image with real holes in it over the canvas, letting
+// whatever was left over from a previous frame show through as a torn-
+// looking patch - the reported "地图撕裂" bug. Background art was never
+// exported with a checkerboard placeholder in the first place (unlike the
+// sprites ART_ASSET_CHECKLIST.md's export pipeline produces), so it needs
+// no processing at all - just load and cache the plain <img>.
+const backgroundImageCache = new Map<string, HTMLImageElement>();
+const failedBackgroundSrcs = new Set<string>();
+
+export function getBackgroundImage(src: string): HTMLImageElement | undefined {
+  if (failedBackgroundSrcs.has(src)) {
+    return undefined;
+  }
+
+  const cached = backgroundImageCache.get(src);
+  if (cached?.complete) {
+    return cached;
+  }
+
+  if (!cached) {
+    const image = new Image();
+    image.onerror = () => {
+      failedBackgroundSrcs.add(src);
+      backgroundImageCache.delete(src);
+    };
+    image.src = src;
+    backgroundImageCache.set(src, image);
+  }
+
+  return undefined;
+}
+
 // Hero art is a pair of high-detail static illustrations per class/branch
 // (walk pose, attack pose), not a 32x32 frame sheet - see CanvasRenderer's
 // drawHeroSprite for how the two get swapped. 'state' defaults to 'walk' so
@@ -178,5 +219,13 @@ export function getTowerSpriteSrc(): string {
 export function preloadSprites(srcs: string[]): void {
   for (const src of srcs) {
     getImage(src);
+  }
+}
+
+// Same fire-and-forget shape as preloadSprites, for getBackgroundImage's
+// separate (un-stripped) cache.
+export function preloadBackgroundImages(srcs: string[]): void {
+  for (const src of srcs) {
+    getBackgroundImage(src);
   }
 }

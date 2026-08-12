@@ -10,12 +10,14 @@ import { biomeDefinitions, type BiomeDefinition } from '../data/biomeConfig';
 import { getEffectiveHeroClass } from '../engine/systems/HeroSystem';
 import {
   getImage,
+  getBackgroundImage,
   getEnemySpriteSrc,
   getHeroSpriteSrc,
   getHeroEvolvedSpriteSrc,
   getPetSpriteSrc,
   getTowerSpriteSrc,
   preloadSprites,
+  preloadBackgroundImages,
   type SpriteImage,
 } from './assetLoader';
 import type { BaseState, EnemyState, HeroState, PetState, Position, VisualEffect } from '../engine/types';
@@ -758,8 +760,11 @@ export function preloadBattleSprites(): void {
     ...Array.from(enemySpriteTypes).map((type) => getEnemySpriteSrc(type)),
     ...petRosterConfig.map((pet) => getPetSpriteSrc(pet.spriteId ?? pet.id)),
     getTowerSpriteSrc(),
-    ...Object.values(biomeDefinitions).map((biome) => biome.backgroundImage),
   ]);
+  // Backgrounds go through a separate, un-stripped cache - see
+  // getBackgroundImage's doc comment for why they can't share getImage's
+  // sprite-oriented checkerboard-alpha processing.
+  preloadBackgroundImages(Object.values(biomeDefinitions).map((biome) => biome.backgroundImage));
 }
 
 function getHeroPulseScale(visualEffects: VisualEffect[]): number {
@@ -1182,7 +1187,7 @@ function advanceBackgroundScroll(hasActiveEncounter: boolean, nowMs: number): vo
 export function drawBackground(ctx: CanvasRenderingContext2D, canvasWidth: number, canvasHeight: number, biome: BiomeDefinition, hasActiveEncounter: boolean): void {
   advanceBackgroundScroll(hasActiveEncounter, performance.now());
 
-  const image = getImage(biome.backgroundImage);
+  const image = getBackgroundImage(biome.backgroundImage);
   if (!image) {
     ctx.fillStyle = biome.fallbackColor;
     ctx.fillRect(0, 0, canvasWidth, canvasHeight);
