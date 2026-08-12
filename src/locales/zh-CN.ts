@@ -24,10 +24,12 @@ const zhCN = {
     saved: '已保存',
   },
   update: {
+    checking: '正在检查更新...',
+    upToDate: '已是最新版本',
     downloading: '正在下载新版本',
     downloaded: '新版本已下载',
     restartNow: '立即重启更新',
-    checkFailed: '检查更新失败,稍后会自动重试',
+    checkFailed: '检查更新失败,请稍后重试',
   },
   records: {
     title: '记录',
@@ -100,6 +102,8 @@ const zhCN = {
     returnToTitleConfirm: '确认返回主菜单?请先保存进度,未保存的内容将会丢失',
     displaySection: '画面',
     displayScale: '画面缩放',
+    updateSection: '更新',
+    checkUpdate: '检查更新',
     exitSection: '退出',
     exitGame: '退出游戏',
     exitGameConfirm: '确认退出游戏?',

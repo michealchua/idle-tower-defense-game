@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { t } from '../locales/i18n';
 import { useGameStore } from '../store/useGameStore';
 import { getSaveMetadata } from '../engine/core/SaveSystem';
 import { getDisplayScale, setDisplayScale, MIN_DISPLAY_SCALE, MAX_DISPLAY_SCALE } from '../utils/displayScale';
+import type { UpdateStatus } from '../utils/updater';
 
 function formatSavedAt(iso: string): string {
   return new Date(iso).toLocaleString('zh-CN', {
@@ -30,8 +31,17 @@ function SettingsPanel({ onClose, onReturnToTitle }: SettingsPanelProps) {
   const [confirmingReturn, setConfirmingReturn] = useState(false);
   const [confirmingExit, setConfirmingExit] = useState(false);
   const [scale, setScale] = useState(() => getDisplayScale());
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
 
   const metadata = activeSlot !== null ? getSaveMetadata(activeSlot) : null;
+
+  // No automatic check-on-launch anymore (see electron/main.cjs's
+  // app.whenReady) - this is the only way a check ever fires, so this
+  // effect just listens for whatever the button below triggers, not
+  // something that runs on its own.
+  useEffect(() => {
+    return window.tataKAIUpdater?.onStatus(setUpdateStatus);
+  }, []);
 
   function handleSaveNow(): void {
     if (activeSlot === null) {
@@ -45,6 +55,11 @@ function SettingsPanel({ onClose, onReturnToTitle }: SettingsPanelProps) {
   function handleScaleChange(next: number): void {
     setScale(next);
     setDisplayScale(next);
+  }
+
+  function handleCheckUpdate(): void {
+    setUpdateStatus({ state: 'checking' });
+    window.tataKAIUpdater?.checkNow();
   }
 
   return (
@@ -98,6 +113,34 @@ function SettingsPanel({ onClose, onReturnToTitle }: SettingsPanelProps) {
               onChange={(event) => handleScaleChange(Number(event.target.value))}
               className="settings-scale-slider"
             />
+          </div>
+
+          <div className="settings-section">
+            <div className="settings-section-title">{t('settings.updateSection')}</div>
+            <button className="btn btn-sm" onClick={handleCheckUpdate} disabled={updateStatus?.state === 'checking'}>
+              {t('settings.checkUpdate')}
+            </button>
+            {updateStatus?.state === 'checking' && <div className="item-detail">{t('update.checking')}</div>}
+            {updateStatus?.state === 'up-to-date' && <div className="item-detail">{t('update.upToDate')}</div>}
+            {updateStatus?.state === 'available' && (
+              <div className="item-detail">
+                {t('update.downloading')} v{updateStatus.version}
+              </div>
+            )}
+            {updateStatus?.state === 'downloading' && (
+              <div className="item-detail">
+                {t('update.downloading')} {updateStatus.percent}%
+              </div>
+            )}
+            {updateStatus?.state === 'downloaded' && (
+              <div className="item-detail">
+                {t('update.downloaded')} v{updateStatus.version}{' '}
+                <button className="btn btn-sm btn-primary" onClick={() => window.tataKAIUpdater?.installNow()}>
+                  {t('update.restartNow')}
+                </button>
+              </div>
+            )}
+            {updateStatus?.state === 'error' && <div className="item-detail">{t('update.checkFailed')}</div>}
           </div>
 
           <div className="settings-section">

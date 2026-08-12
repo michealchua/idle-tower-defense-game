@@ -160,12 +160,14 @@ ipcMain.on('save:list', (event) => {
 // for a long session) would never see that notification at all, and even
 // when they did it explained nothing about what to do next. Every event
 // autoUpdater emits gets forwarded to whichever window is currently open;
-// update:install-now is the only thing the renderer can trigger back.
+// update:install-now/update:check-now are the only things the renderer can
+// trigger back.
 function sendUpdateStatus(status) {
   mainWindow?.webContents.send('update:status', status);
 }
 
 autoUpdater.on('update-available', (info) => sendUpdateStatus({ state: 'available', version: info.version }));
+autoUpdater.on('update-not-available', () => sendUpdateStatus({ state: 'up-to-date' }));
 autoUpdater.on('download-progress', (progress) => sendUpdateStatus({ state: 'downloading', percent: Math.round(progress.percent) }));
 autoUpdater.on('update-downloaded', (info) => sendUpdateStatus({ state: 'downloaded', version: info.version }));
 autoUpdater.on('error', (err) => sendUpdateStatus({ state: 'error', message: err.message }));
@@ -178,16 +180,41 @@ ipcMain.on('update:install-now', () => {
   autoUpdater.quitAndInstall();
 });
 
+// Manual trigger for SettingsPanel's "检查更新" button - there is no
+// automatic check on launch anymore (see app.whenReady below), so this is
+// the only way a check ever happens: the player asks for it, instead of
+// silently waiting on one every time they open the app.
+ipcMain.on('update:check-now', () => {
+  if (!app.isPackaged) {
+    // No publish feed to check against in a dev build - same "nothing to
+    // do here" case app.isPackaged already guarded the old launch-time
+    // check with.
+    sendUpdateStatus({ state: 'up-to-date' });
+    return;
+  }
+  sendUpdateStatus({ state: 'checking' });
+  autoUpdater.checkForUpdates().catch((err) => sendUpdateStatus({ state: 'error', message: err.message }));
+});
+
 // --- App chrome IPC (settings panel) ---------------------------------------
 // Backs src/components/SettingsPanel.tsx: an in-page display-scale slider
-// and a real "quit the app" button for the exit-game action. The slider
-// resizes the actual OS window (setSize), not a CSS/webContents zoom - a
-// zoom leaves the window itself full-size with smaller content floating
-// inside it, which isn't a smaller window at all. setAspectRatio (see
-// createWindow) is already locked, so this always keeps the same shape;
-// BattleScreen.tsx's own ResizeObserver picks up the new size for free.
+// and a real "quit the app" button for the exit-game action. Two things
+// happen together here, not one or the other:
+//   1. setSize actually resizes the OS window - a webContents zoom alone
+//      would leave the window itself full-size with smaller content
+//      floating inside it, which isn't a smaller window at all.
+//   2. setZoomFactor compresses the whole rendered page (HUD buttons/text
+//      included, not just the canvas world BattleScreen.tsx's own
+//      ResizeObserver already rescales) by that same factor, so the fixed-px
+//      HUD chrome shrinks in lockstep with the window instead of staying
+//      full-size and overlapping once the window gets small. setAspectRatio
+//      (see createWindow) keeps the window's shape locked throughout.
 ipcMain.on('app:set-window-scale', (_event, factor) => {
-  mainWindow?.setSize(Math.round(BASE_WINDOW_WIDTH * factor), Math.round(BASE_WINDOW_HEIGHT * factor));
+  if (!mainWindow) {
+    return;
+  }
+  mainWindow.setSize(Math.round(BASE_WINDOW_WIDTH * factor), Math.round(BASE_WINDOW_HEIGHT * factor));
+  mainWindow.webContents.setZoomFactor(factor);
 });
 
 ipcMain.on('app:quit', () => {
@@ -196,17 +223,6 @@ ipcMain.on('app:quit', () => {
 
 app.whenReady().then(() => {
   createWindow();
-
-  if (app.isPackaged) {
-    // Checks GitHub Releases (see package.json's build.publish) for a newer
-    // version and downloads it in the background (autoDownload defaults to
-    // true) - progress/completion surface through the events wired above.
-    // Not run in dev builds - there is no publish feed to check, and
-    // app.isPackaged is false there anyway.
-    autoUpdater.checkForUpdates().catch((err) => {
-      console.error('Auto-update check failed:', err);
-    });
-  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

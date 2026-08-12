@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld('tataKAIUpdater', {
     return () => ipcRenderer.removeListener('update:status', handler);
   },
   installNow: () => ipcRenderer.send('update:install-now'),
+  checkNow: () => ipcRenderer.send('update:check-now'),
 });
 
 // Backs src/components/SettingsPanel.tsx - see main.cjs's "App chrome IPC"
