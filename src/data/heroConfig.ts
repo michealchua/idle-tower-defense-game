@@ -14,6 +14,23 @@ export const heroBaseConfig = {
   criticalChance: 0.05,
 };
 
+// MovementSystem.tickHeroMovement - heroes hold their deployed slot
+// (homePosition) until an enemy wanders inside engageRange, walk out to meet
+// it, stop once within attackRange to actually fight (CombatSystem's own
+// range check), then drift back home once nothing's left to fight.
+// engageRange is deliberately wider than attackRange so a hero starts
+// closing the distance on an approaching enemy instead of only reacting once
+// it's already close enough to hit - the two would otherwise be
+// indistinguishable and a hero would never actually need to move.
+export const heroMovementConfig = {
+  engageRange: 160,
+  moveSpeed: 60,
+  // Once within this of a target position (home or an enemy), snap exactly
+  // to it instead of asymptotically crawling the last fraction of a pixel
+  // forever.
+  arriveEpsilon: 2,
+};
+
 export type UpgradeCategory = 'combat' | 'survival' | 'utility';
 
 export interface UpgradeDefinition {

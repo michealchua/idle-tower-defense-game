@@ -18,7 +18,13 @@ function relayoutDeployedHeroes(state: GameState): void {
   state.deployedHeroIds.forEach((heroId, index) => {
     const hero = state.heroes.find((candidate) => candidate.id === heroId);
     if (hero) {
-      hero.position = positions[index];
+      // Snaps both - a hero mid-walk when the squad's rearranged (deploy/
+      // undeploy/swap) reappears at its new slot immediately rather than
+      // finishing its old walk first, same "no interpolation, always
+      // authoritative" contract position already had before movement existed.
+      hero.position = { ...positions[index] };
+      hero.homePosition = { ...positions[index] };
+      hero.moveTargetEnemyInstanceId = null;
     }
   });
 }

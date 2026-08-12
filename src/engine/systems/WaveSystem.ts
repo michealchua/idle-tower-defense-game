@@ -50,6 +50,11 @@ function resetBattlefieldForWave(state: GameState): void {
   state.base.currentHp = state.base.maxHp;
   for (const hero of state.heroes) {
     hero.currentHp = hero.maxHp;
+    // A hero mid-walk (or mid-fight) when the wave ends snaps back to its
+    // slot for the fresh attempt, same "clean start" treatment as HP/enemies
+    // above - see MovementSystem.tickHeroMovement.
+    hero.position = { ...hero.homePosition };
+    hero.moveTargetEnemyInstanceId = null;
   }
   state.enemies = [];
   state.spawnCooldownRemaining = 0;

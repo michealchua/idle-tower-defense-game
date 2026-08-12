@@ -54,7 +54,26 @@ export interface HeroState {
   // level shared globalUpgrades. Reset (like level/exp) on ascend, see
   // AscensionSystem.ascend.
   upgrades: Record<UpgradeableStat, number>;
+  // Live, moves during combat (see MovementSystem.tickHeroMovement) - walks
+  // toward whatever enemy moveTargetEnemyInstanceId points at once it's
+  // outside attackRange, and drifts back toward homePosition once there's no
+  // target. CombatSystem/SkillSystem's own range checks already read this
+  // field live, so a hero mid-walk only actually starts attacking once
+  // movement has closed the distance to attackRange.
   position: Position;
+  // The hero's deployed-slot anchor (see HeroSystem.relayoutDeployedHeroes) -
+  // fixed until the squad's deploy order changes, unlike position above.
+  // BattleScreen's deploy-slot-grid drawing and drag/swap hit-testing both
+  // care about slot layout, not wherever a hero has wandered off to mid-
+  // fight, hence the split.
+  homePosition: Position;
+  // Sticky pursuit target (see tickHeroMovement) - null when idle/home or
+  // when nothing's currently in engage range. Kept separate from combat's
+  // own per-attack target selection (CombatSystem always just fires at
+  // whatever's in range right now) so a hero mid-walk commits to closing the
+  // distance on one enemy instead of flip-flopping toward whichever enemy
+  // reads as "best" each individual tick.
+  moveTargetEnemyInstanceId: number | null;
   // Per-hero gear, one item per slot - each hero has their own independent
   // loadout, replacing the old GameState-level shared `equipped` map (see
   // EquipmentSystem.ts/HeroSystem.ts). Set on createHero, mutated only by

@@ -460,6 +460,14 @@ export const useGameStore = create<GameStore>()(
     gameState.highestGlobalWaveReached = gameState.highestGlobalWaveReached ?? getGlobalWaveNumber(gameState.wave);
     gameState.totalBossKills = gameState.totalBossKills ?? 0;
     gameState.seenChapterStoryIds = gameState.seenChapterStoryIds ?? [];
+    // Saves written before hero movement existed won't have these two fields
+    // on any hero at all - default homePosition to wherever position already
+    // was (exactly what it meant before the split) and leave no pursuit
+    // target set.
+    for (const hero of gameState.heroes) {
+      hero.homePosition = hero.homePosition ?? { ...hero.position };
+      hero.moveTargetEnemyInstanceId = hero.moveTargetEnemyInstanceId ?? null;
+    }
     // A save is never resumed mid-combat - heal the battlefield and
     // re-derive the current wave's shape (same as retrying a failed wave),
     // then clear the purely cosmetic/transient fields retryCurrentWave
