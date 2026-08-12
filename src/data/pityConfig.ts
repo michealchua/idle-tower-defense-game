@@ -30,3 +30,17 @@ export const gachaPityConfig: Record<PityPoolId, PityRule> = {
   heroPremium: { rarities: ['red', 'rainbow'], pullsUntilGuarantee: 30 },
   petPremium: { rarities: ['red', 'rainbow'], pullsUntilGuarantee: 30 },
 };
+
+// "新手绝对福利" floor for the player's very first ever 10-pull (see
+// GachaSystem.pullMulti) - deliberately separate from gachaPityConfig above
+// (the long-run hard-pity backstop, unaffected by this) since the two are
+// different mechanics with different floors: this is a one-time newcomer
+// nudge at gold-or-above, weaker than premium's own red-or-above hard pity.
+// Only premium (diamond) pools have an entry - gold-currency pools
+// deliberately get no first-10 guarantee at all, so a lookup here for
+// 'heroGold'/'petGold' is undefined and GachaSystem.pullMulti treats that as
+// "no bonus this batch".
+export const firstTenPullGuaranteeRarities: Partial<Record<PityPoolId, GachaRarity[]>> = {
+  heroPremium: ['gold', 'red', 'rainbow'],
+  petPremium: ['gold', 'red', 'rainbow'],
+};

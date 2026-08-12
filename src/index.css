@@ -187,6 +187,25 @@ select {
   justify-content: flex-end;
 }
 
+/* Player-facing game-speed buttons (BattleScreen.tsx) - a locked tier stays
+   visible but disabled/dim rather than hidden, so the player can see what's
+   coming instead of speed options just silently appearing later. */
+.speed-control-row {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.speed-btn {
+  min-width: 32px;
+  padding: 2px 8px;
+}
+
+.speed-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .hud-btn {
   display: flex;
   flex-direction: column;

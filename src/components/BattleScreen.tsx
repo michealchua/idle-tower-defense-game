@@ -9,6 +9,8 @@ import { getMaxDeployedHeroes } from '../data/castleConfig';
 import { formatBigNumber } from '../utils/scaling';
 import { audioManager } from '../audio/AudioManager';
 import { enemyArchetypes } from '../data/enemyArchetypes';
+import { speedTiers } from '../data/speedConfig';
+import { getGlobalWaveNumber } from '../engine/systems/WaveSystem';
 import { ELEMENT_ICON, ELEMENT_LABEL_KEYS } from './HeroPanel';
 
 // Logical simulation/coordinate space - every entity position in
@@ -79,6 +81,8 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
   const dragPreviewKind = useGameStore((state) => state.dragPreviewKind);
   const teamPower = useGameStore((state) => state.teamPower);
   const recommendedPower = useGameStore((state) => state.recommendedPower);
+  const speedMultiplier = useGameStore((state) => state.speedMultiplier);
+  const setSpeedMultiplier = useGameStore((state) => state.setSpeedMultiplier);
   const swapDeployedHeroes = useGameStore((state) => state.swapDeployedHeroes);
   // Dragging an already-deployed hero directly on the canvas to swap its
   // slot with another - separate from dragPreviewKind, which is for
@@ -282,6 +286,7 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
   // uses it - narrowing a property access like `wave.bossKind` doesn't
   // persist across a function boundary the way narrowing a local const does.
   const bossKind = wave.isBossWave ? wave.bossKind : undefined;
+  const globalWave = getGlobalWaveNumber(wave);
 
   return (
     <div className="stage-column">
@@ -331,6 +336,22 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
           </div>
           <div className="bar-track">
             <div className="bar-fill bar-fill-hp" style={{ width: `${hpRatio * 100}%` }} />
+          </div>
+          <div className="speed-control-row">
+            {speedTiers.map((tier) => {
+              const unlocked = globalWave >= tier.requiredWave;
+              return (
+                <button
+                  key={tier.multiplier}
+                  className={`btn btn-sm speed-btn${speedMultiplier === tier.multiplier ? ' btn-primary' : ''}`}
+                  disabled={!unlocked}
+                  title={unlocked ? undefined : `${t('battle.speedLocked')} ${tier.requiredWave}`}
+                  onClick={() => setSpeedMultiplier(tier.multiplier)}
+                >
+                  x{tier.multiplier}
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>

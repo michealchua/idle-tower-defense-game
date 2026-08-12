@@ -231,6 +231,10 @@ interface GameStore {
   starUpPet: (petId: string) => void;
   isPaused: boolean;
   speedMultiplier: number;
+  // Player-facing speed control (see BattleScreen.tsx's speed buttons) -
+  // separate from debugSetSpeed, which is debug-only and skips the
+  // wave-gate check SPEED_TIERS enforces in the UI.
+  setSpeedMultiplier: (multiplier: number) => void;
   // UI-only, not part of gameState - whether a hero roster card is mid-drag
   // over the battle canvas, so BattleScreen knows whether to overlay the
   // deploy-slot grid. Null whenever nothing is being dragged. Pets have no
@@ -432,6 +436,10 @@ export const useGameStore = create<GameStore>()(
   },
   isPaused: false,
   speedMultiplier: 1,
+  setSpeedMultiplier: (multiplier) => {
+    gameLoop?.setSpeedMultiplier(multiplier);
+    set({ speedMultiplier: multiplier });
+  },
   dragPreviewKind: null,
   setDragPreviewKind: (kind) => set({ dragPreviewKind: kind }),
   dismissStory: () => {

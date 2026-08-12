@@ -34,13 +34,20 @@ export interface GachaRarityDefinition {
 // pullWeight (the gold-cost pool's odds) is tuned to the "祈愿抽卡" spec's
 // four buckets - N 50% (white+green) / R 30% (blue) / SR 18% (purple) /
 // SSR 2% (gold+red+rainbow combined, split between the three the same
-// ~81:17:2 ratio the tiers already had) - summing to exactly 100. Only the
-// gold pool was retuned; premiumPullWeight (the diamond pool) is
-// deliberately left alone, it's a separate, already-more-generous curve.
+// ~81:17:2 ratio the tiers already had) - summing to exactly 100.
+//
+// premiumPullWeight (the diamond pool) was found to be too generous -
+// gold/red/rainbow at 12/6/2 made diamonds the dominant way to build a
+// roster, undercutting the gold pool's whole reason to exist and making the
+// diamond economy feel too easy alongside its other sources (see
+// diamondConfig.ts). Rebalanced down to gold 5 / red 1 / rainbow 0.8 (still
+// meaningfully better than the gold pool's 1.63/0.33/0.04, just not by as
+// wide a margin), with the freed-up weight (93.2) split evenly back across
+// white/green/blue/purple, which were flat 20 each before.
 export const gachaRarityConfig: Record<GachaRarity, GachaRarityDefinition> = {
   white: {
     pullWeight: 34,
-    premiumPullWeight: 20,
+    premiumPullWeight: 23.3,
     shardsPerDuplicate: 10,
     starUpCosts: [
       { shards: 10, gold: 1000 },
@@ -52,7 +59,7 @@ export const gachaRarityConfig: Record<GachaRarity, GachaRarityDefinition> = {
   },
   green: {
     pullWeight: 16,
-    premiumPullWeight: 20,
+    premiumPullWeight: 23.3,
     shardsPerDuplicate: 20,
     starUpCosts: [
       { shards: 20, gold: 2000 },
@@ -64,7 +71,7 @@ export const gachaRarityConfig: Record<GachaRarity, GachaRarityDefinition> = {
   },
   blue: {
     pullWeight: 30,
-    premiumPullWeight: 20,
+    premiumPullWeight: 23.3,
     shardsPerDuplicate: 30,
     starUpCosts: [
       { shards: 30, gold: 5000 },
@@ -76,7 +83,7 @@ export const gachaRarityConfig: Record<GachaRarity, GachaRarityDefinition> = {
   },
   purple: {
     pullWeight: 18,
-    premiumPullWeight: 20,
+    premiumPullWeight: 23.3,
     shardsPerDuplicate: 40,
     breakthroughMaterial: 'epicSourceStone',
     starUpCosts: [
@@ -89,7 +96,7 @@ export const gachaRarityConfig: Record<GachaRarity, GachaRarityDefinition> = {
   },
   gold: {
     pullWeight: 1.63,
-    premiumPullWeight: 12,
+    premiumPullWeight: 5,
     shardsPerDuplicate: 60,
     breakthroughMaterial: 'legendarySourceStone',
     starUpCosts: [
@@ -105,7 +112,7 @@ export const gachaRarityConfig: Record<GachaRarity, GachaRarityDefinition> = {
   // (gachaPullConfig.premiumPullWeight).
   red: {
     pullWeight: 0.33,
-    premiumPullWeight: 6,
+    premiumPullWeight: 1,
     shardsPerDuplicate: 80,
     breakthroughMaterial: 'diamonds',
     starUpCosts: [
@@ -118,7 +125,7 @@ export const gachaRarityConfig: Record<GachaRarity, GachaRarityDefinition> = {
   },
   rainbow: {
     pullWeight: 0.04,
-    premiumPullWeight: 2,
+    premiumPullWeight: 0.8,
     shardsPerDuplicate: 100,
     breakthroughMaterial: 'diamonds',
     starUpCosts: [

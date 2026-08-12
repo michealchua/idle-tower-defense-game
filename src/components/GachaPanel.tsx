@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { gachaPullConfig, gachaRarityConfig, type GachaRarity } from '../data/gachaConfig';
 import { diamondExchangeConfig } from '../data/diamondConfig';
 import { gachaPityConfig, type PityPoolId } from '../data/pityConfig';
+import { isPanelUnlocked, panelUnlockWave } from '../data/unlockConditionConfig';
+import { getGlobalWaveNumber } from '../engine/systems/WaveSystem';
 import { t } from '../locales/i18n';
 import { useGameStore } from '../store/useGameStore';
 import type { GachaPullResult } from '../engine/systems/GachaSystem';
@@ -295,9 +297,27 @@ function PullCard({
   );
 }
 
+// Placeholder shown in place of the pet pull cards until the Pet panel
+// itself unlocks (panelUnlockWave.pet) - without this, a player could pull
+// (and own) pets from wave 20 (Gacha unlocks) through wave 50 with no Pet
+// panel yet in existence to view or manage what they'd gotten.
+function PetGachaLockedCard({ requiredWave }: { requiredWave: number }) {
+  return (
+    <div className="mini-card">
+      <div className="mini-card-name">
+        <IconPaw /> {t('gacha.pullPet')}
+      </div>
+      <div className="mini-card-sub text-faint">
+        {t('gacha.petLocked')} {requiredWave}
+      </div>
+    </div>
+  );
+}
+
 function GachaPanel() {
   const gold = useGameStore((state) => state.gold);
   const diamonds = useGameStore((state) => state.diamonds);
+  const wave = useGameStore((state) => state.wave);
   const pityCounters = useGameStore((state) => state.pityCounters);
   const isFirstTenPullDone = useGameStore((state) => state.isFirstTenPullDone);
   const pullHero = useGameStore((state) => state.pullHero);
@@ -316,6 +336,8 @@ function GachaPanel() {
   // that finishes (see handleRevealDone), so the flash/text never appear
   // before the player has actually seen every card revealed.
   const [pendingReveal, setPendingReveal] = useState<GachaPullResult[] | null>(null);
+  const petRequiredWave = panelUnlockWave.pet ?? 0;
+  const petUnlocked = isPanelUnlocked('pet', getGlobalWaveNumber(wave));
 
   // Auto-dismiss the celebration overlay - no explicit close action needed,
   // it's a brief flourish, not a modal the player has to acknowledge.
@@ -368,23 +390,27 @@ function GachaPanel() {
           onResults={handlePullResults}
           pityPoolId="heroGold"
           pityCurrent={pityCounters.heroGold}
-          showFirstTenPullBadge={!isFirstTenPullDone}
+          showFirstTenPullBadge={false}
           weightField="pullWeight"
         />
-        <PullCard
-          kind="pet"
-          label={t('gacha.pullPet')}
-          costPerPull={gachaPullConfig.pullCostGold}
-          currencyLabel={t('battle.gold')}
-          balance={gold}
-          pullOne={pullPet}
-          pullMulti={pullPetMulti}
-          onResults={handlePullResults}
-          pityPoolId="petGold"
-          pityCurrent={pityCounters.petGold}
-          showFirstTenPullBadge={!isFirstTenPullDone}
-          weightField="pullWeight"
-        />
+        {petUnlocked ? (
+          <PullCard
+            kind="pet"
+            label={t('gacha.pullPet')}
+            costPerPull={gachaPullConfig.pullCostGold}
+            currencyLabel={t('battle.gold')}
+            balance={gold}
+            pullOne={pullPet}
+            pullMulti={pullPetMulti}
+            onResults={handlePullResults}
+            pityPoolId="petGold"
+            pityCurrent={pityCounters.petGold}
+            showFirstTenPullBadge={false}
+            weightField="pullWeight"
+          />
+        ) : (
+          <PetGachaLockedCard requiredWave={petRequiredWave} />
+        )}
       </div>
 
       <div className="card-subtitle" style={{ marginTop: 10 }}>
@@ -406,21 +432,25 @@ function GachaPanel() {
           showFirstTenPullBadge={!isFirstTenPullDone}
           weightField="premiumPullWeight"
         />
-        <PullCard
-          kind="pet"
-          isPremium
-          label={t('gacha.pullPetPremium')}
-          costPerPull={gachaPullConfig.pullCostDiamonds}
-          currencyLabel={t('battle.diamonds')}
-          balance={diamonds}
-          pullOne={pullPetPremium}
-          pullMulti={pullPetPremiumMulti}
-          onResults={handlePullResults}
-          pityPoolId="petPremium"
-          pityCurrent={pityCounters.petPremium}
-          showFirstTenPullBadge={!isFirstTenPullDone}
-          weightField="premiumPullWeight"
-        />
+        {petUnlocked ? (
+          <PullCard
+            kind="pet"
+            isPremium
+            label={t('gacha.pullPetPremium')}
+            costPerPull={gachaPullConfig.pullCostDiamonds}
+            currencyLabel={t('battle.diamonds')}
+            balance={diamonds}
+            pullOne={pullPetPremium}
+            pullMulti={pullPetPremiumMulti}
+            onResults={handlePullResults}
+            pityPoolId="petPremium"
+            pityCurrent={pityCounters.petPremium}
+            showFirstTenPullBadge={!isFirstTenPullDone}
+            weightField="premiumPullWeight"
+          />
+        ) : (
+          <PetGachaLockedCard requiredWave={petRequiredWave} />
+        )}
       </div>
 
       {lastResult && (

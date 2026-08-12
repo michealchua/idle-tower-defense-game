@@ -2,7 +2,8 @@ import { t } from '../locales/i18n';
 import { getVisualTierForLevel } from '../data/milestoneConfig';
 import { enemyArchetypes, type EnemyArchetypeId } from '../data/enemyArchetypes';
 import { heroClasses } from '../data/heroConfig';
-import { heroRosterConfig } from '../data/heroRosterConfig';
+import { heroRosterConfig, getHeroDefinition } from '../data/heroRosterConfig';
+import type { GachaRarity } from '../data/gachaConfig';
 import { petRosterConfig, getPetDefinition } from '../data/petRosterConfig';
 import { enemyHeroAttackIntervalSeconds } from '../data/enemyConfig';
 import { biomeDefinitions, type BiomeDefinition } from '../data/biomeConfig';
@@ -927,6 +928,22 @@ function drawVisualEffect(ctx: CanvasRenderingContext2D, effect: VisualEffect): 
   }
 }
 
+// Matches index.css's --rarity-* palette (hardcoded here since canvas fill
+// styles can't reference CSS custom properties) - same rarity identity the
+// roster list/detail panel already color hero names by, extended to the
+// in-combat name label. Rainbow has no single solid color in CSS either
+// (see .rarity-rainbow's gradient text) - borrows its brightest gradient
+// stop as a stand-in solid accent, same choice GachaPanel's reveal cards use.
+const RARITY_NAME_COLOR: Record<GachaRarity, string> = {
+  white: '#c7cbd6',
+  green: '#52d17c',
+  blue: '#4da3ff',
+  purple: '#c07bff',
+  gold: '#ffb648',
+  red: '#ff3b3b',
+  rainbow: '#69f0ae',
+};
+
 function drawHero(ctx: CanvasRenderingContext2D, hero: HeroState, pulseScale: number, nowSeconds: number): HpBarRequest {
   const heroStyle = getHeroVisualStyle(getVisualTierForLevel(hero.level));
   const heroRadius = HERO_RADIUS * heroStyle.radiusMultiplier * pulseScale;
@@ -968,7 +985,7 @@ function drawHero(ctx: CanvasRenderingContext2D, hero: HeroState, pulseScale: nu
   drawGroundShadow(ctx, hero.position.x, hero.position.y + heroRadius * 0.9, heroRadius * 0.8);
 
   ctx.font = '10px sans-serif';
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+  ctx.fillStyle = RARITY_NAME_COLOR[getHeroDefinition(hero.id).rarity];
   ctx.textAlign = 'center';
   ctx.fillText(hero.name, hero.position.x, hero.position.y - heroRadius - 18);
 

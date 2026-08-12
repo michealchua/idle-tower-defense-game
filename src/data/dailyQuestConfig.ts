@@ -15,8 +15,11 @@ export interface DailyQuestDefinition {
   labelKey: string;
 }
 
+// rewardDiamonds halved as part of a wider diamond-economy pass (see
+// diamondConfig.ts's doc comment) - diamonds were too easy to accumulate
+// overall, not specifically from this source.
 export const dailyQuestConfig: Record<DailyQuestId, DailyQuestDefinition> = {
-  killEnemies: { id: 'killEnemies', targetAmount: 50, rewardDiamonds: 15, labelKey: 'dailyQuest.killEnemies' },
-  clearWaves: { id: 'clearWaves', targetAmount: 3, rewardDiamonds: 20, labelKey: 'dailyQuest.clearWaves' },
-  pullGacha: { id: 'pullGacha', targetAmount: 5, rewardDiamonds: 15, labelKey: 'dailyQuest.pullGacha' },
+  killEnemies: { id: 'killEnemies', targetAmount: 50, rewardDiamonds: 8, labelKey: 'dailyQuest.killEnemies' },
+  clearWaves: { id: 'clearWaves', targetAmount: 3, rewardDiamonds: 10, labelKey: 'dailyQuest.clearWaves' },
+  pullGacha: { id: 'pullGacha', targetAmount: 5, rewardDiamonds: 8, labelKey: 'dailyQuest.pullGacha' },
 };

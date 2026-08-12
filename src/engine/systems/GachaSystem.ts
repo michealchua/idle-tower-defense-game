@@ -1,7 +1,7 @@
 import { weightedPick } from '../../utils/scaling';
 import { gachaPullConfig, gachaRarityConfig, type GachaRarity } from '../../data/gachaConfig';
 import { diamondExchangeConfig, dailyLoginRewardConfig } from '../../data/diamondConfig';
-import { gachaPityConfig, type PityPoolId } from '../../data/pityConfig';
+import { gachaPityConfig, firstTenPullGuaranteeRarities, type PityPoolId } from '../../data/pityConfig';
 import { incrementDailyQuestProgress } from './DailyQuestSystem';
 import { panelUnlockWave } from '../../data/unlockConditionConfig';
 import { heroRosterConfig } from '../../data/heroRosterConfig';
@@ -57,9 +57,10 @@ function pullOne<T extends { id: string; rarity: GachaRarity; unlockConditions?:
   shards: Record<string, number>,
   unlock: (state: GameState, id: string) => boolean,
   pityPoolId: PityPoolId,
+  forcedRaritiesOverride?: GachaRarity[],
 ): GachaPullResult {
   const rule = gachaPityConfig[pityPoolId];
-  const forcedRarities = resolveForcedRarities(state, pityPoolId);
+  const forcedRarities = forcedRaritiesOverride ?? resolveForcedRarities(state, pityPoolId);
   const definition = pickRosterEntryByRarity(roster, weightField, forcedRarities);
 
   state.pityCounters[pityPoolId] = rule.rarities.includes(definition.rarity) ? 0 : state.pityCounters[pityPoolId] + 1;
@@ -72,40 +73,40 @@ function pullOne<T extends { id: string; rarity: GachaRarity; unlockConditions?:
   return { id: definition.id, rarity: definition.rarity, isNewUnlock, pityTriggered: forcedRarities !== undefined };
 }
 
-export function pullHero(state: GameState): GachaPullResult | null {
+export function pullHero(state: GameState, forcedRarities?: GachaRarity[]): GachaPullResult | null {
   if (state.gold < gachaPullConfig.pullCostGold) {
     return null;
   }
   state.gold -= gachaPullConfig.pullCostGold;
   state.goldSpentTotal += gachaPullConfig.pullCostGold;
-  return pullOne(state, heroRosterConfig, 'pullWeight', state.heroShards, unlockHero, 'heroGold');
+  return pullOne(state, heroRosterConfig, 'pullWeight', state.heroShards, unlockHero, 'heroGold', forcedRarities);
 }
 
-export function pullPet(state: GameState): GachaPullResult | null {
+export function pullPet(state: GameState, forcedRarities?: GachaRarity[]): GachaPullResult | null {
   if (state.gold < gachaPullConfig.pullCostGold) {
     return null;
   }
   state.gold -= gachaPullConfig.pullCostGold;
   state.goldSpentTotal += gachaPullConfig.pullCostGold;
-  return pullOne(state, petRosterConfig, 'pullWeight', state.petShards, unlockPet, 'petGold');
+  return pullOne(state, petRosterConfig, 'pullWeight', state.petShards, unlockPet, 'petGold', forcedRarities);
 }
 
 // Same shape as pullHero/pullPet, spending diamonds at premiumPullWeight
 // odds instead of gold at pullWeight odds - see gachaConfig.ts.
-export function pullHeroPremium(state: GameState): GachaPullResult | null {
+export function pullHeroPremium(state: GameState, forcedRarities?: GachaRarity[]): GachaPullResult | null {
   if (state.diamonds < gachaPullConfig.pullCostDiamonds) {
     return null;
   }
   state.diamonds -= gachaPullConfig.pullCostDiamonds;
-  return pullOne(state, heroRosterConfig, 'premiumPullWeight', state.heroShards, unlockHero, 'heroPremium');
+  return pullOne(state, heroRosterConfig, 'premiumPullWeight', state.heroShards, unlockHero, 'heroPremium', forcedRarities);
 }
 
-export function pullPetPremium(state: GameState): GachaPullResult | null {
+export function pullPetPremium(state: GameState, forcedRarities?: GachaRarity[]): GachaPullResult | null {
   if (state.diamonds < gachaPullConfig.pullCostDiamonds) {
     return null;
   }
   state.diamonds -= gachaPullConfig.pullCostDiamonds;
-  return pullOne(state, petRosterConfig, 'premiumPullWeight', state.petShards, unlockPet, 'petPremium');
+  return pullOne(state, petRosterConfig, 'premiumPullWeight', state.petShards, unlockPet, 'petPremium', forcedRarities);
 }
 
 // Atomic - the whole batch's cost must be affordable upfront, so a 10/100-
@@ -119,34 +120,29 @@ function pullMulti(
   totalCost: number,
   currency: 'gold' | 'diamonds',
   pityPoolId: PityPoolId,
-  pullOneOfKind: (state: GameState) => GachaPullResult | null,
+  pullOneOfKind: (state: GameState, forcedRarities?: GachaRarity[]) => GachaPullResult | null,
 ): GachaPullResult[] {
   if (state[currency] < totalCost) {
     return [];
   }
 
-  // "新手绝对福利" - the player's very first ever 10-pull, on whichever of
-  // the four pools they use it on, is guaranteed at least one gold-or-
-  // better hit. Reuses this pool's own pity mechanism instead of a
-  // parallel forced-rarity path: pre-arming the counter to one pull short
-  // of its guarantee makes the very first pull in this batch trigger
-  // resolveForcedRarities naturally, complete with the same rarity-reset
-  // bookkeeping a normal pity hit gets.
-  const isFirstTenPullGuarantee = count === 10 && !state.isFirstTenPullDone;
-  if (isFirstTenPullGuarantee) {
-    const rule = gachaPityConfig[pityPoolId];
-    state.pityCounters[pityPoolId] = Math.max(state.pityCounters[pityPoolId], rule.pullsUntilGuarantee - 1);
-  }
+  // "新手绝对福利" - the player's very first ever 10-pull is guaranteed at
+  // least one gold-or-better hit, but only on a premium (diamond) pool -
+  // firstTenPullGuaranteeRarities has no entry for the gold-currency pools,
+  // so guaranteeRarities is undefined there and this batch rolls with no
+  // bonus at all, same as any other 10-pull. Only the first pull of the
+  // batch gets the forced floor.
+  const guaranteeRarities = count === 10 && !state.isFirstTenPullDone ? firstTenPullGuaranteeRarities[pityPoolId] : undefined;
 
   const results: GachaPullResult[] = [];
   for (let i = 0; i < count; i += 1) {
-    const result = pullOneOfKind(state);
+    const result = pullOneOfKind(state, i === 0 ? guaranteeRarities : undefined);
     if (result) {
       results.push(result);
     }
   }
 
-  if (isFirstTenPullGuarantee) {
+  if (guaranteeRarities) {
     state.isFirstTenPullDone = true;
   }
 
