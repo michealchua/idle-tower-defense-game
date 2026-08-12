@@ -1,12 +1,18 @@
+import { useState } from 'react';
 import { heroRosterConfig } from '../data/heroRosterConfig';
 import { petRosterConfig, type PetDefinition } from '../data/petRosterConfig';
 import type { HeroDefinition } from '../data/heroRosterConfig';
 import type { GachaRarity } from '../data/gachaConfig';
 import type { UpgradeableStat } from '../data/heroConfig';
+import { enemyArchetypes, type EnemyArchetypeId } from '../data/enemyArchetypes';
+import { enemyLoreConfig } from '../data/enemyLoreConfig';
 import { getConditionStatuses } from '../engine/systems/UnlockSystem';
 import { formatUnlockCondition } from './formatUnlockCondition';
 import { t } from '../locales/i18n';
 import { useGameStore } from '../store/useGameStore';
+
+const ENEMY_ARCHETYPE_IDS = Object.keys(enemyArchetypes) as EnemyArchetypeId[];
+type CodexTab = 'hero' | 'pet' | 'enemy';
 
 const RARITY_LABEL_KEYS: Record<GachaRarity, string> = {
   white: 'rarity.white',
@@ -63,6 +69,7 @@ function CodexPanel() {
   const ascensionLevel = useGameStore((state) => state.ascensionLevel);
   const unlockHeroByCondition = useGameStore((state) => state.unlockHeroByCondition);
   const unlockPetByCondition = useGameStore((state) => state.unlockPetByCondition);
+  const [activeTab, setActiveTab] = useState<CodexTab>('hero');
 
   const conditionState = { unlockedHeroIds, unlockedPetIds, heroes, goldSpentTotal, ascensionLevel };
 
@@ -183,19 +190,44 @@ function CodexPanel() {
     );
   }
 
+  // Always visible, no lock state - this game has no "have you fought this
+  // archetype yet" tracking (out of scope to add just for the codex), so
+  // every enemy's lore is readable from the start rather than half the tab
+  // sitting permanently locked with nothing to unlock it.
+  function renderEnemyEntry(archetypeId: EnemyArchetypeId) {
+    const lore = enemyLoreConfig[archetypeId];
+    return (
+      <div key={archetypeId} className="item-card">
+        <span>{t(lore.nameKey)}</span>
+        <div className="item-detail">{t(lore.descriptionKey)}</div>
+      </div>
+    );
+  }
+
+  const TABS: { id: CodexTab; labelKey: string; count?: string }[] = [
+    { id: 'hero', labelKey: 'codex.heroSection', count: `${unlockedHeroIds.length}/${heroRosterConfig.length}` },
+    { id: 'pet', labelKey: 'codex.petSection', count: `${unlockedPetIds.length}/${petRosterConfig.length}` },
+    { id: 'enemy', labelKey: 'codex.enemySection' },
+  ];
+
   return (
     <div>
-      <div className="card">
-        <div className="card-title">
-          {t('codex.heroSection')} ({unlockedHeroIds.length}/{heroRosterConfig.length})
-        </div>
-        <div className="list">{heroRosterConfig.map(renderHeroEntry)}</div>
+      <div className="filter-bar">
+        {TABS.map((tab) => (
+          <button
+            key={tab.id}
+            className={`btn btn-sm${activeTab === tab.id ? ' btn-primary' : ''}`}
+            onClick={() => setActiveTab(tab.id)}
+          >
+            {t(tab.labelKey)}
+            {tab.count && ` (${tab.count})`}
+          </button>
+        ))}
       </div>
       <div className="card">
-        <div className="card-title">
-          {t('codex.petSection')} ({unlockedPetIds.length}/{petRosterConfig.length})
-        </div>
-        <div className="list">{petRosterConfig.map(renderPetEntry)}</div>
+        {activeTab === 'hero' && <div className="list">{heroRosterConfig.map(renderHeroEntry)}</div>}
+        {activeTab === 'pet' && <div className="list">{petRosterConfig.map(renderPetEntry)}</div>}
+        {activeTab === 'enemy' && <div className="list">{ENEMY_ARCHETYPE_IDS.map(renderEnemyEntry)}</div>}
       </div>
     </div>
   );
