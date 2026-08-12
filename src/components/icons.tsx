@@ -211,67 +211,6 @@ export function IconSave(props: IconProps) {
   );
 }
 
-// --- Elements --------------------------------------------------------------
-
-export function IconElementFire(props: IconProps) {
-  return (
-    <Base {...props}>
-      <path d="M12 2L20 21H4Z" />
-    </Base>
-  );
-}
-
-export function IconElementWater(props: IconProps) {
-  return (
-    <Base {...props}>
-      <path d="M12 4L18 15A7 7 0 1 1 6 15Z" />
-    </Base>
-  );
-}
-
-export function IconElementEarth(props: IconProps) {
-  return (
-    <Base {...props}>
-      <path d="M2 20L8 8L11.5 14L15 6L22 20Z" />
-    </Base>
-  );
-}
-
-export function IconElementWind(props: IconProps) {
-  return (
-    <Base {...props}>
-      <path d="M3 8H14M3 12H18M3 16H11" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    </Base>
-  );
-}
-
-export function IconElementLight(props: IconProps) {
-  return (
-    <Base {...props}>
-      <circle cx="12" cy="12" r="4.5" />
-      <rect x="11" y="1" width="2" height="4" />
-      <rect x="11" y="19" width="2" height="4" />
-      <rect x="1" y="11" width="4" height="2" />
-      <rect x="19" y="11" width="4" height="2" />
-      <rect x="11" y="1" width="2" height="4" transform="rotate(45 12 12)" />
-      <rect x="11" y="1" width="2" height="4" transform="rotate(135 12 12)" />
-      <rect x="11" y="1" width="2" height="4" transform="rotate(225 12 12)" />
-      <rect x="11" y="1" width="2" height="4" transform="rotate(315 12 12)" />
-    </Base>
-  );
-}
-
-// Standard "crescent" construction: a large circular arc out, a smaller one
-// back - the two radii differing is what makes the path self-intersect into
-// a lune instead of retracing a plain circle.
-export function IconElementDark(props: IconProps) {
-  return (
-    <Base {...props}>
-      <path d="M20 12.5A8.5 8.5 0 1 1 11.5 4A6.5 6.5 0 0 0 20 12.5Z" />
-    </Base>
-  );
-}
-
 // --- Classes / roles ---------------------------------------------------
 
 export function IconOrb(props: IconProps) {

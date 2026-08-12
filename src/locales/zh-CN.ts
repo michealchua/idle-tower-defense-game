@@ -173,14 +173,6 @@ const zhCN = {
     priest: '牧师',
     special: '特殊职业',
   },
-  element: {
-    fire: '火',
-    water: '水',
-    earth: '土',
-    wind: '风',
-    light: '光',
-    dark: '暗',
-  },
   evolutionBranch: {
     warriorBerserker: '狂战士',
     warriorGuardian: '守护战士',

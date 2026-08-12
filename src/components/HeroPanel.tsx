@@ -6,7 +6,6 @@ import { getMaxDeployedHeroes } from '../data/castleConfig';
 import { heroEvolutionConfig, heroUpgradeConfig, type HeroClass, type UpgradeableStat } from '../data/heroConfig';
 import { MAX_STAR_LEVEL, gachaRarityConfig, getStarUpCost, type GachaRarity } from '../data/gachaConfig';
 import { getActiveBondCounts, type BondId } from '../data/bondConfig';
-import type { ElementId } from '../data/elementConfig';
 import { isHeroUpgradeMaxed, previewHeroUpgradeBulk } from '../engine/systems/UpgradeSystem';
 import { canEvolveHero, getEffectiveHeroClass } from '../engine/systems/HeroSystem';
 import { formatBigNumber } from '../utils/scaling';
@@ -28,12 +27,6 @@ import {
   IconDagger,
   IconGhost,
   IconHeal,
-  IconElementFire,
-  IconElementWater,
-  IconElementEarth,
-  IconElementWind,
-  IconElementLight,
-  IconElementDark,
   type IconProps,
 } from './icons';
 
@@ -170,24 +163,6 @@ const CLASS_ICON: Record<HeroClass, (props: IconProps) => JSX.Element> = {
   assassin: IconDagger,
   priest: IconHeal,
   special: IconStar,
-};
-
-export const ELEMENT_LABEL_KEYS: Record<ElementId, string> = {
-  fire: 'element.fire',
-  water: 'element.water',
-  earth: 'element.earth',
-  wind: 'element.wind',
-  light: 'element.light',
-  dark: 'element.dark',
-};
-
-export const ELEMENT_ICON: Record<ElementId, (props: IconProps) => JSX.Element> = {
-  fire: IconElementFire,
-  water: IconElementWater,
-  earth: IconElementEarth,
-  wind: IconElementWind,
-  light: IconElementLight,
-  dark: IconElementDark,
 };
 
 const RARITY_LABEL_KEYS: Record<GachaRarity, string> = {
@@ -472,7 +447,6 @@ function HeroDetail({
   const effectiveClass = getEffectiveHeroClass(hero);
   const BondIcon = BOND_ICON[definition.bondId];
   const HeroClassIcon = CLASS_ICON[effectiveClass];
-  const HeroElementIcon = ELEMENT_ICON[definition.element];
 
   return (
     <div className={`detail-card ${RARITY_BORDER_CLASS[definition.rarity]}`}>
@@ -482,8 +456,6 @@ function HeroDetail({
       </div>
       <div className="item-detail">
         <HeroClassIcon /> {t(CLASS_LABEL_KEYS[effectiveClass])}
-        {' · '}
-        <HeroElementIcon /> {t(ELEMENT_LABEL_KEYS[definition.element])}
         <span className="text-faint"> · {heroLabel(definition)}</span>
       </div>
 
@@ -643,7 +615,6 @@ const HeroRosterList = memo(function HeroRosterList({
         const isSelected = definition.id === effectiveSelectedId;
         const RowBondIcon = BOND_ICON[definition.bondId];
         const RowClassIcon = CLASS_ICON[effectiveClass];
-        const RowElementIcon = ELEMENT_ICON[definition.element];
         return (
           <div
             key={definition.id}
@@ -656,8 +627,7 @@ const HeroRosterList = memo(function HeroRosterList({
             <div className={`mini-card-name ${RARITY_CLASS[definition.rarity]}`}>
               <span>
                 <RowBondIcon />
-                <RowClassIcon />
-                <RowElementIcon /> {name}
+                <RowClassIcon /> {name}
                 {evolutionBranchId ? <IconStar /> : ''}
               </span>
               <span className={`status-dot${isDeployed ? ' on' : ''}`} title={isDeployed ? t('squad.deployed') : t('squad.benched')} />

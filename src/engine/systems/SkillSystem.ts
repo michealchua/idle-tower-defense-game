@@ -13,18 +13,8 @@ import {
 import { calculateDamage, applyDamage } from './DamageSystem';
 import { spawnVisualEffect } from './EffectsSystem';
 import { getDeployedHeroes } from './HeroStatsSystem';
-import { getHeroDefinition } from '../../data/heroRosterConfig';
-import { enemyArchetypes } from '../../data/enemyArchetypes';
-import { getElementDamageMultiplier } from '../../data/elementConfig';
 import { getBondEffects } from '../../data/bondConfig';
-import type { EnemyState, GameState, HeroState } from '../types';
-
-// Skill damage respects the same hero-element-vs-enemy-element advantage as
-// a plain auto-attack (CombatSystem.tickAttackerCombat) - a fire mage's
-// fireball shouldn't quietly skip the wheel its basic attacks follow.
-function elementMultiplierFor(hero: HeroState, enemy: EnemyState): number {
-  return getElementDamageMultiplier(getHeroDefinition(hero.id).element, enemyArchetypes[enemy.archetypeId].element);
-}
+import type { GameState, HeroState } from '../types';
 
 const strategyLookup: Record<SkillTargetingStrategyKey, TargetComparator> = {
   heroDefault: heroDefaultStrategy,
@@ -118,10 +108,7 @@ function castAoeDamage(state: GameState, hero: HeroState, definition: SkillDefin
   const skillDamageMultiplier = getBondEffects(state.deployedHeroIds).skillDamageMultiplier;
 
   for (const enemy of hitEnemies) {
-    const damageResult = calculateDamage(
-      hero.attackDamage * definition.damageMultiplier * elementMultiplierFor(hero, enemy) * skillDamageMultiplier,
-      0,
-    );
+    const damageResult = calculateDamage(hero.attackDamage * definition.damageMultiplier * skillDamageMultiplier, 0);
     applyDamage(state, enemy, damageResult);
   }
 
@@ -149,7 +136,7 @@ function castChainDamage(state: GameState, hero: HeroState, definition: SkillDef
     });
 
     const damageResult = calculateDamage(
-      hero.attackDamage * definition.damageMultiplier * elementMultiplierFor(hero, target) * getBondEffects(state.deployedHeroIds).skillDamageMultiplier,
+      hero.attackDamage * definition.damageMultiplier * getBondEffects(state.deployedHeroIds).skillDamageMultiplier,
       0,
     );
     applyDamage(state, target, damageResult);

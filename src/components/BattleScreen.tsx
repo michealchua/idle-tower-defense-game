@@ -8,10 +8,8 @@ import { layoutHeroPositions } from '../data/mapConfig';
 import { getMaxDeployedHeroes } from '../data/castleConfig';
 import { formatBigNumber } from '../utils/scaling';
 import { audioManager } from '../audio/AudioManager';
-import { enemyArchetypes } from '../data/enemyArchetypes';
 import { speedTiers } from '../data/speedConfig';
 import { getGlobalWaveNumber } from '../engine/systems/WaveSystem';
-import { ELEMENT_ICON, ELEMENT_LABEL_KEYS } from './HeroPanel';
 
 // Logical simulation/coordinate space - every entity position in
 // mapConfig.ts and every fixed pixel size in CanvasRenderer.ts is authored
@@ -299,17 +297,12 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
           <div className="hud-widget-row" style={{ justifyContent: 'space-between', fontSize: 11 }}>
             <span>
               {t('wave.stage')} {wave.chapter}-{wave.waveInChapter} · {t(biome.labelKey)}
-              {bossKind &&
-                (() => {
-                  const element = enemyArchetypes[bossKind].element;
-                  const ElementIcon = ELEMENT_ICON[element];
-                  return (
-                    <>
-                      {' · '}
-                      {t(bossKind === 'boss' ? 'wave.boss' : 'wave.miniboss')} <ElementIcon /> {t(ELEMENT_LABEL_KEYS[element])}
-                    </>
-                  );
-                })()}
+              {bossKind && (
+                <>
+                  {' · '}
+                  {t(bossKind === 'boss' ? 'wave.boss' : 'wave.miniboss')}
+                </>
+              )}
             </span>
             {wave.isBossWave && wave.timeRemaining !== undefined ? (
               <span>{Math.ceil(wave.timeRemaining)}s</span>
