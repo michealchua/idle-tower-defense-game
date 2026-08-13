@@ -1,6 +1,6 @@
 import { enemyScalingConfig, getScalingMultiplier } from '../../data/enemyScalingConfig';
 import { heroBaseConfig } from '../../data/heroConfig';
-import { squadConfig } from '../../data/squadConfig';
+import { baselineSquadSize } from '../../data/squadConfig';
 import { getDeployedHeroes } from './HeroStatsSystem';
 import { getGlobalWaveNumber } from './WaveSystem';
 import type { GameState, HeroState, WaveState } from '../types';
@@ -24,13 +24,13 @@ export function getTeamPower(state: GameState): number {
   return getDeployedHeroes(state).reduce((sum, hero) => sum + getHeroPower(hero), 0);
 }
 
-// A full starting squad (squadConfig.maxDeployedHeroes) of fresh level-1
+// A full starting squad (squadConfig.baselineSquadSize) of fresh level-1
 // heroes, in getHeroPower's units - the "you're expected to have this much
 // power by stage 1" baseline every other stage's recommendation scales off.
 function getBaselineSquadPower(): number {
   const dps = heroBaseConfig.attackDamage * heroBaseConfig.attackSpeed * (1 + heroBaseConfig.criticalChance);
   const baselineHeroPower = dps * 10 + heroBaseConfig.maxHp * 0.5;
-  return baselineHeroPower * squadConfig.maxDeployedHeroes;
+  return baselineHeroPower * baselineSquadSize;
 }
 
 // Recommended team power for a given stage - deliberately stage-only (not
