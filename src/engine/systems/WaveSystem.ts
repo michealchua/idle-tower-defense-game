@@ -1,11 +1,11 @@
 import { getBossKindForWave, getBossTimeLimit, getNormalWaveEnemyCount, waveConfig } from '../../data/waveConfig';
-import { getBaseMaxHpForWave } from '../../data/baseConfig';
 import { effectLifetimes } from '../../data/effectConfig';
 import { getDiamondChapterClearReward } from '../../data/diamondConfig';
 import { getBiomeForChapter } from '../../data/biomeConfig';
 import { storyScripts } from '../../data/storyConfig';
 import { spawnVisualEffect } from './EffectsSystem';
 import { incrementDailyQuestProgress } from './DailyQuestSystem';
+import { getAliveDeployedHeroes } from './HeroStatsSystem';
 import type { GameState, WaveState } from '../types';
 
 // Pure - derives a wave's "shape" purely from chapter/waveInChapter. Shared
@@ -46,10 +46,9 @@ export function createInitialWaveState(): WaveState {
 // the same treatment - chip damage from CombatSystem.tickEnemyAttacksOnHeroes
 // doesn't carry across waves, only within one.
 function resetBattlefieldForWave(state: GameState): void {
-  state.base.maxHp = getBaseMaxHpForWave(getGlobalWaveNumber(state.wave));
-  state.base.currentHp = state.base.maxHp;
   for (const hero of state.heroes) {
     hero.currentHp = hero.maxHp;
+    hero.isDowned = false;
     // A hero mid-walk (or mid-fight) when the wave ends snaps back to its
     // slot for the fresh attempt, same "clean start" treatment as HP/enemies
     // above - see MovementSystem.tickHeroMovement.
@@ -102,8 +101,8 @@ export function advanceToNextWave(state: GameState): void {
   });
 }
 
-// What a failed wave (timer expired without clearing, or the base was
-// destroyed) triggers - never isGameOver. Same chapter/waveInChapter, so
+// What a failed wave (timer expired without clearing, or the whole squad
+// went down) triggers - never isGameOver. Same chapter/waveInChapter, so
 // hero/gear/gold progress carries over but the attempt starts fresh.
 export function retryCurrentWave(state: GameState): void {
   configureWaveShape(state.wave);
@@ -115,9 +114,24 @@ function isBossAlive(state: GameState): boolean {
   return state.enemies.some((enemy) => enemy.archetypeId === bossArchetypeId);
 }
 
-// Checks clear conditions and advances - called every tick after combat/
-// skills resolve, so a boss killed this tick is detected the same tick.
+// Replaces the old base-HP-reaches-0 lose condition (see BaseState's doc
+// comment) - true once every currently-deployed hero is downed at the same
+// time (DamageSystem.applyDamageToHero). Empty-squad states (nothing
+// deployed at all) deliberately don't count as a wipe - there's nothing to
+// have lost yet.
+function checkSquadWipe(state: GameState): boolean {
+  return state.deployedHeroIds.length > 0 && getAliveDeployedHeroes(state).length === 0;
+}
+
+// Checks clear/fail conditions and advances/retries - called every tick
+// after combat/skills resolve, so a boss killed or a squad wiped this tick
+// is detected the same tick.
 export function tickWaveProgress(state: GameState, deltaSeconds: number): void {
+  if (checkSquadWipe(state)) {
+    retryCurrentWave(state);
+    return;
+  }
+
   const wave = state.wave;
 
   if (wave.isBossWave) {
@@ -130,7 +144,7 @@ export function tickWaveProgress(state: GameState, deltaSeconds: number): void {
       return;
     }
 
-    if (wave.timeRemaining === 0 && state.base.currentHp > 0) {
+    if (wave.timeRemaining === 0) {
       retryCurrentWave(state);
     }
     return;

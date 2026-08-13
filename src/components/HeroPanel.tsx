@@ -17,6 +17,8 @@ import { useDeploySlotDrag } from './useDeploySlotDrag';
 import Accordion from './Accordion';
 import PanelHeader from './PanelHeader';
 import StatTile from './StatTile';
+import SpriteAvatar from './SpriteAvatar';
+import { getHeroSpriteSrc, getHeroEvolvedSpriteSrc } from '../render/assetLoader';
 import { ItemCard, SLOT_ICON, SLOT_IDS, SLOT_LABEL_KEYS } from './EquipmentPanel';
 import { getActiveSetBonuses, type EquipmentSlot } from '../data/equipmentConfig';
 import {
@@ -204,6 +206,15 @@ const MATERIAL_LABEL_KEYS = {
 
 function heroLabel(definition: HeroDefinition): string {
   return `${t(RARITY_LABEL_KEYS[definition.rarity])}${definition.id.split('-')[1]}`;
+}
+
+// Avatar granularity is per-class/per-evolution-branch, not per individual
+// hero - same sprites CanvasRenderer.drawHero draws on the field (see
+// assetLoader.getHeroSpriteSrc's doc comment on why: 100 roster entries
+// share just 8 base-class + 16 evolution-branch sprites, not one portrait
+// each). Two same-class, non-evolved heroes will show the same avatar.
+function heroAvatarSrc(effectiveClass: HeroClass, evolutionBranchId: string | null | undefined): string {
+  return evolutionBranchId ? getHeroEvolvedSpriteSrc(evolutionBranchId) : getHeroSpriteSrc(effectiveClass);
 }
 
 // Per-hero gear (see HeroState.equipment) - 4 slots (weapon/armor/trinket/
@@ -451,9 +462,16 @@ function HeroDetail({
 
   return (
     <div className={`detail-card ${RARITY_BORDER_CLASS[definition.rarity]}`}>
-      <div className={`detail-title ${RARITY_CLASS[definition.rarity]}`}>
-        <BondIcon /> {hero.name}{' '}
-        <span className="text-faint">Lv.{hero.level} · ★{currentStar}/{MAX_STAR_LEVEL}</span>
+      <div className={`detail-title ${RARITY_CLASS[definition.rarity]}`} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <SpriteAvatar
+          src={heroAvatarSrc(effectiveClass, hero.evolutionBranchId)}
+          size={48}
+          fallback={<HeroClassIcon />}
+        />
+        <span>
+          <BondIcon /> {hero.name}{' '}
+          <span className="text-faint">Lv.{hero.level} · ★{currentStar}/{MAX_STAR_LEVEL}</span>
+        </span>
       </div>
       <div className="item-detail">
         <HeroClassIcon /> {t(CLASS_LABEL_KEYS[effectiveClass])}
@@ -626,10 +644,17 @@ const HeroRosterList = memo(function HeroRosterList({
             onPointerCancel={onPointerCancel}
           >
             <div className={`mini-card-name ${RARITY_CLASS[definition.rarity]}`}>
-              <span>
-                <RowBondIcon />
-                <RowClassIcon /> {name}
-                {evolutionBranchId ? <IconStar /> : ''}
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <SpriteAvatar
+                  src={heroAvatarSrc(effectiveClass, evolutionBranchId)}
+                  size={28}
+                  fallback={<RowClassIcon />}
+                />
+                <span>
+                  <RowBondIcon />
+                  <RowClassIcon /> {name}
+                  {evolutionBranchId ? <IconStar /> : ''}
+                </span>
               </span>
               <span className={`status-dot${isDeployed ? ' on' : ''}`} title={isDeployed ? t('squad.deployed') : t('squad.benched')} />
             </div>

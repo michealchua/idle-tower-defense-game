@@ -15,19 +15,17 @@ import {
   getHeroSpriteSrc,
   getHeroEvolvedSpriteSrc,
   getPetSpriteSrc,
-  getTowerSpriteSrc,
   preloadSprites,
   preloadBackgroundImages,
   type SpriteImage,
 } from './assetLoader';
-import type { BaseState, EnemyState, HeroState, PetState, Position, VisualEffect } from '../engine/types';
+import type { EnemyState, HeroState, PetState, Position, VisualEffect } from '../engine/types';
 
 // Exported so BattleScreen's canvas-native drag-to-swap can hit-test pointer
 // coordinates against the same radii these are actually drawn at.
 export const HERO_RADIUS = 20;
 export const PET_RADIUS = 12;
 const ENEMY_RADIUS = 16;
-const BASE_SIZE = 46;
 const HP_BAR_WIDTH = 40;
 const HP_BAR_HEIGHT = 5;
 const ATTACK_PULSE_SCALE = 0.2;
@@ -105,7 +103,11 @@ function getEnemyVisualStyle(visualId: string): EnemyVisualStyle {
 // so it gets its own 'slime' identity, every other non-special humanoid mob
 // shares 'goblin', the two caster-flavored archetypes (healAbility/
 // summonAbility) share 'witch', and both boss tiers share 'demon_boss'.
-const ENEMY_SPRITE_TYPE: Record<EnemyArchetypeId, string> = {
+// Exported so CodexPanel's enemy-tab avatars use the exact same shared
+// sprite grouping the battle canvas itself draws from (see CanvasRenderer.
+// drawEnemy) - a codex entry never shows a different image than what that
+// archetype actually looks like on the field.
+export const ENEMY_SPRITE_TYPE: Record<EnemyArchetypeId, string> = {
   normal: 'goblin',
   fast: 'goblin',
   tank: 'goblin',
@@ -123,40 +125,6 @@ const ENEMY_SPRITE_TYPE: Record<EnemyArchetypeId, string> = {
 };
 
 const HP_BAR_RADIUS = HP_BAR_HEIGHT / 2;
-
-// Three tiers instead of a hard green/red cutoff - an amber middle band
-// means a bar crossing 50% reads as "getting concerning" a beat before it
-// hits the old danger-red threshold, instead of jumping straight there.
-function hpBarColorForRatio(ratio: number): string {
-  if (ratio > 0.55) {
-    return '#4caf50';
-  }
-  return ratio > 0.3 ? '#ffb300' : '#e53935';
-}
-
-function drawHpBar(ctx: CanvasRenderingContext2D, x: number, y: number, ratio: number): void {
-  const barX = x - HP_BAR_WIDTH / 2;
-  ctx.fillStyle = 'rgba(10, 10, 14, 0.75)';
-  ctx.beginPath();
-  ctx.roundRect(barX, y, HP_BAR_WIDTH, HP_BAR_HEIGHT, HP_BAR_RADIUS);
-  ctx.fill();
-
-  const filledWidth = HP_BAR_WIDTH * Math.max(0, Math.min(1, ratio));
-  if (filledWidth <= 0.5) {
-    return;
-  }
-  ctx.fillStyle = hpBarColorForRatio(ratio);
-  ctx.beginPath();
-  ctx.roundRect(barX, y, filledWidth, HP_BAR_HEIGHT, HP_BAR_RADIUS);
-  ctx.fill();
-
-  // Glossy top-half highlight - the one detail that reliably reads as "a
-  // rendered bar" instead of a flat color-block rectangle.
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.28)';
-  ctx.beginPath();
-  ctx.roundRect(barX, y, filledWidth, HP_BAR_HEIGHT * 0.45, HP_BAR_RADIUS * 0.8);
-  ctx.fill();
-}
 
 interface HpBarRequest {
   x: number;
@@ -454,72 +422,6 @@ function drawPetSilhouette(ctx: CanvasRenderingContext2D, x: number, y: number, 
   ctx.stroke();
 }
 
-// Procedural castle - stone-gradient curtain wall, two crenellated corner
-// towers, an arched gate, and a small flag. Replaces a flat filled square
-// whenever public/sprites/towers/castle.png hasn't been dropped in yet (it
-// doesn't exist at all as of this writing - see ART_ASSET_CHECKLIST.md).
-function drawProceduralCastle(ctx: CanvasRenderingContext2D, x: number, y: number, size: number): void {
-  const stoneBase = '#8d8478';
-  const stoneDark = shadeColor(stoneBase, -0.35);
-  const stoneLight = shadeColor(stoneBase, 0.22);
-
-  const halfW = size * 0.5;
-  const wallTop = y - size * 0.05;
-  const wallBottom = y + size * 0.5;
-  const towerTop = y - size * 0.42;
-  const towerW = size * 0.3;
-
-  const gradient = ctx.createLinearGradient(x, towerTop, x, wallBottom);
-  gradient.addColorStop(0, stoneLight);
-  gradient.addColorStop(1, stoneDark);
-
-  ctx.fillStyle = gradient;
-  ctx.strokeStyle = stoneDark;
-  ctx.lineWidth = Math.max(1, size * 0.025);
-
-  ctx.fillRect(x - halfW * 0.62, wallTop, halfW * 1.24, wallBottom - wallTop);
-  ctx.strokeRect(x - halfW * 0.62, wallTop, halfW * 1.24, wallBottom - wallTop);
-
-  for (const side of [-1, 1]) {
-    const towerX = x + side * halfW * 0.72;
-    ctx.fillRect(towerX - towerW / 2, towerTop, towerW, wallBottom - towerTop);
-    ctx.strokeRect(towerX - towerW / 2, towerTop, towerW, wallBottom - towerTop);
-    ctx.fillRect(towerX - towerW / 2, towerTop - size * 0.12, towerW * 0.32, size * 0.12);
-    ctx.fillRect(towerX + towerW / 2 - towerW * 0.32, towerTop - size * 0.12, towerW * 0.32, size * 0.12);
-  }
-
-  ctx.fillRect(x - size * 0.14, wallTop - size * 0.1, size * 0.1, size * 0.1);
-  ctx.fillRect(x + size * 0.04, wallTop - size * 0.1, size * 0.1, size * 0.1);
-
-  // Arched gate - straight sides up to the springline, one semicircular arc
-  // for the top, same construction as the equipment "boot" UI icon's heel.
-  ctx.fillStyle = shadeColor(stoneDark, -0.3);
-  const doorHalfW = size * 0.11;
-  const doorSpringY = wallBottom - size * 0.17;
-  ctx.beginPath();
-  ctx.moveTo(x - doorHalfW, wallBottom);
-  ctx.lineTo(x - doorHalfW, doorSpringY);
-  ctx.arc(x, doorSpringY, doorHalfW, Math.PI, 0);
-  ctx.lineTo(x + doorHalfW, wallBottom);
-  ctx.closePath();
-  ctx.fill();
-
-  // Flag on the right tower.
-  ctx.strokeStyle = stoneDark;
-  ctx.lineWidth = Math.max(1, size * 0.02);
-  ctx.beginPath();
-  ctx.moveTo(x + halfW * 0.72, towerTop - size * 0.12);
-  ctx.lineTo(x + halfW * 0.72, towerTop - size * 0.34);
-  ctx.stroke();
-  ctx.fillStyle = '#c0392b';
-  ctx.beginPath();
-  ctx.moveTo(x + halfW * 0.72, towerTop - size * 0.34);
-  ctx.lineTo(x + halfW * 0.72 + size * 0.17, towerTop - size * 0.28);
-  ctx.lineTo(x + halfW * 0.72, towerTop - size * 0.22);
-  ctx.closePath();
-  ctx.fill();
-}
-
 // --- Sprite sheet frame animation --------------------------------------
 //
 // Shared layout convention for every hero/enemy sheet dropped into
@@ -749,8 +651,8 @@ function getAllEvolutionBranchIds(): string[] {
 // here is keyed by class/archetype-type/roster-id/biome (see assetLoader's
 // getXSpriteSrc doc comments), so the full list stays small and fixed
 // (4 hero classes + 8 evolution branches + 4 enemy sprite types + every pet +
-// the tower + every biome background) regardless of how many hero/enemy
-// instances end up on field.
+// every biome background) regardless of how many hero/enemy instances end up
+// on field.
 export function preloadBattleSprites(): void {
   const enemySpriteTypes = new Set(Object.values(ENEMY_SPRITE_TYPE));
 
@@ -759,7 +661,6 @@ export function preloadBattleSprites(): void {
     ...getAllEvolutionBranchIds().flatMap((branchId) => [getHeroEvolvedSpriteSrc(branchId, 'walk'), getHeroEvolvedSpriteSrc(branchId, 'attack')]),
     ...Array.from(enemySpriteTypes).map((type) => getEnemySpriteSrc(type)),
     ...petRosterConfig.map((pet) => getPetSpriteSrc(pet.spriteId ?? pet.id)),
-    getTowerSpriteSrc(),
   ]);
   // Backgrounds go through a separate, un-stripped cache - see
   // getBackgroundImage's doc comment for why they can't share getImage's
@@ -953,7 +854,16 @@ function drawHero(ctx: CanvasRenderingContext2D, hero: HeroState, pulseScale: nu
   const heroStyle = getHeroVisualStyle(getVisualTierForLevel(hero.level));
   const heroRadius = HERO_RADIUS * heroStyle.radiusMultiplier * pulseScale;
 
-  if (heroStyle.glowColor) {
+  // Downed (HeroState.isDowned, see DamageSystem.applyDamageToHero) heroes
+  // stay on the field - dimmed and desaturated rather than removed, so the
+  // squad-wipe lose condition (WaveSystem.tickWaveProgress's checkSquadWipe)
+  // reads visually before it actually triggers, instead of heroes just
+  // vanishing one by one with no feedback.
+  ctx.save();
+  if (hero.isDowned) {
+    ctx.globalAlpha = 0.45;
+    ctx.filter = 'grayscale(1)';
+  } else if (heroStyle.glowColor) {
     ctx.fillStyle = heroStyle.glowColor;
     ctx.beginPath();
     ctx.arc(hero.position.x, hero.position.y, heroRadius + 8, 0, Math.PI * 2);
@@ -1005,6 +915,8 @@ function drawHero(ctx: CanvasRenderingContext2D, hero: HeroState, pulseScale: nu
     drawHeroSilhouette(ctx, heroClass, hero.position.x, hero.position.y, heroRadius, heroStyle.color);
     drawFallbackGlyph(ctx, hero.position.x, hero.position.y, heroClass.charAt(0).toUpperCase(), heroRadius * 0.75);
   }
+
+  ctx.restore();
 
   return { x: hero.position.x, y: hero.position.y - HERO_RADIUS - 12, ratio: hero.currentHp / hero.maxHp };
 }
@@ -1306,9 +1218,13 @@ function drawDeploySlot(ctx: CanvasRenderingContext2D, position: Position, occup
   ctx.setLineDash([]);
 }
 
-export function drawDeploySlots(ctx: CanvasRenderingContext2D, slots: Position[], occupiedCount: number): void {
+// occupiedSlotIndices is a set of grid-cell indices, not a count - slots are
+// addressed by persistent HeroState.deployedSlotIndex now (see mapConfig.
+// layoutSlotPositions' doc comment), so "the first N slots are occupied"
+// (a simple count) no longer holds once a hero can occupy any specific cell.
+export function drawDeploySlots(ctx: CanvasRenderingContext2D, slots: Position[], occupiedSlotIndices: Set<number>): void {
   slots.forEach((slot, index) => {
-    drawDeploySlot(ctx, slot, index < occupiedCount);
+    drawDeploySlot(ctx, slot, occupiedSlotIndices.has(index));
   });
 }
 
@@ -1355,7 +1271,6 @@ export function renderScene(
   heroes: HeroState[],
   pets: PetState[],
   enemies: EnemyState[],
-  base: BaseState,
   visualEffects: VisualEffect[],
   screenShakeIntensity: number,
 ): void {
@@ -1379,18 +1294,6 @@ export function renderScene(
       (Math.random() * 2 - 1) * screenShakeIntensity,
     );
   }
-
-  const towerSprite = getImage(getTowerSpriteSrc());
-  drawGroundShadow(ctx, base.position.x, base.position.y + BASE_SIZE * 0.52, BASE_SIZE * 0.62);
-  if (towerSprite) {
-    // Never animated (no walk/attack states for a stationary base) and never
-    // flipped (no facing direction) - always the static-image tier, aspect-
-    // preserved in case castle.png isn't authored perfectly square.
-    drawStaticSprite(ctx, towerSprite, base.position.x, base.position.y, BASE_SIZE, false);
-  } else {
-    drawProceduralCastle(ctx, base.position.x, base.position.y, BASE_SIZE);
-  }
-  drawHpBar(ctx, base.position.x, base.position.y - BASE_SIZE / 2 - 12, base.currentHp / base.maxHp);
 
   // One shared pulse (any active attack flash) rather than per-hero
   // attribution - visual effects don't carry an owner id in v1, and a

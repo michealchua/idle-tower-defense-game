@@ -12,7 +12,7 @@ import {
 } from './TargetingSystem';
 import { calculateDamage, applyDamage } from './DamageSystem';
 import { spawnVisualEffect } from './EffectsSystem';
-import { getDeployedHeroes } from './HeroStatsSystem';
+import { getAliveDeployedHeroes } from './HeroStatsSystem';
 import { getBondEffects } from '../../data/bondConfig';
 import type { GameState, HeroState } from '../types';
 
@@ -29,7 +29,7 @@ const strategyLookup: Record<SkillTargetingStrategyKey, TargetComparator> = {
 // Each hero casts its own unlocked skills independently - pets don't get
 // skills in v1.
 export function tickSkills(state: GameState, deltaSeconds: number): void {
-  for (const hero of getDeployedHeroes(state)) {
+  for (const hero of getAliveDeployedHeroes(state)) {
     tickHeroSkills(state, hero, deltaSeconds);
   }
 }
@@ -152,7 +152,7 @@ function castChainDamage(state: GameState, hero: HeroState, definition: SkillDef
 // heroConfig.ts: HP lost to enemy attacks (CombatSystem.tickEnemyAttacksOnHeroes)
 // can be restored here instead of only on the next wave.
 function castHealAlly(state: GameState, hero: HeroState, definition: SkillDefinition): boolean {
-  const injured = getDeployedHeroes(state)
+  const injured = getAliveDeployedHeroes(state)
     .filter((candidate) => distance(candidate.position, hero.position) <= definition.range && candidate.currentHp < candidate.maxHp)
     .sort((a, b) => a.currentHp / a.maxHp - b.currentHp / b.maxHp);
   const targets = injured.slice(0, definition.targetCount ?? 1);

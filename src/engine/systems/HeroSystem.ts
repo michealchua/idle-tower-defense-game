@@ -1,5 +1,5 @@
 import { createHero } from '../entities/Hero';
-import { layoutHeroPositions } from '../../data/mapConfig';
+import { layoutSlotPositions } from '../../data/mapConfig';
 import { getMaxDeployedHeroes } from '../../data/squadConfig';
 import { equipmentSlots, getEquipmentScore, type EquipmentSlot } from '../../data/equipmentConfig';
 import { heroEvolutionConfig, type HeroClass } from '../../data/heroConfig';
@@ -8,25 +8,56 @@ import { recomputeHeroStats } from './HeroStatsSystem';
 import { getGlobalWaveNumber } from './WaveSystem';
 import type { GameState, HeroState } from '../types';
 
-// Repositions every currently-deployed hero across the row anchor so the
-// active squad stays centered instead of growing lopsided as it changes
-// size. Benched heroes keep whatever stale position they last had -
-// harmless, since combat/skills/leveling/rendering all filter to
-// deployedHeroIds and never read a benched hero's position.
-function relayoutDeployedHeroes(state: GameState): void {
-  const positions = layoutHeroPositions(state.deployedHeroIds.length);
-  state.deployedHeroIds.forEach((heroId, index) => {
-    const hero = state.heroes.find((candidate) => candidate.id === heroId);
-    if (hero) {
-      // Snaps both - a hero mid-walk when the squad's rearranged (deploy/
-      // undeploy/swap) reappears at its new slot immediately rather than
-      // finishing its old walk first, same "no interpolation, always
-      // authoritative" contract position already had before movement existed.
-      hero.position = { ...positions[index] };
-      hero.homePosition = { ...positions[index] };
-      hero.moveTargetEnemyInstanceId = null;
+// Lowest-numbered cell (0..cap-1) not already claimed by another currently-
+// deployed hero's deployedSlotIndex - used whenever a hero needs a slot
+// assigned (fresh deploy/unlock) but hasn't picked a specific one via drag.
+// null if every cell is taken (shouldn't happen: deployedHeroIds is capped
+// at the same `cap` by deployHero/unlockHero below, so there's always at
+// least one free cell whenever a new deploy is actually allowed to proceed).
+function firstFreeSlotIndex(state: GameState, cap: number): number | null {
+  const used = new Set(
+    state.heroes
+      .filter((hero) => state.deployedHeroIds.includes(hero.id))
+      .map((hero) => hero.deployedSlotIndex),
+  );
+  for (let index = 0; index < cap; index += 1) {
+    if (!used.has(index)) {
+      return index;
     }
-  });
+  }
+  return null;
+}
+
+// Repositions every currently-deployed hero from its own deployedSlotIndex
+// (not array order - see HeroState.deployedSlotIndex's doc comment) against
+// the current squad-cap-sized grid. Benched heroes keep whatever stale
+// position they last had - harmless, since combat/skills/leveling/rendering
+// all filter to deployedHeroIds and never read a benched hero's position.
+function relayoutDeployedHeroes(state: GameState): void {
+  const cap = getMaxDeployedHeroes(getGlobalWaveNumber(state.wave));
+  const positions = layoutSlotPositions(cap);
+
+  for (const heroId of state.deployedHeroIds) {
+    const hero = state.heroes.find((candidate) => candidate.id === heroId);
+    if (!hero) {
+      continue;
+    }
+    // Self-healing fallback for a deployed hero missing a valid slot (an
+    // old save migrated without one, or the cap has otherwise moved out
+    // from under it) - claims the first free cell rather than leaving it
+    // unpositioned.
+    if (hero.deployedSlotIndex === null || hero.deployedSlotIndex >= positions.length) {
+      hero.deployedSlotIndex = firstFreeSlotIndex(state, cap);
+    }
+    const position = hero.deployedSlotIndex !== null ? positions[hero.deployedSlotIndex] : positions[0];
+    // Snaps both - a hero mid-walk when the squad's rearranged (deploy/
+    // undeploy/moveHeroToSlot) reappears at its new slot immediately rather
+    // than finishing its old walk first, same "no interpolation, always
+    // authoritative" contract position already had before movement existed.
+    hero.position = { ...position };
+    hero.homePosition = { ...position };
+    hero.moveTargetEnemyInstanceId = null;
+  }
 }
 
 // Free primitive - acquisition (spending gold) now happens one level up, in
@@ -43,9 +74,12 @@ export function unlockHero(state: GameState, heroId: string): boolean {
   }
 
   state.unlockedHeroIds.push(heroId);
-  state.heroes.push(createHero(heroId, { x: 0, y: 0 }));
+  const hero = createHero(heroId, { x: 0, y: 0 });
+  state.heroes.push(hero);
 
-  if (state.deployedHeroIds.length < getMaxDeployedHeroes(getGlobalWaveNumber(state.wave))) {
+  const cap = getMaxDeployedHeroes(getGlobalWaveNumber(state.wave));
+  if (state.deployedHeroIds.length < cap) {
+    hero.deployedSlotIndex = firstFreeSlotIndex(state, cap);
     state.deployedHeroIds.push(heroId);
     relayoutDeployedHeroes(state);
   }
@@ -62,10 +96,15 @@ export function deployHero(state: GameState, heroId: string): boolean {
   if (!state.unlockedHeroIds.includes(heroId) || state.deployedHeroIds.includes(heroId)) {
     return false;
   }
-  if (state.deployedHeroIds.length >= getMaxDeployedHeroes(getGlobalWaveNumber(state.wave))) {
+  const cap = getMaxDeployedHeroes(getGlobalWaveNumber(state.wave));
+  if (state.deployedHeroIds.length >= cap) {
     return false;
   }
 
+  const hero = state.heroes.find((candidate) => candidate.id === heroId);
+  if (hero) {
+    hero.deployedSlotIndex = firstFreeSlotIndex(state, cap);
+  }
   state.deployedHeroIds.push(heroId);
   relayoutDeployedHeroes(state);
   recomputeHeroStats(state);
@@ -78,26 +117,47 @@ export function undeployHero(state: GameState, heroId: string): boolean {
     return false;
   }
 
+  const hero = state.heroes.find((candidate) => candidate.id === heroId);
+  if (hero) {
+    hero.deployedSlotIndex = null;
+  }
   state.deployedHeroIds.splice(index, 1);
   relayoutDeployedHeroes(state);
   recomputeHeroStats(state);
   return true;
 }
 
-// Swaps two deployed heroes' squad-order slots - since relayoutDeployedHeroes
-// derives on-field position purely from index in deployedHeroIds, swapping
-// the array entries is all it takes to swap their positions too. Used by the
-// canvas drag-to-reposition gesture (BattleScreen), not squad membership -
-// stats are unaffected, so no recomputeHeroStats needed.
-export function swapDeployedHeroes(state: GameState, heroIdA: string, heroIdB: string): boolean {
-  const indexA = state.deployedHeroIds.indexOf(heroIdA);
-  const indexB = state.deployedHeroIds.indexOf(heroIdB);
-  if (indexA === -1 || indexB === -1 || indexA === indexB) {
+// Moves a deployed hero to a specific cell of the fixed slot grid (see
+// mapConfig.layoutSlotPositions) - the canvas-native drag gesture
+// (BattleScreen) resolves the drop point to a targetSlotIndex and calls this
+// unconditionally, whether that cell is empty or occupied:
+//  - empty cell: heroId just claims it.
+//  - occupied cell: the two heroes trade deployedSlotIndex values (this is
+//    the only case the old swapDeployedHeroes handled - dragging onto
+//    another hero to swap places is now just this function's special case,
+//    not a separate code path).
+// Squad membership (deployedHeroIds) is unaffected either way, so no
+// recomputeHeroStats needed - only on-field position changes.
+export function moveHeroToSlot(state: GameState, heroId: string, targetSlotIndex: number): boolean {
+  const hero = state.heroes.find((candidate) => candidate.id === heroId);
+  if (!hero || !state.deployedHeroIds.includes(heroId)) {
+    return false;
+  }
+  const cap = getMaxDeployedHeroes(getGlobalWaveNumber(state.wave));
+  if (targetSlotIndex < 0 || targetSlotIndex >= cap) {
+    return false;
+  }
+  if (hero.deployedSlotIndex === targetSlotIndex) {
     return false;
   }
 
-  state.deployedHeroIds[indexA] = heroIdB;
-  state.deployedHeroIds[indexB] = heroIdA;
+  const occupant = state.heroes.find(
+    (candidate) => candidate.id !== heroId && state.deployedHeroIds.includes(candidate.id) && candidate.deployedSlotIndex === targetSlotIndex,
+  );
+  if (occupant) {
+    occupant.deployedSlotIndex = hero.deployedSlotIndex;
+  }
+  hero.deployedSlotIndex = targetSlotIndex;
   relayoutDeployedHeroes(state);
   return true;
 }

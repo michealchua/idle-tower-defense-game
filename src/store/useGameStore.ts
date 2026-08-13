@@ -21,7 +21,7 @@ import {
   unlockHero as unlockHeroInEngine,
   deployHero as deployHeroInEngine,
   undeployHero as undeployHeroInEngine,
-  swapDeployedHeroes as swapDeployedHeroesInEngine,
+  moveHeroToSlot as moveHeroToSlotInEngine,
   equipItemToHero as equipItemToHeroInEngine,
   unequipHeroSlot as unequipHeroSlotInEngine,
   equipStrongestForHero as equipStrongestForHeroInEngine,
@@ -204,7 +204,7 @@ interface GameStore {
   unlockPet: (petId: string) => void;
   deployHero: (heroId: string) => void;
   undeployHero: (heroId: string) => void;
-  swapDeployedHeroes: (heroIdA: string, heroIdB: string) => void;
+  moveHeroToSlot: (heroId: string, slotIndex: number) => void;
   evolveHero: (heroId: string, branchId: string) => boolean;
   unlockHeroByCondition: (heroId: string) => void;
   unlockPetByCondition: (petId: string) => void;
@@ -311,8 +311,8 @@ export const useGameStore = create<GameStore>()(
       set(snapshotGameState(gameState));
     }
   },
-  swapDeployedHeroes: (heroIdA, heroIdB) => {
-    if (swapDeployedHeroesInEngine(gameState, heroIdA, heroIdB)) {
+  moveHeroToSlot: (heroId, slotIndex) => {
+    if (moveHeroToSlotInEngine(gameState, heroId, slotIndex)) {
       set(snapshotGameState(gameState));
     }
   },
@@ -471,9 +471,28 @@ export const useGameStore = create<GameStore>()(
     // on any hero at all - default homePosition to wherever position already
     // was (exactly what it meant before the split) and leave no pursuit
     // target set.
+    // Saves written before persistent slot indices existed won't have
+    // deployedSlotIndex on any hero - default every deployed hero to its
+    // current position-in-deployedHeroIds (exactly what its slot was under
+    // the old array-order layout) so the fixed grid it now reads from lines
+    // up with where that save already had it. relayoutDeployedHeroes (called
+    // via retryCurrentWave below) also self-heals a missing/invalid index,
+    // this just makes the specific slot assignment match the old layout
+    // instead of an arbitrary "first free" one.
+    gameState.deployedHeroIds.forEach((heroId, index) => {
+      const hero = gameState.heroes.find((candidate) => candidate.id === heroId);
+      if (hero && (hero.deployedSlotIndex === undefined || hero.deployedSlotIndex === null)) {
+        hero.deployedSlotIndex = index;
+      }
+    });
     for (const hero of gameState.heroes) {
       hero.homePosition = hero.homePosition ?? { ...hero.position };
       hero.moveTargetEnemyInstanceId = hero.moveTargetEnemyInstanceId ?? null;
+      hero.deployedSlotIndex = hero.deployedSlotIndex ?? null;
+      // Saves written before the base-HP-removal squad-wipe mechanic won't
+      // have this field - retryCurrentWave below clears it too, this just
+      // covers any code that might read it before that runs.
+      hero.isDowned = hero.isDowned ?? false;
     }
     // A save is never resumed mid-combat - heal the battlefield and
     // re-derive the current wave's shape (same as retrying a failed wave),

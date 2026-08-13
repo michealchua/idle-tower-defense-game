@@ -1,10 +1,12 @@
 import { spawnVisualEffect } from './EffectsSystem';
 import { distance, getEnemiesInRange, heroDefaultStrategy, pickBestTarget } from './TargetingSystem';
 import { calculateDamage, applyDamage, applyDamageToHero } from './DamageSystem';
-import { getDeployedHeroes } from './HeroStatsSystem';
+import { getAliveDeployedHeroes } from './HeroStatsSystem';
 import { effectLifetimes } from '../../data/effectConfig';
 import { enemyHeroAttackIntervalSeconds } from '../../data/enemyConfig';
 import { heroBaseConfig } from '../../data/heroConfig';
+import { getTalentFlatBonus } from '../../data/talentConfig';
+import { getAscensionShopFlatBonus } from '../../data/ascensionShopConfig';
 import type { GameState, Position } from '../types';
 
 interface Attacker {
@@ -55,21 +57,30 @@ function tickAttackerCombat(state: GameState, attacker: Attacker, deltaSeconds: 
 }
 
 export function tickCombat(state: GameState, deltaSeconds: number): void {
-  for (const hero of getDeployedHeroes(state)) {
+  for (const hero of getAliveDeployedHeroes(state)) {
     tickAttackerCombat(state, hero, deltaSeconds);
   }
 }
 
 // Mirror of tickAttackerCombat, enemy-side - an enemy inside a hero's attack
 // range chips away at a random in-range deployed hero on its own cooldown.
-// Deliberately simple (no priority targeting) since this is supplementary
-// attrition on the squad, not the primary lose condition (see
-// applyDamageToHero) - MovementSystem/base HP remains the real threat.
+// This is now the primary lose condition - see WaveSystem.tickWaveProgress's
+// checkSquadWipe, which fails the wave once every deployed hero is downed.
 export function tickEnemyAttacksOnHeroes(state: GameState, deltaSeconds: number): void {
-  const heroes = getDeployedHeroes(state);
+  const heroes = getAliveDeployedHeroes(state);
   if (heroes.length === 0) {
     return;
   }
+
+  // damageReduction (talentConfig.ts/ascensionShopConfig.ts) used to apply
+  // to base chip damage before the base-HP mechanic was removed - now that
+  // hero HP loss is the only lose condition (see WaveSystem.
+  // tickWaveProgress's checkSquadWipe), it reduces hero chip damage instead,
+  // same purchasable stat/UI, just repointed at the threat that actually
+  // still exists.
+  const damageReduction =
+    getTalentFlatBonus(state.talentLevels, 'damageReduction') +
+    getAscensionShopFlatBonus(state.ascensionShopLevels, 'damageReduction');
 
   for (const enemy of state.enemies) {
     enemy.heroAttackCooldownRemaining = Math.max(0, enemy.heroAttackCooldownRemaining - deltaSeconds);
@@ -83,7 +94,7 @@ export function tickEnemyAttacksOnHeroes(state: GameState, deltaSeconds: number)
     }
 
     const target = inRange[Math.floor(Math.random() * inRange.length)];
-    applyDamageToHero(state, target, enemy.heroDamage);
+    applyDamageToHero(state, target, enemy.heroDamage * (1 - damageReduction));
     enemy.heroAttackCooldownRemaining = enemyHeroAttackIntervalSeconds;
   }
 }

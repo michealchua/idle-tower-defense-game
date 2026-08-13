@@ -38,6 +38,7 @@ export function ascend(state: GameState): boolean {
     hero.unlockedSkillIds = [];
     hero.skills = {};
     hero.upgrades = createInitialHeroUpgrades();
+    hero.isDowned = false;
 
     // evolutionBranchId itself is permanent (see its doc comment in
     // types.ts) - but it was granted its exclusive skill via
@@ -55,7 +56,6 @@ export function ascend(state: GameState): boolean {
 
   state.wave = createInitialWaveState();
   state.enemies = [];
-  state.base.currentHp = state.base.maxHp;
   state.spawnCooldownRemaining = 0;
 
   recomputeHeroStats(state);

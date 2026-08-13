@@ -1,6 +1,6 @@
 import { spawnVisualEffect, triggerHitStop, triggerScreenShake } from './EffectsSystem';
 import { rollEquipmentDrop } from './EquipmentSystem';
-import { getDeployedHeroes } from './HeroStatsSystem';
+import { getAliveDeployedHeroes } from './HeroStatsSystem';
 import { enemyArchetypes } from '../../data/enemyArchetypes';
 import { effectLifetimes, hitStopConfig, screenShakeConfig } from '../../data/effectConfig';
 import { getTalentMultiplier, talentPointRewardConfig } from '../../data/talentConfig';
@@ -82,15 +82,18 @@ export function applyDamage(state: GameState, target: EnemyState, damage: Damage
   }
 }
 
-// Chip damage from CombatSystem.tickEnemyAttacksOnHeroes - clamped to a
-// minimum of 1 rather than letting it reach 0, since there's no hero
-// death/revival state built yet (same clamp precedent as
-// HeroStatsSystem.recomputeHeroStats' post-levelup/equip heal). Heroes stay
-// on the field and keep fighting even at 1 HP; a wave transition
-// (WaveSystem.resetBattlefieldForWave) or a healAlly skill is what brings
-// them back up.
+// Chip damage from CombatSystem.tickEnemyAttacksOnHeroes - can now reach 0,
+// which downs the hero (see HeroState.isDowned's doc comment and
+// HeroStatsSystem.getAliveDeployedHeroes). A downed hero stops fighting/
+// moving/being targeted for the rest of this wave attempt; WaveSystem.
+// tickWaveProgress's checkSquadWipe fails the whole wave once every deployed
+// hero is downed at once, and resetBattlefieldForWave clears isDowned (and
+// heals everyone) on the next attempt.
 export function applyDamageToHero(state: GameState, hero: HeroState, amount: number): void {
-  hero.currentHp = Math.max(1, hero.currentHp - amount);
+  hero.currentHp = Math.max(0, hero.currentHp - amount);
+  if (hero.currentHp === 0) {
+    hero.isDowned = true;
+  }
 
   spawnVisualEffect(state, {
     kind: 'damageNumber',
@@ -122,7 +125,7 @@ export function handleDeath(state: GameState, target: EnemyState): void {
   // so they don't earn it. Stat growth from any resulting level-up is
   // applied later by LevelSystem/HeroStatsSystem, so there's nothing to
   // recompute here.
-  for (const hero of getDeployedHeroes(state)) {
+  for (const hero of getAliveDeployedHeroes(state)) {
     hero.exp += target.expReward * expGainMultiplier;
   }
   rollEquipmentDrop(state);

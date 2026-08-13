@@ -62,11 +62,18 @@ export interface HeroState {
   // movement has closed the distance to attackRange.
   position: Position;
   // The hero's deployed-slot anchor (see HeroSystem.relayoutDeployedHeroes) -
-  // fixed until the squad's deploy order changes, unlike position above.
-  // BattleScreen's deploy-slot-grid drawing and drag/swap hit-testing both
-  // care about slot layout, not wherever a hero has wandered off to mid-
-  // fight, hence the split.
+  // fixed until deployedSlotIndex changes, unlike position above.
+  // BattleScreen's deploy-slot-grid drawing and drag hit-testing both care
+  // about slot layout, not wherever a hero has wandered off to mid-fight,
+  // hence the split.
   homePosition: Position;
+  // Which of the fixed 9-cell grid (mapConfig.layoutSlotPositions) this
+  // deployed hero occupies - null when benched. Persistent (survives
+  // teammates deploying/undeploying elsewhere) rather than derived from
+  // index-in-deployedHeroIds, so BattleScreen's canvas-native drag can move a
+  // hero to any specific cell (including an empty one), not just swap with
+  // another hero - see HeroSystem.moveHeroToSlot.
+  deployedSlotIndex: number | null;
   // Sticky pursuit target (see tickHeroMovement) - null when idle/home or
   // when nothing's currently in engage range. Kept separate from combat's
   // own per-attack target selection (CombatSystem always just fires at
@@ -85,6 +92,15 @@ export interface HeroState {
   // this is never reset by AscensionSystem.ascend - it's permanent
   // collection progress, same as equipment/stars.
   evolutionBranchId: string | null;
+  // True once currentHp has been driven to 0 this wave attempt (see
+  // DamageSystem.applyDamageToHero) - a downed hero stays in
+  // heroes/deployedHeroIds (never removed) but stops attacking/moving/
+  // casting/being targeted (see CombatSystem/MovementSystem/SkillSystem's
+  // getAliveDeployedHeroes usage) until WaveSystem.resetBattlefieldForWave
+  // clears it on the next wave attempt. WaveSystem.tickWaveProgress fails
+  // the current wave the moment every deployed hero is downed at once - see
+  // its checkSquadWipe.
+  isDowned: boolean;
 }
 
 export interface PetState {
@@ -153,9 +169,12 @@ export interface EnemyState {
   name?: string;
 }
 
+// No HP/damage semantics anymore (the castle/base-HP mechanic was removed -
+// see WaveSystem's checkSquadWipe, which replaced it as the loss condition).
+// position survives as a plain map anchor: MovementSystem's "hold position
+// once close enough" line and TargetingSystem's closestToBase strategy both
+// still need a fixed point to measure distance against.
 export interface BaseState {
-  maxHp: number;
-  currentHp: number;
   position: Position;
 }
 

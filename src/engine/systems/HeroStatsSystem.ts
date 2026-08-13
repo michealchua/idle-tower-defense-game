@@ -24,6 +24,17 @@ export function getDeployedHeroes(state: GameState): HeroState[] {
   return state.heroes.filter((hero) => state.deployedHeroIds.includes(hero.id));
 }
 
+// The subset of getDeployedHeroes that's actually still fighting - combat,
+// movement, skill-casting, and being targeted by enemy attacks all read this
+// instead, so a downed hero (HeroState.isDowned, see DamageSystem.
+// applyDamageToHero) stops doing/receiving any of that without being removed
+// from the roster or deployedHeroIds. Rendering still draws every deployed
+// hero (downed ones just render differently - see CanvasRenderer.drawHero),
+// so that one call site deliberately keeps using getDeployedHeroes instead.
+export function getAliveDeployedHeroes(state: GameState): HeroState[] {
+  return getDeployedHeroes(state).filter((hero) => !hero.isDowned);
+}
+
 // Shared by DifficultySystem/SpawnSystem (use the strongest hero as "how far
 // has this player gotten") and AscensionSystem (ascension eligibility).
 // Deployed-only so a strong benched hero can't inflate spawn difficulty or

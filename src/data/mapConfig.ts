@@ -1,4 +1,5 @@
 import type { Position } from '../engine/types';
+import { maxDeployedHeroesCap } from './squadConfig';
 
 export const mapConfig = {
   spawnPosition: { x: 370, y: 150 },
@@ -39,6 +40,22 @@ export function layoutHeroPositions(count: number): Position[] {
       y: y + (row - (rows - 1) / 2) * heroRowSpacing,
     };
   });
+}
+
+// Slot grid sized to the squad's current CAP (squadConfig.getMaxDeployedHeroes,
+// wave-gated, up to maxDeployedHeroesCap=9) rather than to how many heroes
+// happen to be deployed right now - unlike layoutHeroPositions(count) above,
+// whose row count (and therefore every cell's y) shifts on every single
+// deploy/undeploy. Slot index is now persistent per hero (HeroState.
+// deployedSlotIndex, see HeroSystem.relayoutDeployedHeroes) rather than
+// derived from array order, so a hero's cell must stay fixed across ordinary
+// squad changes for the "drag to any of the 9 cells" gesture (BattleScreen's
+// canvas-native drag) to feel stable. The grid only ever grows (and
+// re-centers) at the fixed wave milestones squadSlotUnlockWaves gates the cap
+// on - rare enough that the occasional shift there is an acceptable
+// trade-off against shifting on every deploy/undeploy instead.
+export function layoutSlotPositions(cap: number): Position[] {
+  return layoutHeroPositions(Math.min(cap, maxDeployedHeroesCap));
 }
 
 // Pets sit behind the hero GRID's actual left edge (toward the base, away

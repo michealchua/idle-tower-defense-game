@@ -8,6 +8,24 @@ import { t } from '../locales/i18n';
 import { useGameStore } from '../store/useGameStore';
 import type { GachaPullResult } from '../engine/systems/GachaSystem';
 import { IconSword, IconPaw, IconDiamond, type IconProps } from './icons';
+import SpriteAvatar from './SpriteAvatar';
+import { getHeroSpriteSrc, getPetSpriteSrc } from '../render/assetLoader';
+import { heroRosterConfig } from '../data/heroRosterConfig';
+import { petRosterConfig } from '../data/petRosterConfig';
+
+// A pull result's id is unique to exactly one roster (hero ids are
+// `<rarity>-N`, pet ids are `pet-N` - see heroRosterConfig.ts/
+// petRosterConfig.ts's generators, no overlap) - GachaPullResult itself
+// carries no hero/pet tag, so this tries the hero roster first and falls
+// back to pet.
+function gachaResultAvatarSrc(result: GachaPullResult): string {
+  const heroDefinition = heroRosterConfig.find((hero) => hero.id === result.id);
+  if (heroDefinition) {
+    return getHeroSpriteSrc(heroDefinition.class);
+  }
+  const petDefinition = petRosterConfig.find((pet) => pet.id === result.id);
+  return getPetSpriteSrc(petDefinition?.spriteId ?? petDefinition?.id ?? result.id);
+}
 
 const RARITY_LABEL_KEYS: Record<GachaRarity, string> = {
   white: 'rarity.white',
@@ -108,6 +126,36 @@ const REVEAL_TOTAL_BUDGET_MS = 3200;
 const REVEAL_STAGGER_MS_MIN = 90;
 const REVEAL_STAGGER_MS_MAX = 400;
 
+// Matches index.css's gacha-summon-grow/-flash animation durations (1.1s) -
+// kept as one named constant instead of duplicating the literal, so the JS
+// auto-advance timer and the CSS animation that has to finish playing before
+// it fires never drift out of sync if either changes later.
+const SUMMON_ANIMATION_MS = 1100;
+
+// "开蛋/召唤阵" process animation shown between pressing a pull button and
+// GachaRevealOverlay's card flips starting - two counter-spinning rings that
+// grow/fade plus a flash pulse (index.css's gacha-summon-* classes/keyframes),
+// same for every pull regardless of size or rarity (the rarity-specific
+// payoff is GachaCelebration below, after the cards are actually revealed).
+// Purely a timed pass-through: nothing here is interactive, it just calls
+// onDone once the animation's had time to play.
+function GachaSummonOverlay({ onDone }: { onDone: () => void }) {
+  useEffect(() => {
+    const timer = setTimeout(onDone, SUMMON_ANIMATION_MS);
+    return () => clearTimeout(timer);
+  }, [onDone]);
+
+  return (
+    <div className="gacha-summon-backdrop">
+      <div className="gacha-summon-grow">
+        <div className="gacha-summon-circle" />
+        <div className="gacha-summon-circle gacha-summon-circle-outer" />
+      </div>
+      <div className="gacha-summon-flash" />
+    </div>
+  );
+}
+
 // Full card-by-card reveal sequence shown before a pull's result text/
 // celebration flash - each result starts face-down and flips over on its own
 // stagger, tap-anywhere/skip button instantly reveals the rest, and the
@@ -136,6 +184,7 @@ function GachaRevealOverlay({ results, onDone }: { results: GachaPullResult[]; o
               <div className="gacha-reveal-card-inner">
                 <div className="gacha-reveal-card-back">?</div>
                 <div className="gacha-reveal-card-front" style={{ borderColor: accent, boxShadow: `0 0 10px ${accent}` }}>
+                  <SpriteAvatar src={gachaResultAvatarSrc(result)} size={32} />
                   <div className={`gacha-reveal-card-label rarity-${result.rarity}`}>{formatRosterLabel(result.rarity, result.id)}</div>
                   {result.isNewUnlock && <div className="gacha-reveal-card-new">{t('gacha.multiResultNew')}</div>}
                 </div>
@@ -331,6 +380,11 @@ function GachaPanel() {
   const exchangeDiamondsForGold = useGameStore((state) => state.exchangeDiamondsForGold);
   const [lastResult, setLastResult] = useState<string | null>(null);
   const [celebration, setCelebration] = useState<{ rarity: GachaRarity; key: number } | null>(null);
+  // Holds the raw pull results while GachaSummonOverlay's process animation
+  // plays out - handleSummonDone hands them off to pendingReveal once that
+  // finishes, so the card-flip sequence never starts before the summon
+  // animation has had its moment.
+  const [summonResults, setSummonResults] = useState<GachaPullResult[] | null>(null);
   // Holds the raw pull results while GachaRevealOverlay plays out its
   // card-by-card flip sequence - lastResult/celebration only get set once
   // that finishes (see handleRevealDone), so the flash/text never appear
@@ -350,7 +404,15 @@ function GachaPanel() {
   }, [celebration]);
 
   function handlePullResults(results: GachaPullResult[]): void {
-    setPendingReveal(results);
+    setSummonResults(results);
+  }
+
+  function handleSummonDone(): void {
+    if (!summonResults) {
+      return;
+    }
+    setPendingReveal(summonResults);
+    setSummonResults(null);
   }
 
   function handleRevealDone(): void {
@@ -369,6 +431,8 @@ function GachaPanel() {
   return (
     <div className="card">
       <div className="card-title">{t('gacha.title')}</div>
+
+      {summonResults && <GachaSummonOverlay onDone={handleSummonDone} />}
 
       {pendingReveal && <GachaRevealOverlay results={pendingReveal} onDone={handleRevealDone} />}
 

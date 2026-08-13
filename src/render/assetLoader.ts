@@ -202,12 +202,6 @@ export function getHeroEvolvedSpriteSrc(evolutionBranchId: string, state: HeroSp
   return `sprites/heroes/evolved/${evolutionBranchId.replace(/-/g, '_')}_${state}.png`;
 }
 
-// Single tower sprite - no per-castleType variants yet, same "one file, not
-// one per instance" reasoning as the others above.
-export function getTowerSpriteSrc(): string {
-  return `sprites/towers/castle.png`;
-}
-
 // Fire-and-forget, same as getImage itself - just kicks off a load for every
 // src up front (once, from BattleScreen's mount effect via
 // CanvasRenderer.preloadBattleSprites) so the handful of sheets a fresh

@@ -6,10 +6,14 @@ import type { GachaRarity } from '../data/gachaConfig';
 import type { UpgradeableStat } from '../data/heroConfig';
 import { enemyArchetypes, type EnemyArchetypeId } from '../data/enemyArchetypes';
 import { enemyLoreConfig } from '../data/enemyLoreConfig';
+import { MAX_STAR_LEVEL } from '../data/gachaConfig';
 import { getConditionStatuses } from '../engine/systems/UnlockSystem';
 import { formatUnlockCondition } from './formatUnlockCondition';
 import { t } from '../locales/i18n';
 import { useGameStore } from '../store/useGameStore';
+import SpriteAvatar from './SpriteAvatar';
+import { getHeroSpriteSrc, getPetSpriteSrc, getEnemySpriteSrc } from '../render/assetLoader';
+import { ENEMY_SPRITE_TYPE } from '../render/CanvasRenderer';
 
 const ENEMY_ARCHETYPE_IDS = Object.keys(enemyArchetypes) as EnemyArchetypeId[];
 type CodexTab = 'hero' | 'pet' | 'enemy';
@@ -65,6 +69,8 @@ function CodexPanel() {
   const heroes = useGameStore((state) => state.heroes);
   const unlockedHeroIds = useGameStore((state) => state.unlockedHeroIds);
   const unlockedPetIds = useGameStore((state) => state.unlockedPetIds);
+  const heroStars = useGameStore((state) => state.heroStars);
+  const petStars = useGameStore((state) => state.petStars);
   const goldSpentTotal = useGameStore((state) => state.goldSpentTotal);
   const ascensionLevel = useGameStore((state) => state.ascensionLevel);
   const unlockHeroByCondition = useGameStore((state) => state.unlockHeroByCondition);
@@ -79,12 +85,16 @@ function CodexPanel() {
 
     if (isUnlocked) {
       return (
-        <div key={definition.id} className={`item-card ${RARITY_BORDER_CLASS[definition.rarity]}`}>
-          <span className={RARITY_CLASS[definition.rarity]}>
-            {rarityLabel}
-            {definition.id.split('-')[1]}
-          </span>
-          <span className="text-muted"> ({t('codex.obtained')})</span>
+        <div key={definition.id} className={`item-card ${RARITY_BORDER_CLASS[definition.rarity]}`} style={{ display: 'flex', gap: 8 }}>
+          <SpriteAvatar src={getHeroSpriteSrc(definition.class)} size={36} />
+          <div>
+            <span className={RARITY_CLASS[definition.rarity]}>
+              {rarityLabel}
+              {definition.id.split('-')[1]}
+            </span>
+            <span className="text-muted"> ({t('codex.obtained')})</span>
+            <div className="text-faint">★{heroStars[definition.id] ?? 0}/{MAX_STAR_LEVEL}</div>
+          </div>
         </div>
       );
     }
@@ -135,14 +145,18 @@ function CodexPanel() {
 
     if (isUnlocked) {
       return (
-        <div key={definition.id} className={`item-card ${RARITY_BORDER_CLASS[definition.rarity]}`}>
-          <span className={RARITY_CLASS[definition.rarity]}>
-            {rarityLabel}
-            {definition.id.split('-')[1]}
-          </span>
-          <span className="text-muted"> ({t('codex.obtained')})</span>
-          <div className="item-detail">
-            {t('petRoster.passiveBonus')}: {bonusLabel}
+        <div key={definition.id} className={`item-card ${RARITY_BORDER_CLASS[definition.rarity]}`} style={{ display: 'flex', gap: 8 }}>
+          <SpriteAvatar src={getPetSpriteSrc(definition.spriteId ?? definition.id)} size={36} />
+          <div>
+            <span className={RARITY_CLASS[definition.rarity]}>
+              {rarityLabel}
+              {definition.id.split('-')[1]}
+            </span>
+            <span className="text-muted"> ({t('codex.obtained')})</span>
+            <div className="text-faint">★{petStars[definition.id] ?? 0}/{MAX_STAR_LEVEL}</div>
+            <div className="item-detail">
+              {t('petRoster.passiveBonus')}: {bonusLabel}
+            </div>
           </div>
         </div>
       );
@@ -197,9 +211,12 @@ function CodexPanel() {
   function renderEnemyEntry(archetypeId: EnemyArchetypeId) {
     const lore = enemyLoreConfig[archetypeId];
     return (
-      <div key={archetypeId} className="item-card">
-        <span>{t(lore.nameKey)}</span>
-        <div className="item-detail">{t(lore.descriptionKey)}</div>
+      <div key={archetypeId} className="item-card" style={{ display: 'flex', gap: 8 }}>
+        <SpriteAvatar src={getEnemySpriteSrc(ENEMY_SPRITE_TYPE[archetypeId])} size={36} />
+        <div>
+          <span>{t(lore.nameKey)}</span>
+          <div className="item-detail">{t(lore.descriptionKey)}</div>
+        </div>
       </div>
     );
   }

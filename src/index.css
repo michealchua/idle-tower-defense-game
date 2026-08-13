@@ -40,6 +40,40 @@
   --rarity-rainbow-3: #69f0ae;
   --rarity-rainbow-4: #40c4ff;
   --rarity-rainbow-5: #b388ff;
+
+  /* Spacing/type/shadow/z-index scale - the design-token gap flagged in the
+     five-part revamp's Phase 5 (colors/radii above already had tokens,
+     these didn't). Existing rules keep their hand-written px values for now
+     (a full retrofit is its own separate pass, not bundled into this one) -
+     these exist so every NEW rule from here on reaches for a token instead
+     of another one-off literal, and so the values below have exactly one
+     place to tune later.
+     Spacing follows a 4px base step - matches the increments already used
+     ad hoc throughout the file (4/6/8/10/12/16px). */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --font-size-xs: 10px;
+  --font-size-sm: 12px;
+  --font-size-md: 14px;
+  --font-size-lg: 18px;
+  --font-size-xl: 24px;
+  --shadow-modal: 0 4px 20px rgba(0, 0, 0, 0.5);
+  --shadow-glow-sm: 0 0 10px rgba(0, 0, 0, 0.35);
+  /* z-index scale - every current full-screen-overlay z-index (verified
+     against the file as of this pass) collapses onto one of these five
+     tiers; .debug-panel/.debug-toggle (1000/1001) are deliberately excluded
+     - a dev-only escape hatch meant to sit above literally everything else,
+     not part of the app's own layering system. */
+  --z-hud: 20;
+  --z-dropdown: 30;
+  --z-modal: 50;
+  --z-tutorial: 55;
+  --z-celebration: 60;
+  --z-overlay: 65;
 }
 
 * {
@@ -800,7 +834,7 @@ select {
 .tutorial-layer {
   position: fixed;
   inset: 0;
-  z-index: 55;
+  z-index: var(--z-tutorial);
   pointer-events: none;
 }
 
@@ -832,7 +866,7 @@ select {
   background: var(--surface);
   border: 1px solid var(--accent-strong);
   border-radius: var(--radius-sm);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-modal);
   pointer-events: auto;
 }
 
@@ -902,7 +936,7 @@ select {
 .gacha-reveal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 65;
+  z-index: var(--z-overlay);
   background: rgba(5, 5, 8, 0.88);
   display: flex;
   flex-direction: column;
@@ -994,7 +1028,7 @@ select {
 .gacha-celebration {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: var(--z-celebration);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1044,6 +1078,86 @@ select {
   text-shadow: 0 0 30px rgba(255, 255, 255, 0.5);
 }
 
+/* Rarity-exclusive "大招式" flourish layered on top of the plain radial glow
+   above - one extra pseudo-element pair per tier so gold/red/rainbow each
+   read as a genuinely different show, not just a re-tinted copy of the same
+   effect. ::before paints first (behind .gacha-celebration-label, which
+   comes after it in DOM order) so it never obscures the rarity text;
+   ::after paints last (on top) but stays low-opacity/blurred so it reads as
+   an overlay bloom rather than covering the label. Both inherit
+   pointer-events:none from .gacha-celebration. */
+.gacha-celebration-gold::before,
+.gacha-celebration-red::before,
+.gacha-celebration-rainbow::before {
+  content: '';
+  position: absolute;
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+}
+
+/* Gold: a light beam slamming down from above plus one expanding burst
+   ring - "light beam" per the plan's 金卡是光柱下砸. */
+.gacha-celebration-gold::before {
+  background: radial-gradient(circle, rgba(255, 214, 128, 0.55), transparent 60%);
+  animation: gacha-burst-ring 1.2s ease-out forwards;
+}
+.gacha-celebration-gold::after {
+  content: '';
+  position: absolute;
+  top: -10%;
+  width: 60px;
+  height: 140%;
+  background: linear-gradient(180deg, rgba(255, 214, 128, 0.9), rgba(255, 214, 128, 0));
+  animation: gacha-light-beam 1s ease-out forwards;
+  filter: blur(2px);
+}
+
+/* Red: an expanding flame-colored ring burst - "flame spread" per the
+   plan's 红卡是烈焰扩散. */
+.gacha-celebration-red::before {
+  background: radial-gradient(circle, rgba(255, 110, 64, 0.55), transparent 60%);
+  animation: gacha-burst-ring 1.1s ease-out forwards;
+}
+.gacha-celebration-red::after {
+  content: '';
+  position: absolute;
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 80, 50, 0.7);
+  animation: gacha-flame-ring 1.3s ease-out forwards;
+}
+
+/* Rainbow: a spinning aurora disc plus counter-spinning starburst spokes -
+   "aurora/starfield" per the plan's 彩虹是极光/星空展开. Reuses the same
+   5-stop --rarity-rainbow-* gradient the label/CodexPanel/HeroPanel already
+   share (see index.css's :root), not a separately tuned palette. */
+.gacha-celebration-rainbow::before {
+  background: conic-gradient(
+    from 0deg,
+    var(--rarity-rainbow-1),
+    var(--rarity-rainbow-2),
+    var(--rarity-rainbow-3),
+    var(--rarity-rainbow-4),
+    var(--rarity-rainbow-5),
+    var(--rarity-rainbow-1)
+  );
+  opacity: 0.35;
+  filter: blur(6px);
+  animation: gacha-aurora-spin 2.4s linear infinite, gacha-burst-ring 1.4s ease-out forwards;
+}
+.gacha-celebration-rainbow::after {
+  content: '';
+  position: absolute;
+  width: 340px;
+  height: 340px;
+  border-radius: 50%;
+  background: repeating-conic-gradient(rgba(255, 255, 255, 0.5) 0deg 4deg, transparent 4deg 20deg);
+  opacity: 0.5;
+  animation: gacha-aurora-spin 3.6s linear infinite reverse, gacha-celebration-fade 1.8s ease-out forwards;
+}
+
 @keyframes gacha-celebration-pop {
   0% {
     transform: scale(0.4);
@@ -1065,6 +1179,160 @@ select {
     opacity: 1;
   }
   100% {
+    opacity: 0;
+  }
+}
+
+@keyframes gacha-burst-ring {
+  0% {
+    transform: scale(0.2);
+    opacity: 0;
+  }
+  40% {
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.4);
+    opacity: 0;
+  }
+}
+
+@keyframes gacha-light-beam {
+  0% {
+    transform: scaleY(0);
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    transform: scaleY(1);
+    opacity: 0;
+  }
+}
+
+@keyframes gacha-flame-ring {
+  0% {
+    transform: scale(0.3);
+    opacity: 0.9;
+    border-width: 6px;
+  }
+  100% {
+    transform: scale(2.2);
+    opacity: 0;
+    border-width: 1px;
+  }
+}
+
+@keyframes gacha-aurora-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Pre-reveal "开蛋/召唤阵" process animation (GachaSummonOverlay) - plays
+   for ~1.1s after a pull button is pressed, before GachaRevealOverlay's
+   card flips start, so a pull reads as an event happening rather than an
+   instant swap of button-press for result. Not shown per-card (unlike the
+   reveal grid) - one shared circle regardless of pull size, since x100
+   already budgets its own reveal time via REVEAL_TOTAL_BUDGET_MS and
+   doesn't need this stacked on top per result. */
+.gacha-summon-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(6, 8, 14, 0.55);
+  animation: modal-fade-in 0.15s ease-out;
+  pointer-events: none;
+}
+
+.gacha-summon-grow {
+  display: grid;
+  place-items: center;
+  animation: gacha-summon-grow 1.1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.gacha-summon-circle {
+  grid-area: 1 / 1;
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  border: 3px solid transparent;
+  border-top-color: var(--accent-strong);
+  border-right-color: var(--accent-strong);
+  animation: gacha-summon-spin 0.9s linear infinite;
+}
+
+.gacha-summon-circle-outer {
+  width: 260px;
+  height: 260px;
+  border-top-color: var(--rarity-purple);
+  border-left-color: var(--rarity-purple);
+  animation: gacha-summon-spin-reverse 1.4s linear infinite;
+}
+
+.gacha-summon-flash {
+  position: absolute;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.9), transparent 70%);
+  animation: gacha-summon-flash 1.1s ease-in forwards;
+}
+
+@keyframes gacha-summon-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes gacha-summon-spin-reverse {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(-360deg);
+  }
+}
+
+@keyframes gacha-summon-grow {
+  0% {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.15);
+    opacity: 0;
+  }
+}
+
+@keyframes gacha-summon-flash {
+  0%,
+  70% {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+  85% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(2.5);
     opacity: 0;
   }
 }
@@ -1122,6 +1390,35 @@ select {
   font-size: 10px;
   color: var(--text-muted);
   margin-top: 2px;
+}
+
+/* Square thumbnail for SpriteAvatar.tsx - reuses the same pixel-art battle
+   sprites CanvasRenderer draws on the field, cropped to a square instead of
+   drawn at native aspect ratio. image-rendering: pixelated keeps the crop
+   crisp at these small sizes, matching CanvasRenderer's own
+   imageSmoothingEnabled=false convention for pixel-art sprites. */
+.sprite-avatar {
+  position: relative;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+}
+
+.sprite-avatar canvas {
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+
+.sprite-avatar-fallback {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-muted);
 }
 
 .status-dot {

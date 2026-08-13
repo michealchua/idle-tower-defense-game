@@ -4,8 +4,9 @@ import { renderScene, drawBackground, drawVignette, drawDeploySlots, drawSwapHig
 import { t } from '../locales/i18n';
 import { getNormalWaveEnemyCount } from '../data/waveConfig';
 import { getBiomeForChapter, bossMusicTracks } from '../data/biomeConfig';
-import { layoutHeroPositions } from '../data/mapConfig';
+import { layoutSlotPositions, mapConfig } from '../data/mapConfig';
 import { getMaxDeployedHeroes } from '../data/squadConfig';
+import type { Position } from '../engine/types';
 import { formatBigNumber } from '../utils/scaling';
 import { audioManager } from '../audio/AudioManager';
 import { speedTiers } from '../data/speedConfig';
@@ -21,10 +22,15 @@ const CANVAS_WIDTH = 400;
 const CANVAS_HEIGHT = 300;
 
 // How far (in logical canvas units) a pointer can be from a hero's center
-// and still grab/target it - wider than the drawn radius for an easier
-// grab. Pets have no canvas drag interaction (see PetSystem.ts - every
-// owned pet is always active, nothing to deploy/swap).
+// and still grab it - wider than the drawn radius for an easier grab. Pets
+// have no canvas drag interaction (see PetSystem.ts - every owned pet is
+// always active, nothing to deploy/reposition).
 const HERO_HIT_RADIUS = HERO_RADIUS * 1.4;
+
+// How far a pointer can be from a grid cell's center and still target it for
+// drop - half the smaller of the two grid spacings, so adjacent cells' hit
+// areas don't overlap.
+const SLOT_HIT_RADIUS = Math.min(mapConfig.heroColSpacing, mapConfig.heroRowSpacing) / 2;
 
 interface CanvasDragState {
   kind: 'hero';
@@ -33,11 +39,13 @@ interface CanvasDragState {
   // pixels - lets the draw effect place the ghost/highlights directly.
   pointerX: number;
   pointerY: number;
-  hoverTargetId: string | null;
+  // Index into the fixed slot grid (mapConfig.layoutSlotPositions), not a
+  // hero id - dropping now targets a specific cell (empty or occupied)
+  // instead of only ever another hero, see HeroSystem.moveHeroToSlot.
+  hoverSlotIndex: number | null;
 }
 
-// Nearest hero within radius, excluding the one currently being dragged so
-// you can't "swap" a hero with itself.
+// Nearest hero within radius, excluding the one currently being dragged.
 function findNearestUnit<T extends { id: string; position: { x: number; y: number } }>(
   units: T[],
   point: { x: number; y: number },
@@ -59,6 +67,21 @@ function findNearestUnit<T extends { id: string; position: { x: number; y: numbe
   return closest;
 }
 
+// Nearest grid cell within radius - used to resolve a canvas-native
+// hero-reposition drag's drop target, see CanvasDragState.hoverSlotIndex.
+function findNearestSlotIndex(positions: Position[], point: Position, radius: number): number | null {
+  let closest: number | null = null;
+  let closestDistance = radius;
+  positions.forEach((position, index) => {
+    const distance = Math.hypot(position.x - point.x, position.y - point.y);
+    if (distance <= closestDistance) {
+      closest = index;
+      closestDistance = distance;
+    }
+  });
+  return closest;
+}
+
 // stageRef is owned by App.tsx (not created here) - App also hands the same
 // ref to HeroPanel (rendered inside its centered modal, a sibling of this
 // component, not a child) so hero-card drags can hit-test against this
@@ -70,7 +93,6 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
   const heroes = useGameStore((state) => state.deployedHeroes);
   const pets = useGameStore((state) => state.pets);
   const enemies = useGameStore((state) => state.enemies);
-  const base = useGameStore((state) => state.base);
   const visualEffects = useGameStore((state) => state.visualEffects);
   const screenShakeIntensity = useGameStore((state) => state.screenShakeIntensity);
   const isGameOver = useGameStore((state) => state.isGameOver);
@@ -81,13 +103,23 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
   const speedMultiplier = useGameStore((state) => state.speedMultiplier);
   const setSpeedMultiplier = useGameStore((state) => state.setSpeedMultiplier);
   const isStealthMode = useGameStore((state) => state.windowMode === 'stealth');
-  const swapDeployedHeroes = useGameStore((state) => state.swapDeployedHeroes);
-  // Dragging an already-deployed hero directly on the canvas to swap its
-  // slot with another - separate from dragPreviewKind, which is for
-  // dragging a fresh unit in from the roster panel.
+  const moveHeroToSlot = useGameStore((state) => state.moveHeroToSlot);
+  // Dragging an already-deployed hero directly on the canvas to move it to
+  // any grid cell - separate from dragPreviewKind, which is for dragging a
+  // fresh unit in from the roster panel.
   const [canvasDrag, setCanvasDrag] = useState<CanvasDragState | null>(null);
 
   const biome = getBiomeForChapter(wave.chapter);
+  const globalWave = getGlobalWaveNumber(wave);
+  // Fixed grid this wave's squad cap actually has (mapConfig.
+  // layoutSlotPositions) - shared by the roster-panel drag-in preview and
+  // the canvas-native reposition drag below, so both draw/hit-test against
+  // the exact same cells.
+  const maxDeployedHeroes = getMaxDeployedHeroes(globalWave);
+  const slotPositions = layoutSlotPositions(maxDeployedHeroes);
+  const occupiedSlotIndices = new Set(
+    heroes.map((hero) => hero.deployedSlotIndex).filter((index): index is number => index !== null),
+  );
 
   // Converts a pointer event's screen coordinates into the logical
   // CANVAS_WIDTH x CANVAS_HEIGHT space entity positions live in - inverts
@@ -127,7 +159,7 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
       // Some pointer sessions reject capture - degrade gracefully, same as
       // useDeploySlotDrag's identical guard.
     }
-    setCanvasDrag({ kind: 'hero', id: hero.id, pointerX: point.x, pointerY: point.y, hoverTargetId: null });
+    setCanvasDrag({ kind: 'hero', id: hero.id, pointerX: point.x, pointerY: point.y, hoverSlotIndex: null });
   }
 
   function handleCanvasPointerMove(event: ReactPointerEvent<HTMLCanvasElement>): void {
@@ -138,13 +170,13 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
     if (!point) {
       return;
     }
-    const target = findNearestUnit(heroes, point, HERO_HIT_RADIUS, canvasDrag.id);
-    setCanvasDrag((prev) => (prev ? { ...prev, pointerX: point.x, pointerY: point.y, hoverTargetId: target?.id ?? null } : prev));
+    const hoverSlotIndex = findNearestSlotIndex(slotPositions, point, SLOT_HIT_RADIUS);
+    setCanvasDrag((prev) => (prev ? { ...prev, pointerX: point.x, pointerY: point.y, hoverSlotIndex } : prev));
   }
 
   function handleCanvasPointerUp(): void {
-    if (canvasDrag?.hoverTargetId) {
-      swapDeployedHeroes(canvasDrag.id, canvasDrag.hoverTargetId);
+    if (canvasDrag && canvasDrag.hoverSlotIndex !== null) {
+      moveHeroToSlot(canvasDrag.id, canvasDrag.hoverSlotIndex);
     }
     setCanvasDrag(null);
   }
@@ -245,10 +277,14 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
     const offsetY = (pixelHeight - CANVAS_HEIGHT * scale) / 2;
     ctx.setTransform(scale, 0, 0, scale, offsetX, offsetY);
 
-    renderScene(ctx, heroes, pets, enemies, base, visualEffects, screenShakeIntensity);
+    renderScene(ctx, heroes, pets, enemies, visualEffects, screenShakeIntensity);
 
-    if (dragPreviewKind === 'hero') {
-      drawDeploySlots(ctx, layoutHeroPositions(getMaxDeployedHeroes(getGlobalWaveNumber(wave))), heroes.length);
+    // Grid shown for both drag flavors: dragging a fresh unit in from the
+    // roster panel (dragPreviewKind), or repositioning an already-deployed
+    // one on the canvas itself (canvasDrag) - same cells either way, see
+    // slotPositions/occupiedSlotIndices above.
+    if (dragPreviewKind === 'hero' || canvasDrag) {
+      drawDeploySlots(ctx, slotPositions, occupiedSlotIndices);
     }
 
     if (canvasDrag) {
@@ -256,17 +292,17 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
       if (draggedUnit) {
         drawSwapHighlight(ctx, draggedUnit.position, HERO_RADIUS, 'rgba(255, 235, 59, 0.9)');
       }
-      if (canvasDrag.hoverTargetId) {
-        const targetUnit = heroes.find((unit) => unit.id === canvasDrag.hoverTargetId);
-        if (targetUnit) {
-          drawSwapHighlight(ctx, targetUnit.position, HERO_RADIUS, 'rgba(76, 255, 133, 0.95)');
-        }
+      if (canvasDrag.hoverSlotIndex !== null) {
+        // Same ring color whether the target cell is empty (plain move) or
+        // occupied (swap) - both are valid, immediate drop outcomes, see
+        // HeroSystem.moveHeroToSlot.
+        drawSwapHighlight(ctx, slotPositions[canvasDrag.hoverSlotIndex], HERO_RADIUS, 'rgba(76, 255, 133, 0.95)');
       }
       drawSwapGhost(ctx, canvasDrag.kind, canvasDrag.pointerX, canvasDrag.pointerY);
     }
-  }, [heroes, pets, enemies, base, visualEffects, screenShakeIntensity, displaySize, biome, dragPreviewKind, wave, canvasDrag]);
+  }, [heroes, pets, enemies, visualEffects, screenShakeIntensity, displaySize, biome, dragPreviewKind, wave, canvasDrag, slotPositions, occupiedSlotIndices]);
 
-  const hpRatio = base.maxHp > 0 ? Math.max(0, Math.min(1, base.currentHp / base.maxHp)) : 0;
+  const aliveHeroCount = heroes.filter((hero) => !hero.isDowned).length;
 
   // Derived, not stored - WaveState only tracks the spawn countdown, so
   // "killed so far" is total minus what's left to spawn minus what's still
@@ -284,7 +320,6 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
   // uses it - narrowing a property access like `wave.bossKind` doesn't
   // persist across a function boundary the way narrowing a local const does.
   const bossKind = wave.isBossWave ? wave.bossKind : undefined;
-  const globalWave = getGlobalWaveNumber(wave);
 
   return (
     <div className="stage-column">
@@ -328,10 +363,13 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
             </span>
           </div>
           <div className="hud-label" style={{ marginTop: 4 }}>
-            {t('base.hp')} {formatBigNumber(base.currentHp)}/{formatBigNumber(base.maxHp)}
+            {t('battle.aliveHeroes')} {aliveHeroCount}/{heroes.length}
           </div>
           <div className="bar-track">
-            <div className="bar-fill bar-fill-hp" style={{ width: `${hpRatio * 100}%` }} />
+            <div
+              className="bar-fill bar-fill-hp"
+              style={{ width: `${heroes.length > 0 ? (aliveHeroCount / heroes.length) * 100 : 0}%` }}
+            />
           </div>
           <div className="speed-control-row">
             {speedTiers.map((tier) => {

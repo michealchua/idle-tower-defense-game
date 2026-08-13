@@ -94,6 +94,7 @@ const zhCN = {
     speedLocked: '需要波次',
     stealthModeOn: '摸鱼模式',
     stealthModeOff: '退出摸鱼模式',
+    aliveHeroes: '存活英雄',
     fullscreenOn: '全屏',
     fullscreenOff: '退出全屏',
   },
@@ -141,9 +142,6 @@ const zhCN = {
     evolveCancel: '取消',
     evolutionLocked: '等级达到以下数值可进化',
     evolved: '已进化',
-  },
-  base: {
-    hp: '基地生命值',
   },
   bond: {
     warrior: '战士',
@@ -339,7 +337,7 @@ const zhCN = {
     maxHp: '生命值加成',
     goldGain: '金币获取',
     expGain: '经验获取',
-    damageReduction: '基地减伤',
+    damageReduction: '英雄受伤减免',
     criticalChance: '暴击率加成',
   },
   gacha: {
@@ -401,7 +399,7 @@ const zhCN = {
     expGain: '经验获取',
     attackDamageBonus: '全军攻击力加成',
     maxHpBonus: '生命值加成',
-    damageReduction: '基地减伤',
+    damageReduction: '英雄受伤减免',
     criticalChanceBonus: '暴击率加成',
   },
 };

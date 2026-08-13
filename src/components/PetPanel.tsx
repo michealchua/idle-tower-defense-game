@@ -6,6 +6,15 @@ import type { PetState } from '../engine/types';
 import { t } from '../locales/i18n';
 import { useGameStore } from '../store/useGameStore';
 import { IconPaw } from './icons';
+import SpriteAvatar from './SpriteAvatar';
+import { getPetSpriteSrc } from '../render/assetLoader';
+
+// Pets already have a real per-pet spriteId (unlike heroes, which only key
+// off class) - see petRosterConfig's doc comment - so avatars here are a
+// true one-to-one match with the owned pet, not a shared class silhouette.
+function petAvatarSrc(definition: PetDefinition): string {
+  return getPetSpriteSrc(definition.spriteId ?? definition.id);
+}
 
 const STAT_LABEL_KEYS: Record<UpgradeableStat, string> = {
   attackDamage: 'hero.attackDamage',
@@ -97,8 +106,11 @@ function PetDetail({ definition, gold, materials }: { definition: PetDefinition;
 
   return (
     <div className={`detail-card ${RARITY_BORDER_CLASS[definition.rarity]}`}>
-      <div className={`detail-title ${RARITY_CLASS[definition.rarity]}`}>
-        <PET_ICON /> {petLabel(definition)} <span className="text-faint">★{currentStar}/{MAX_STAR_LEVEL}</span>
+      <div className={`detail-title ${RARITY_CLASS[definition.rarity]}`} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <SpriteAvatar src={petAvatarSrc(definition)} size={48} fallback={<PET_ICON />} />
+        <span>
+          {petLabel(definition)} <span className="text-faint">★{currentStar}/{MAX_STAR_LEVEL}</span>
+        </span>
       </div>
       <div className="item-detail">{t('petRoster.active')}</div>
 
@@ -177,7 +189,12 @@ function PetPanel() {
                   onClick={() => setSelectedPetId(definition.id)}
                 >
                   <div className={`mini-card-name ${RARITY_CLASS[definition.rarity]}`}>
-                    <PET_ICON /> {petLabel(definition)}
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <SpriteAvatar src={petAvatarSrc(definition)} size={28} fallback={<PET_ICON />} />
+                      <span>
+                        <PET_ICON /> {petLabel(definition)}
+                      </span>
+                    </span>
                   </div>
                   <div className="mini-card-sub">★{petStars[definition.id] ?? 0}/{MAX_STAR_LEVEL}</div>
                   {corePassive && (
