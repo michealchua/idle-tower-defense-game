@@ -42,20 +42,24 @@ export function layoutHeroPositions(count: number): Position[] {
   });
 }
 
-// Slot grid sized to the squad's current CAP (squadConfig.getMaxDeployedHeroes,
-// wave-gated, up to maxDeployedHeroesCap=9) rather than to how many heroes
-// happen to be deployed right now - unlike layoutHeroPositions(count) above,
-// whose row count (and therefore every cell's y) shifts on every single
-// deploy/undeploy. Slot index is now persistent per hero (HeroState.
-// deployedSlotIndex, see HeroSystem.relayoutDeployedHeroes) rather than
-// derived from array order, so a hero's cell must stay fixed across ordinary
-// squad changes for the "drag to any of the 9 cells" gesture (BattleScreen's
-// canvas-native drag) to feel stable. The grid only ever grows (and
-// re-centers) at the fixed wave milestones squadSlotUnlockWaves gates the cap
-// on - rare enough that the occasional shift there is an acceptable
-// trade-off against shifting on every deploy/undeploy instead.
-export function layoutSlotPositions(cap: number): Position[] {
-  return layoutHeroPositions(Math.min(cap, maxDeployedHeroesCap));
+// Always the full 9-cell grid (maxDeployedHeroesCap), regardless of the
+// squad's current wave-gated cap (squadConfig.getMaxDeployedHeroes) or how
+// many heroes are actually deployed - unlike layoutHeroPositions(count)
+// above, whose row count (and therefore every cell's y) shifts on every
+// single deploy/undeploy/cap-growth. Slot index is persistent per hero
+// (HeroState.deployedSlotIndex, see HeroSystem.relayoutDeployedHeroes)
+// rather than derived from array order, so a hero's cell must stay fixed
+// across squad changes for the "drag to any of the 9 cells" gesture
+// (BattleScreen's canvas-native drag) to feel stable - and the player needs
+// to see the real, complete 3x3 shape (including cells locked behind a
+// later squadSlotUnlockWaves milestone) to understand what they're dragging
+// into, not a partial grid that only shows as many cells as they've
+// currently unlocked. BattleScreen is responsible for drawing cells at/
+// beyond the current cap as locked and rejecting drops onto them (see
+// HeroSystem.moveHeroToSlot's own cap check) - this function only ever
+// hands back geometry, never gates by unlock state.
+export function layoutSlotPositions(): Position[] {
+  return layoutHeroPositions(maxDeployedHeroesCap);
 }
 
 // Pets sit behind the hero GRID's actual left edge (toward the base, away

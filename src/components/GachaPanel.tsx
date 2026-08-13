@@ -143,7 +143,18 @@ function GachaSummonOverlay({ onDone }: { onDone: () => void }) {
   useEffect(() => {
     const timer = setTimeout(onDone, SUMMON_ANIMATION_MS);
     return () => clearTimeout(timer);
-  }, [onDone]);
+    // Deliberately mount-once, not [onDone] - GachaPanel re-renders ~10x/sec
+    // (it selects state.wave, which snapshotGameState spreads into a fresh
+    // object every game tick regardless of whether wave data actually
+    // changed), which redefines the handleSummonDone closure passed in as
+    // onDone on every single one of those renders. Depending on it here
+    // would tear down and reschedule this setTimeout before it ever had a
+    // chance to fire - the animation would play its CSS loop forever and
+    // never actually hand off to the reveal overlay. onDone only needs to
+    // fire once, whichever reference happened to be current when this
+    // component mounted.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="gacha-summon-backdrop">

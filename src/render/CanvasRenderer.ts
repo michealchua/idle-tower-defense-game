@@ -1190,16 +1190,33 @@ export function drawVignette(ctx: CanvasRenderingContext2D, canvasWidth: number,
   ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 }
 
+type DeploySlotState = 'empty' | 'occupied' | 'locked';
+
 // Drawn on top of everything else, only while a roster card is actively
 // being dragged (BattleScreen decides that, this just draws whatever slot
-// list it's handed). occupiedCount slots are dimmed, the rest pulse-glow to
-// read as "drop here".
-function drawDeploySlot(ctx: CanvasRenderingContext2D, position: Position, occupied: boolean): void {
+// list it's handed). Occupied cells are dimmed, empty cells pulse-glow to
+// read as "drop here", and locked cells (beyond the squad's current
+// wave-gated cap - see mapConfig.layoutSlotPositions' doc comment) render as
+// a flat hatched grey so the full 3x3 shape is always visible, but the
+// player can see at a glance which cells aren't usable yet rather than
+// those cells simply not existing on screen.
+function drawDeploySlot(ctx: CanvasRenderingContext2D, position: Position, state: DeploySlotState): void {
   const half = DEPLOY_SLOT_SIZE / 2;
   const x = position.x - half;
   const y = position.y - half;
 
-  if (occupied) {
+  if (state === 'locked') {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+    ctx.fillRect(x, y, DEPLOY_SLOT_SIZE, DEPLOY_SLOT_SIZE);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    ctx.strokeRect(x, y, DEPLOY_SLOT_SIZE, DEPLOY_SLOT_SIZE);
+    ctx.setLineDash([]);
+    return;
+  }
+
+  if (state === 'occupied') {
     ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
     ctx.fillRect(x, y, DEPLOY_SLOT_SIZE, DEPLOY_SLOT_SIZE);
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
@@ -1222,9 +1239,19 @@ function drawDeploySlot(ctx: CanvasRenderingContext2D, position: Position, occup
 // addressed by persistent HeroState.deployedSlotIndex now (see mapConfig.
 // layoutSlotPositions' doc comment), so "the first N slots are occupied"
 // (a simple count) no longer holds once a hero can occupy any specific cell.
-export function drawDeploySlots(ctx: CanvasRenderingContext2D, slots: Position[], occupiedSlotIndices: Set<number>): void {
+// unlockedCount is separate from that - it's the squad's current wave-gated
+// cap (squadConfig.getMaxDeployedHeroes), not an occupancy count: cells at/
+// after this index are always locked regardless of occupiedSlotIndices
+// (nothing can occupy a cell that isn't unlocked yet).
+export function drawDeploySlots(
+  ctx: CanvasRenderingContext2D,
+  slots: Position[],
+  occupiedSlotIndices: Set<number>,
+  unlockedCount: number,
+): void {
   slots.forEach((slot, index) => {
-    drawDeploySlot(ctx, slot, occupiedSlotIndices.has(index));
+    const state: DeploySlotState = index >= unlockedCount ? 'locked' : occupiedSlotIndices.has(index) ? 'occupied' : 'empty';
+    drawDeploySlot(ctx, slot, state);
   });
 }
 

@@ -65,6 +65,12 @@ function formatBonusValue(stat: UpgradeableStat, value: number): string {
   return `+${value}`;
 }
 
+// Roster ids are `<rarity>-<n>` - used as the fallback label for anything
+// not yet unlocked (no HeroState instance exists to have a real name).
+function rarityNumberLabel(rarity: GachaRarity, id: string): string {
+  return `${t(RARITY_LABEL_KEYS[rarity])}${id.split('-')[1]}`;
+}
+
 function CodexPanel() {
   const heroes = useGameStore((state) => state.heroes);
   const unlockedHeroIds = useGameStore((state) => state.unlockedHeroIds);
@@ -76,24 +82,55 @@ function CodexPanel() {
   const unlockHeroByCondition = useGameStore((state) => state.unlockHeroByCondition);
   const unlockPetByCondition = useGameStore((state) => state.unlockPetByCondition);
   const [activeTab, setActiveTab] = useState<CodexTab>('hero');
+  const [selectedHeroId, setSelectedHeroId] = useState<string | null>(null);
+  const [selectedPetId, setSelectedPetId] = useState<string | null>(null);
+  const [selectedEnemyId, setSelectedEnemyId] = useState<EnemyArchetypeId | null>(null);
 
   const conditionState = { unlockedHeroIds, unlockedPetIds, heroes, goldSpentTotal, ascensionLevel };
 
-  function renderHeroEntry(definition: HeroDefinition) {
+  function switchTab(tab: CodexTab): void {
+    setActiveTab(tab);
+  }
+
+  // --- Hero tab ------------------------------------------------------
+
+  const effectiveHeroId = selectedHeroId && heroRosterConfig.some((d) => d.id === selectedHeroId) ? selectedHeroId : heroRosterConfig[0]?.id ?? null;
+  const selectedHeroDefinition = heroRosterConfig.find((d) => d.id === effectiveHeroId);
+
+  function renderHeroGridItem(definition: HeroDefinition) {
     const isUnlocked = unlockedHeroIds.includes(definition.id);
+    const heroInstance = isUnlocked ? heroes.find((hero) => hero.id === definition.id) : undefined;
+    const label = heroInstance ? heroInstance.name : rarityNumberLabel(definition.rarity, definition.id);
+    const isSelected = definition.id === effectiveHeroId;
+
+    return (
+      <button
+        key={definition.id}
+        type="button"
+        className={`roster-grid-item selectable ${RARITY_BORDER_CLASS[definition.rarity]}${isSelected ? ' active' : ''}${isUnlocked ? '' : ' locked'}`}
+        onClick={() => setSelectedHeroId(definition.id)}
+      >
+        <SpriteAvatar src={getHeroSpriteSrc(definition.class)} size={56} />
+        <div className={`roster-grid-item-name ${RARITY_CLASS[definition.rarity]}`}>{label}</div>
+        <div className="roster-grid-item-sub">{isUnlocked ? `★${heroStars[definition.id] ?? 0}/${MAX_STAR_LEVEL}` : t('heroRoster.locked')}</div>
+      </button>
+    );
+  }
+
+  function renderHeroDetail(definition: HeroDefinition) {
+    const isUnlocked = unlockedHeroIds.includes(definition.id);
+    const heroInstance = isUnlocked ? heroes.find((hero) => hero.id === definition.id) : undefined;
     const rarityLabel = t(RARITY_LABEL_KEYS[definition.rarity]);
 
-    if (isUnlocked) {
+    if (isUnlocked && heroInstance) {
       return (
-        <div key={definition.id} className={`item-card ${RARITY_BORDER_CLASS[definition.rarity]}`} style={{ display: 'flex', gap: 8 }}>
-          <SpriteAvatar src={getHeroSpriteSrc(definition.class)} size={36} />
-          <div>
-            <span className={RARITY_CLASS[definition.rarity]}>
-              {rarityLabel}
-              {definition.id.split('-')[1]}
-            </span>
-            <span className="text-muted"> ({t('codex.obtained')})</span>
-            <div className="text-faint">★{heroStars[definition.id] ?? 0}/{MAX_STAR_LEVEL}</div>
+        <div className={`detail-card ${RARITY_BORDER_CLASS[definition.rarity]}`}>
+          <div className={`detail-title ${RARITY_CLASS[definition.rarity]}`}>{heroInstance.name}</div>
+          <div className="item-detail">
+            {rarityLabel} · {t('codex.obtained')}
+          </div>
+          <div className="item-detail">
+            ★{heroStars[definition.id] ?? 0}/{MAX_STAR_LEVEL} · Lv.{heroInstance.level}
           </div>
         </div>
       );
@@ -104,12 +141,9 @@ function CodexPanel() {
       const allMet = statuses.every((status) => status.isMet);
 
       return (
-        <div key={definition.id} className={`item-card locked ${RARITY_BORDER_CLASS[definition.rarity]}`}>
-          <span className={RARITY_CLASS[definition.rarity]}>
-            {rarityLabel}
-            {definition.id.split('-')[1]}
-          </span>
-          <span className="text-muted"> ({t('unlock.conditionLocked')})</span>
+        <div className={`detail-card locked ${RARITY_BORDER_CLASS[definition.rarity]}`}>
+          <div className={`detail-title ${RARITY_CLASS[definition.rarity]}`}>{rarityNumberLabel(definition.rarity, definition.id)}</div>
+          <div className="item-detail">{t('unlock.conditionLocked')}</div>
           {statuses.map((status, index) => (
             <div key={index} className={status.isMet ? 'text-faint' : 'text-muted'}>
               {status.isMet ? '✓' : '✗'} {formatUnlockCondition(status.condition)}
@@ -125,38 +159,58 @@ function CodexPanel() {
     }
 
     return (
-      <div key={definition.id} className={`item-card locked ${RARITY_BORDER_CLASS[definition.rarity]}`}>
-        <span className={RARITY_CLASS[definition.rarity]}>
-          {rarityLabel}
-          {definition.id.split('-')[1]}
-        </span>
-        <span className="text-muted"> ({t('heroRoster.locked')})</span>
+      <div className={`detail-card locked ${RARITY_BORDER_CLASS[definition.rarity]}`}>
+        <div className={`detail-title ${RARITY_CLASS[definition.rarity]}`}>{rarityNumberLabel(definition.rarity, definition.id)}</div>
+        <div className="item-detail">{t('heroRoster.locked')}</div>
         <div className="item-detail">{t('codex.gachaSource')}</div>
       </div>
     );
   }
 
-  function renderPetEntry(definition: PetDefinition) {
-    const isUnlocked = unlockedPetIds.includes(definition.id);
-    const rarityLabel = t(RARITY_LABEL_KEYS[definition.rarity]);
-    const bonusLabel = Object.entries(definition.passiveBonus)
+  // --- Pet tab ---------------------------------------------------------
+
+  const effectivePetId = selectedPetId && petRosterConfig.some((d) => d.id === selectedPetId) ? selectedPetId : petRosterConfig[0]?.id ?? null;
+  const selectedPetDefinition = petRosterConfig.find((d) => d.id === effectivePetId);
+
+  function petBonusLabel(definition: PetDefinition): string {
+    return Object.entries(definition.passiveBonus)
       .map(([stat, value]) => `${t(STAT_LABEL_KEYS[stat as UpgradeableStat])} ${formatBonusValue(stat as UpgradeableStat, value ?? 0)}`)
       .join(', ');
+  }
+
+  function renderPetGridItem(definition: PetDefinition) {
+    const isUnlocked = unlockedPetIds.includes(definition.id);
+    const isSelected = definition.id === effectivePetId;
+
+    return (
+      <button
+        key={definition.id}
+        type="button"
+        className={`roster-grid-item selectable ${RARITY_BORDER_CLASS[definition.rarity]}${isSelected ? ' active' : ''}${isUnlocked ? '' : ' locked'}`}
+        onClick={() => setSelectedPetId(definition.id)}
+      >
+        <SpriteAvatar src={getPetSpriteSrc(definition.spriteId ?? definition.id)} size={56} />
+        <div className={`roster-grid-item-name ${RARITY_CLASS[definition.rarity]}`}>{rarityNumberLabel(definition.rarity, definition.id)}</div>
+        <div className="roster-grid-item-sub">{isUnlocked ? `★${petStars[definition.id] ?? 0}/${MAX_STAR_LEVEL}` : t('petRoster.locked')}</div>
+      </button>
+    );
+  }
+
+  function renderPetDetail(definition: PetDefinition) {
+    const isUnlocked = unlockedPetIds.includes(definition.id);
+    const rarityLabel = t(RARITY_LABEL_KEYS[definition.rarity]);
+    const bonusLabel = petBonusLabel(definition);
 
     if (isUnlocked) {
       return (
-        <div key={definition.id} className={`item-card ${RARITY_BORDER_CLASS[definition.rarity]}`} style={{ display: 'flex', gap: 8 }}>
-          <SpriteAvatar src={getPetSpriteSrc(definition.spriteId ?? definition.id)} size={36} />
-          <div>
-            <span className={RARITY_CLASS[definition.rarity]}>
-              {rarityLabel}
-              {definition.id.split('-')[1]}
-            </span>
-            <span className="text-muted"> ({t('codex.obtained')})</span>
-            <div className="text-faint">★{petStars[definition.id] ?? 0}/{MAX_STAR_LEVEL}</div>
-            <div className="item-detail">
-              {t('petRoster.passiveBonus')}: {bonusLabel}
-            </div>
+        <div className={`detail-card ${RARITY_BORDER_CLASS[definition.rarity]}`}>
+          <div className={`detail-title ${RARITY_CLASS[definition.rarity]}`}>{rarityNumberLabel(definition.rarity, definition.id)}</div>
+          <div className="item-detail">
+            {rarityLabel} · {t('codex.obtained')}
+          </div>
+          <div className="item-detail">★{petStars[definition.id] ?? 0}/{MAX_STAR_LEVEL}</div>
+          <div className="item-detail">
+            {t('petRoster.passiveBonus')}: {bonusLabel}
           </div>
         </div>
       );
@@ -167,12 +221,9 @@ function CodexPanel() {
       const allMet = statuses.every((status) => status.isMet);
 
       return (
-        <div key={definition.id} className={`item-card locked ${RARITY_BORDER_CLASS[definition.rarity]}`}>
-          <span className={RARITY_CLASS[definition.rarity]}>
-            {rarityLabel}
-            {definition.id.split('-')[1]}
-          </span>
-          <span className="text-muted"> ({t('unlock.conditionLocked')})</span>
+        <div className={`detail-card locked ${RARITY_BORDER_CLASS[definition.rarity]}`}>
+          <div className={`detail-title ${RARITY_CLASS[definition.rarity]}`}>{rarityNumberLabel(definition.rarity, definition.id)}</div>
+          <div className="item-detail">{t('unlock.conditionLocked')}</div>
           <div className="item-detail">
             {t('petRoster.passiveBonus')}: {bonusLabel}
           </div>
@@ -191,12 +242,9 @@ function CodexPanel() {
     }
 
     return (
-      <div key={definition.id} className={`item-card locked ${RARITY_BORDER_CLASS[definition.rarity]}`}>
-        <span className={RARITY_CLASS[definition.rarity]}>
-          {rarityLabel}
-          {definition.id.split('-')[1]}
-        </span>
-        <span className="text-muted"> ({t('petRoster.locked')})</span>
+      <div className={`detail-card locked ${RARITY_BORDER_CLASS[definition.rarity]}`}>
+        <div className={`detail-title ${RARITY_CLASS[definition.rarity]}`}>{rarityNumberLabel(definition.rarity, definition.id)}</div>
+        <div className="item-detail">{t('petRoster.locked')}</div>
         <div className="item-detail">
           {t('petRoster.passiveBonus')}: {bonusLabel} · {t('codex.gachaSource')}
         </div>
@@ -204,20 +252,27 @@ function CodexPanel() {
     );
   }
 
+  // --- Enemy tab ---------------------------------------------------------
   // Always visible, no lock state - this game has no "have you fought this
   // archetype yet" tracking (out of scope to add just for the codex), so
-  // every enemy's lore is readable from the start rather than half the tab
-  // sitting permanently locked with nothing to unlock it.
-  function renderEnemyEntry(archetypeId: EnemyArchetypeId) {
+  // every enemy's lore is readable from the start.
+
+  const effectiveEnemyId = selectedEnemyId && ENEMY_ARCHETYPE_IDS.includes(selectedEnemyId) ? selectedEnemyId : ENEMY_ARCHETYPE_IDS[0];
+  const selectedEnemyLore = enemyLoreConfig[effectiveEnemyId];
+
+  function renderEnemyGridItem(archetypeId: EnemyArchetypeId) {
     const lore = enemyLoreConfig[archetypeId];
+    const isSelected = archetypeId === effectiveEnemyId;
     return (
-      <div key={archetypeId} className="item-card" style={{ display: 'flex', gap: 8 }}>
-        <SpriteAvatar src={getEnemySpriteSrc(ENEMY_SPRITE_TYPE[archetypeId])} size={36} />
-        <div>
-          <span>{t(lore.nameKey)}</span>
-          <div className="item-detail">{t(lore.descriptionKey)}</div>
-        </div>
-      </div>
+      <button
+        key={archetypeId}
+        type="button"
+        className={`roster-grid-item selectable${isSelected ? ' active' : ''}`}
+        onClick={() => setSelectedEnemyId(archetypeId)}
+      >
+        <SpriteAvatar src={getEnemySpriteSrc(ENEMY_SPRITE_TYPE[archetypeId])} size={56} />
+        <div className="roster-grid-item-name">{t(lore.nameKey)}</div>
+      </button>
     );
   }
 
@@ -234,7 +289,7 @@ function CodexPanel() {
           <button
             key={tab.id}
             className={`btn btn-sm${activeTab === tab.id ? ' btn-primary' : ''}`}
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => switchTab(tab.id)}
           >
             {t(tab.labelKey)}
             {tab.count && ` (${tab.count})`}
@@ -242,9 +297,31 @@ function CodexPanel() {
         ))}
       </div>
       <div className="card">
-        {activeTab === 'hero' && <div className="list">{heroRosterConfig.map(renderHeroEntry)}</div>}
-        {activeTab === 'pet' && <div className="list">{petRosterConfig.map(renderPetEntry)}</div>}
-        {activeTab === 'enemy' && <div className="list">{ENEMY_ARCHETYPE_IDS.map(renderEnemyEntry)}</div>}
+        {activeTab === 'hero' && (
+          <div className="roster-grid-detail">
+            <div className="roster-grid">{heroRosterConfig.map(renderHeroGridItem)}</div>
+            <div className="detail-pane">{selectedHeroDefinition && renderHeroDetail(selectedHeroDefinition)}</div>
+          </div>
+        )}
+        {activeTab === 'pet' && (
+          <div className="roster-grid-detail">
+            <div className="roster-grid">{petRosterConfig.map(renderPetGridItem)}</div>
+            <div className="detail-pane">{selectedPetDefinition && renderPetDetail(selectedPetDefinition)}</div>
+          </div>
+        )}
+        {activeTab === 'enemy' && (
+          <div className="roster-grid-detail">
+            <div className="roster-grid">{ENEMY_ARCHETYPE_IDS.map(renderEnemyGridItem)}</div>
+            <div className="detail-pane">
+              {selectedEnemyLore && (
+                <div className="detail-card">
+                  <div className="detail-title">{t(selectedEnemyLore.nameKey)}</div>
+                  <div className="item-detail">{t(selectedEnemyLore.descriptionKey)}</div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -620,13 +620,13 @@ const HeroRosterList = memo(function HeroRosterList({
   );
 
   return (
-    <div className="master-list">
+    <div className="roster-grid">
       {ownedHeroes.map((definition, index) => {
         const signature = rosterSignatures[index];
         if (!signature) {
           return null;
         }
-        const [levelStr, attackDamageStr, name, evolutionBranchId, starStr] = signature.split('|');
+        const [levelStr, , name, evolutionBranchId, starStr] = signature.split('|');
         const effectiveClass = evolutionBranchId
           ? (definition.evolutionBranches.find((branch) => branch.id === evolutionBranchId)?.resultClass ?? definition.class)
           : definition.class;
@@ -637,32 +637,24 @@ const HeroRosterList = memo(function HeroRosterList({
         return (
           <div
             key={definition.id}
-            className={`mini-card drag-handle selectable ${RARITY_BORDER_CLASS[definition.rarity]}${isSelected ? ' active' : ''}`}
+            className={`roster-grid-item drag-handle selectable ${RARITY_BORDER_CLASS[definition.rarity]}${isSelected ? ' active' : ''}`}
             onPointerDown={onPointerDown(definition.id)}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerCancel}
           >
-            <div className={`mini-card-name ${RARITY_CLASS[definition.rarity]}`}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <SpriteAvatar
-                  src={heroAvatarSrc(effectiveClass, evolutionBranchId)}
-                  size={28}
-                  fallback={<RowClassIcon />}
-                />
-                <span>
-                  <RowBondIcon />
-                  <RowClassIcon /> {name}
-                  {evolutionBranchId ? <IconStar /> : ''}
-                </span>
-              </span>
-              <span className={`status-dot${isDeployed ? ' on' : ''}`} title={isDeployed ? t('squad.deployed') : t('squad.benched')} />
+            <span className={`status-dot${isDeployed ? ' on' : ''}`} title={isDeployed ? t('squad.deployed') : t('squad.benched')} />
+            <SpriteAvatar
+              src={heroAvatarSrc(effectiveClass, evolutionBranchId)}
+              size={56}
+              fallback={<RowClassIcon />}
+            />
+            <div className={`roster-grid-item-name ${RARITY_CLASS[definition.rarity]}`}>
+              <RowBondIcon /> {name}
+              {evolutionBranchId ? <IconStar /> : ''}
             </div>
-            <div className="mini-card-sub">
+            <div className="roster-grid-item-sub">
               Lv.{levelStr} · ★{starStr}
-            </div>
-            <div className="mini-card-sub">
-              {t('hero.attackDamage')} {formatBigNumber(Number(attackDamageStr))}
             </div>
           </div>
         );
@@ -776,7 +768,7 @@ function HeroPanel({ gameScreenRef }: { gameScreenRef: RefObject<HTMLDivElement>
       ) : (
         <>
           <div className="card-subtitle">{t('squad.dragHint')}</div>
-          <div className="master-detail">
+          <div className="roster-grid-detail">
             <HeroRosterList
               ownedHeroes={ownedHeroes}
               deployedHeroIds={deployedHeroIds}

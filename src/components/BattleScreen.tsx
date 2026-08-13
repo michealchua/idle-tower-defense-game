@@ -111,12 +111,17 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
 
   const biome = getBiomeForChapter(wave.chapter);
   const globalWave = getGlobalWaveNumber(wave);
-  // Fixed grid this wave's squad cap actually has (mapConfig.
-  // layoutSlotPositions) - shared by the roster-panel drag-in preview and
-  // the canvas-native reposition drag below, so both draw/hit-test against
-  // the exact same cells.
+  // Always the full fixed 3x3 grid (mapConfig.layoutSlotPositions) - shared
+  // by the roster-panel drag-in preview and the canvas-native reposition
+  // drag below, so both draw/hit-test against the exact same 9 cells.
+  // maxDeployedHeroes is the wave-gated CAP (how many of those 9 cells are
+  // actually usable right now, squadSlotUnlockWaves) - cells at/after that
+  // index still render (so the player can see the full 3x3 shape and what's
+  // still locked) but can't be dropped into, see the locked-cell slice below
+  // and HeroSystem.moveHeroToSlot's own matching cap check.
   const maxDeployedHeroes = getMaxDeployedHeroes(globalWave);
-  const slotPositions = layoutSlotPositions(maxDeployedHeroes);
+  const slotPositions = layoutSlotPositions();
+  const unlockedSlotPositions = slotPositions.slice(0, maxDeployedHeroes);
   const occupiedSlotIndices = new Set(
     heroes.map((hero) => hero.deployedSlotIndex).filter((index): index is number => index !== null),
   );
@@ -170,7 +175,11 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
     if (!point) {
       return;
     }
-    const hoverSlotIndex = findNearestSlotIndex(slotPositions, point, SLOT_HIT_RADIUS);
+    // Only cells within the currently-unlocked cap are valid drop targets -
+    // a locked cell (drawn but not yet usable, see maxDeployedHeroes above)
+    // never gets the hover ring, rather than highlighting a drop that would
+    // silently do nothing.
+    const hoverSlotIndex = findNearestSlotIndex(unlockedSlotPositions, point, SLOT_HIT_RADIUS);
     setCanvasDrag((prev) => (prev ? { ...prev, pointerX: point.x, pointerY: point.y, hoverSlotIndex } : prev));
   }
 
@@ -284,7 +293,7 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
     // one on the canvas itself (canvasDrag) - same cells either way, see
     // slotPositions/occupiedSlotIndices above.
     if (dragPreviewKind === 'hero' || canvasDrag) {
-      drawDeploySlots(ctx, slotPositions, occupiedSlotIndices);
+      drawDeploySlots(ctx, slotPositions, occupiedSlotIndices, maxDeployedHeroes);
     }
 
     if (canvasDrag) {

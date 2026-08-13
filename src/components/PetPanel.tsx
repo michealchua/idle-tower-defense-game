@@ -173,8 +173,8 @@ function PetPanel() {
       {ownedPets.length === 0 ? (
         <div className="empty-state">{t('petRoster.empty')}</div>
       ) : (
-        <div className="master-detail">
-          <div className="master-list">
+        <div className="roster-grid-detail">
+          <div className="roster-grid">
             {ownedPets.map((definition) => {
               if (!petByDefinition(definition)) {
                 return null;
@@ -185,20 +185,14 @@ function PetPanel() {
                 <button
                   key={definition.id}
                   type="button"
-                  className={`mini-card selectable ${RARITY_BORDER_CLASS[definition.rarity]}${isSelected ? ' active' : ''}`}
+                  className={`roster-grid-item selectable ${RARITY_BORDER_CLASS[definition.rarity]}${isSelected ? ' active' : ''}`}
                   onClick={() => setSelectedPetId(definition.id)}
                 >
-                  <div className={`mini-card-name ${RARITY_CLASS[definition.rarity]}`}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <SpriteAvatar src={petAvatarSrc(definition)} size={28} fallback={<PET_ICON />} />
-                      <span>
-                        <PET_ICON /> {petLabel(definition)}
-                      </span>
-                    </span>
-                  </div>
-                  <div className="mini-card-sub">★{petStars[definition.id] ?? 0}/{MAX_STAR_LEVEL}</div>
+                  <SpriteAvatar src={petAvatarSrc(definition)} size={56} fallback={<PET_ICON />} />
+                  <div className={`roster-grid-item-name ${RARITY_CLASS[definition.rarity]}`}>{petLabel(definition)}</div>
+                  <div className="roster-grid-item-sub">★{petStars[definition.id] ?? 0}/{MAX_STAR_LEVEL}</div>
                   {corePassive && (
-                    <div className="mini-card-sub">
+                    <div className="roster-grid-item-sub">
                       {t(STAT_LABEL_KEYS[corePassive[0]])} {formatBonusValue(corePassive[0], corePassive[1])}
                     </div>
                   )}

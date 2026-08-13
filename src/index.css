@@ -1478,6 +1478,77 @@ select {
   }
 }
 
+/* Grid-on-top / detail-below layout (HeroPanel/PetPanel roster, CodexPanel's
+   three tabs) - a square-avatar-forward grid (~5 columns at the modal's
+   usual width, narrowing responsively) replaces the old side-by-side
+   .master-detail/.master-list narrow sidebar, which could only ever fit one
+   card per row and read as a dense text list rather than a roster you scan
+   by portrait. */
+.roster-grid-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.roster-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+  max-height: 40vh;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.roster-grid-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 6px;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  text-align: center;
+  cursor: pointer;
+  position: relative;
+  font: inherit;
+}
+
+.roster-grid-item.selectable {
+  cursor: pointer;
+}
+
+.roster-grid-item.active {
+  background: var(--surface-hover);
+  border-color: var(--accent-strong);
+}
+
+.roster-grid-item.locked {
+  opacity: 0.6;
+}
+
+.roster-grid-item-name {
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.roster-grid-item-sub {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.roster-grid-item .status-dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+}
+
 .detail-card {
   background: var(--bg-alt);
   border: 1px solid var(--border);

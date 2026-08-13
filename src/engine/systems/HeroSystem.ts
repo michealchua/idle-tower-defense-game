@@ -35,7 +35,7 @@ function firstFreeSlotIndex(state: GameState, cap: number): number | null {
 // all filter to deployedHeroIds and never read a benched hero's position.
 function relayoutDeployedHeroes(state: GameState): void {
   const cap = getMaxDeployedHeroes(getGlobalWaveNumber(state.wave));
-  const positions = layoutSlotPositions(cap);
+  const positions = layoutSlotPositions();
 
   for (const heroId of state.deployedHeroIds) {
     const hero = state.heroes.find((candidate) => candidate.id === heroId);

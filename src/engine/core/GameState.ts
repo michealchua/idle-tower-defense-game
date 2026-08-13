@@ -3,7 +3,6 @@ import { createBase } from '../entities/Base';
 import { heroRosterConfig } from '../../data/heroRosterConfig';
 import { petRosterConfig } from '../../data/petRosterConfig';
 import { layoutSlotPositions } from '../../data/mapConfig';
-import { squadConfig } from '../../data/squadConfig';
 import { talentConfig, type TalentId } from '../../data/talentConfig';
 import { ascensionShopConfig, type AscensionShopId } from '../../data/ascensionShopConfig';
 import { gachaPityConfig, type PityPoolId } from '../../data/pityConfig';
@@ -41,11 +40,7 @@ function createInitialCounters(ids: string[]): Record<string, number> {
 
 export function createInitialGameState(): GameState {
   const starterHeroId = heroRosterConfig[0].id;
-  // squadConfig.maxDeployedHeroes (the wave-1 baseline cap, before any
-  // squadSlotUnlockWaves milestone) - same cap getMaxDeployedHeroes(1) would
-  // return, computed directly since state.wave doesn't exist yet at this
-  // point in construction.
-  const [starterPosition] = layoutSlotPositions(squadConfig.maxDeployedHeroes);
+  const [starterPosition] = layoutSlotPositions();
   const starterHero = createHero(starterHeroId, starterPosition);
   starterHero.deployedSlotIndex = 0;
 
