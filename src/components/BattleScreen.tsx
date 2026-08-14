@@ -1,11 +1,9 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { ensureGameLoopStarted, ensureAutosaveStarted, useGameStore } from '../store/useGameStore';
-import { renderScene, drawBackground, drawVignette, drawDeploySlots, preloadBattleSprites } from '../render/CanvasRenderer';
+import { renderScene, drawBackground, drawVignette, preloadBattleSprites } from '../render/CanvasRenderer';
 import { t } from '../locales/i18n';
 import { getNormalWaveEnemyCount } from '../data/waveConfig';
 import { getBiomeForChapter, bossMusicTracks } from '../data/biomeConfig';
-import { layoutSlotPositions } from '../data/mapConfig';
-import { getMaxDeployedHeroes } from '../data/squadConfig';
 import { formatBigNumber } from '../utils/scaling';
 import { audioManager } from '../audio/AudioManager';
 import { speedTiers } from '../data/speedConfig';
@@ -39,7 +37,6 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
   const victoryPoseRemaining = useGameStore((state) => state.victoryPoseRemaining);
   const isGameOver = useGameStore((state) => state.isGameOver);
   const wave = useGameStore((state) => state.wave);
-  const dragPreviewKind = useGameStore((state) => state.dragPreviewKind);
   const teamPower = useGameStore((state) => state.teamPower);
   const recommendedPower = useGameStore((state) => state.recommendedPower);
   const displayedTeamPower = useAnimatedNumber(teamPower);
@@ -49,14 +46,6 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
 
   const biome = getBiomeForChapter(wave.chapter);
   const globalWave = getGlobalWaveNumber(wave);
-  // Single-protagonist redesign: mapConfig.layoutSlotPositions() now always
-  // hands back exactly one position - this grid only still exists to draw
-  // the roster-panel drag-in preview (dragPreviewKind === 'hero').
-  const maxDeployedHeroes = getMaxDeployedHeroes(globalWave);
-  const slotPositions = layoutSlotPositions();
-  const occupiedSlotIndices = new Set(
-    heroes.map((hero) => hero.deployedSlotIndex).filter((index): index is number => index !== null),
-  );
 
   useEffect(() => {
     ensureGameLoopStarted();
@@ -155,13 +144,7 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
     // HeroStatsSystem.computePetPassiveBonuses), it just isn't drawn here.
     const activePets = activePetId ? pets.filter((pet) => pet.id === activePetId) : [];
     renderScene(ctx, heroes, activePets, enemies, visualEffects, screenShakeIntensity, victoryPoseRemaining > 0);
-
-    // Drag-in-from-roster preview grid only now (canvas-native reposition
-    // drag removed - nothing to rearrange with a single fixed protagonist).
-    if (dragPreviewKind === 'hero') {
-      drawDeploySlots(ctx, slotPositions, occupiedSlotIndices, maxDeployedHeroes);
-    }
-  }, [heroes, pets, activePetId, enemies, visualEffects, screenShakeIntensity, victoryPoseRemaining, displaySize, biome, dragPreviewKind, wave, slotPositions, occupiedSlotIndices, maxDeployedHeroes]);
+  }, [heroes, pets, activePetId, enemies, visualEffects, screenShakeIntensity, victoryPoseRemaining, displaySize, biome, wave]);
 
   const aliveHeroCount = heroes.filter((hero) => !hero.isDowned).length;
 

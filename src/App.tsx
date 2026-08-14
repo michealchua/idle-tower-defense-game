@@ -20,7 +20,6 @@ import { formatBigNumber } from './utils/scaling';
 import { isPanelUnlocked, type PanelId } from './data/unlockConditionConfig';
 import { getActiveTutorialStep } from './data/tutorialConfig';
 import { getGlobalWaveNumber } from './engine/systems/WaveSystem';
-import { getMaxDeployedHeroes } from './data/squadConfig';
 import { setWindowMode as applyWindowMode } from './utils/windowMode';
 import { t } from './locales/i18n';
 import { useGameStore } from './store/useGameStore';
@@ -79,10 +78,9 @@ function App() {
   const [activePanel, setActivePanel] = useState<PanelId | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
-  // Owned here (not by BattleScreen) because HeroPanel now renders inside
-  // this component's modal - a sibling of BattleScreen, not a child - but
-  // still needs the battle canvas's bounding rect for drag-to-deploy
-  // hit-testing (see useDeploySlotDrag).
+  // Owned here (not by BattleScreen) so it can be handed down as a prop -
+  // BattleScreen attaches it to the actual `.canvas-stage` div for its own
+  // ResizeObserver.
   const stageRef = useRef<HTMLDivElement>(null);
 
   const activeSlot = useGameStore((state) => state.activeSlot);
@@ -95,7 +93,6 @@ function App() {
   const displayedGold = useAnimatedNumber(gold);
   const displayedDiamonds = useAnimatedNumber(diamonds);
   const displayedTeamPower = useAnimatedNumber(teamPower);
-  const deployedHeroIds = useGameStore((state) => state.deployedHeroIds);
   const wave = useGameStore((state) => state.wave);
   const activeTutorialStep = useGameStore((state) => getActiveTutorialStep(state));
   const completeTutorialStep = useGameStore((state) => state.completeTutorialStep);
@@ -133,7 +130,6 @@ function App() {
   // buttons for panels the run has actually reached, instead of exposing
   // every system from wave 1.
   const globalWave = getGlobalWaveNumber(wave);
-  const maxDeployedHeroes = getMaxDeployedHeroes(globalWave);
   const visibleGrowthTabs = GROWTH_TABS.filter((tab) => isPanelUnlocked(tab.id, globalWave));
   const visibleCoreTabs = CORE_TABS.filter((tab) => isPanelUnlocked(tab.id, globalWave));
 
@@ -213,7 +209,7 @@ function App() {
   function renderPanel(id: PanelId) {
     switch (id) {
       case 'hero':
-        return <HeroPanel gameScreenRef={stageRef} />;
+        return <HeroPanel />;
       case 'pet':
         return <PetPanel />;
       case 'equipment':
@@ -264,14 +260,13 @@ function App() {
 
       {windowMode !== 'stealth' && (
       <div className="hud-layer">
-        {/* Base/progress identity - squad size and current chapter/biome,
-            not a fabricated player name or power score (this game has
-            neither concept). */}
+        {/* Progress identity - current chapter/biome, not a fabricated
+            player name or power score (this game has neither concept).
+            Single-protagonist redesign removed the old squad-size readout
+            here (deployedHeroIds.length/maxDeployedHeroes) - always 1/9 now
+            that there's exactly one hero, so it stopped conveying anything. */}
         <div className="hud-corner top-left">
           <div className="hud-widget">
-            <div className="hud-widget-row">
-              <span><IconSword /> {deployedHeroIds.length}/{maxDeployedHeroes}</span>
-            </div>
             <div className="hud-label">
               {t('wave.stage')} {wave.chapter}-{wave.waveInChapter} · {t(biome.labelKey)}
             </div>

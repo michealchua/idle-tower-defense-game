@@ -1,22 +1,39 @@
 import { useState } from 'react';
-import { heroRosterConfig } from '../data/heroRosterConfig';
+import { heroRosterConfig, type HeroEvolutionBranch } from '../data/heroRosterConfig';
 import { petRosterConfig, type PetDefinition } from '../data/petRosterConfig';
-import type { HeroDefinition } from '../data/heroRosterConfig';
+import { skillDefinitions, type SkillDefinition } from '../data/skillConfig';
 import type { GachaRarity } from '../data/gachaConfig';
-import type { UpgradeableStat } from '../data/heroConfig';
+import type { HeroClass, UpgradeableStat } from '../data/heroConfig';
 import { enemyArchetypes, type EnemyArchetypeId } from '../data/enemyArchetypes';
 import { enemyLoreConfig } from '../data/enemyLoreConfig';
 import { MAX_STAR_LEVEL } from '../data/gachaConfig';
 import { getConditionStatuses } from '../engine/systems/UnlockSystem';
+import { getAvailableEvolutionBranches } from '../engine/systems/HeroSystem';
 import { formatUnlockCondition } from './formatUnlockCondition';
 import { t } from '../locales/i18n';
 import { useGameStore } from '../store/useGameStore';
 import SpriteAvatar from './SpriteAvatar';
-import { getHeroSpriteSrc, getPetSpriteSrc, getEnemySpriteSrc } from '../render/assetLoader';
+import { getPetSpriteSrc, getEnemySpriteSrc } from '../render/assetLoader';
 import { ENEMY_SPRITE_TYPE } from '../render/CanvasRenderer';
+import { IconOrb, IconStar } from './icons';
 
 const ENEMY_ARCHETYPE_IDS = Object.keys(enemyArchetypes) as EnemyArchetypeId[];
-type CodexTab = 'hero' | 'pet' | 'enemy';
+// Single-protagonist redesign: the old 'hero' tab (100-entry roster, locked
+// vs owned) doesn't apply anymore - there's exactly one hero, always owned.
+// 'evolution' (the branch tree) and 'skill' (the gacha-drawn skill pool)
+// replace it as the two collection concepts that now actually vary per run.
+type CodexTab = 'evolution' | 'skill' | 'pet' | 'enemy';
+
+const CLASS_LABEL_KEYS: Record<HeroClass, string> = {
+  warrior: 'class.warrior',
+  mage: 'class.mage',
+  paladin: 'class.paladin',
+  summoner: 'class.summoner',
+  archer: 'class.archer',
+  assassin: 'class.assassin',
+  priest: 'class.priest',
+  special: 'class.special',
+};
 
 const RARITY_LABEL_KEYS: Record<GachaRarity, string> = {
   white: 'rarity.white',
@@ -75,14 +92,13 @@ function CodexPanel() {
   const heroes = useGameStore((state) => state.heroes);
   const unlockedHeroIds = useGameStore((state) => state.unlockedHeroIds);
   const unlockedPetIds = useGameStore((state) => state.unlockedPetIds);
-  const heroStars = useGameStore((state) => state.heroStars);
   const petStars = useGameStore((state) => state.petStars);
   const goldSpentTotal = useGameStore((state) => state.goldSpentTotal);
   const ascensionLevel = useGameStore((state) => state.ascensionLevel);
-  const unlockHeroByCondition = useGameStore((state) => state.unlockHeroByCondition);
   const unlockPetByCondition = useGameStore((state) => state.unlockPetByCondition);
-  const [activeTab, setActiveTab] = useState<CodexTab>('hero');
-  const [selectedHeroId, setSelectedHeroId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<CodexTab>('evolution');
+  const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
+  const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
   const [selectedPetId, setSelectedPetId] = useState<string | null>(null);
   const [selectedEnemyId, setSelectedEnemyId] = useState<EnemyArchetypeId | null>(null);
 
@@ -92,75 +108,112 @@ function CodexPanel() {
     setActiveTab(tab);
   }
 
-  // --- Hero tab ------------------------------------------------------
+  // --- Evolution tab -----------------------------------------------------
+  // Protagonist's whole branch tree (heroRosterConfig[0].evolutionBranches,
+  // see HeroSystem's doc comments) - single-protagonist redesign replaced
+  // "which of 100 heroes have you pulled" with "how far down the one hero's
+  // tree have you gotten", so this tab shows every node's tier/chosen/
+  // reachable-next/still-locked status instead of a locked/owned roster.
 
-  const effectiveHeroId = selectedHeroId && heroRosterConfig.some((d) => d.id === selectedHeroId) ? selectedHeroId : heroRosterConfig[0]?.id ?? null;
-  const selectedHeroDefinition = heroRosterConfig.find((d) => d.id === effectiveHeroId);
+  const protagonist = heroes[0];
+  const evolutionBranches = heroRosterConfig[0]?.evolutionBranches ?? [];
+  const reachableBranchIds = protagonist ? new Set(getAvailableEvolutionBranches(protagonist).map((branch) => branch.id)) : new Set<string>();
+  const effectiveBranchId =
+    selectedBranchId && evolutionBranches.some((branch) => branch.id === selectedBranchId) ? selectedBranchId : evolutionBranches[0]?.id ?? null;
+  const selectedBranch = evolutionBranches.find((branch) => branch.id === effectiveBranchId);
 
-  function renderHeroGridItem(definition: HeroDefinition) {
-    const isUnlocked = unlockedHeroIds.includes(definition.id);
-    const isSelected = definition.id === effectiveHeroId;
+  function branchStatus(branch: HeroEvolutionBranch): 'chosen' | 'reachable' | 'locked' {
+    if (protagonist?.evolutionPath.includes(branch.id)) {
+      return 'chosen';
+    }
+    return reachableBranchIds.has(branch.id) ? 'reachable' : 'locked';
+  }
+
+  function renderBranchGridItem(branch: HeroEvolutionBranch) {
+    const status = branchStatus(branch);
+    const isSelected = branch.id === effectiveBranchId;
+
+    return (
+      <button
+        key={branch.id}
+        type="button"
+        className={`roster-grid-item selectable${isSelected ? ' active' : ''}${status === 'locked' ? ' locked' : ''}`}
+        onClick={() => setSelectedBranchId(branch.id)}
+      >
+        <IconStar />
+        <div className="roster-grid-item-name">{t(branch.nameKey)}</div>
+        <div className="roster-grid-item-sub">
+          {t('codex.evolutionTier')} {branch.tier} ·{' '}
+          {status === 'chosen' ? t('codex.obtained') : status === 'reachable' ? `Lv.${branch.unlockLevel}` : t('heroRoster.locked')}
+        </div>
+      </button>
+    );
+  }
+
+  function renderBranchDetail(branch: HeroEvolutionBranch) {
+    const status = branchStatus(branch);
+    return (
+      <div className={`detail-card${status === 'locked' ? ' locked' : ''}`}>
+        <div className="detail-title">{t(branch.nameKey)}</div>
+        <div className="item-detail">
+          {t('codex.evolutionTier')} {branch.tier} · {t(CLASS_LABEL_KEYS[branch.resultClass])} · Lv.{branch.unlockLevel}
+        </div>
+        <div className="item-detail">
+          {t('hero.attackDamage')} ×{branch.statMultiplier.attackDamage} · {t('hero.maxHp')} ×{branch.statMultiplier.maxHp}
+        </div>
+        <div className="item-detail">
+          {t('hero.attackSpeed')} ×{branch.statMultiplier.attackSpeed} · {t('hero.criticalChance')} ×{branch.statMultiplier.criticalChance}
+        </div>
+        <div className="item-detail">
+          {t('codex.evolutionSkillReward')}: {t(skillDefinitions[branch.skillUnlock.skillId]?.nameKey ?? '')}
+        </div>
+        <div className="item-detail">
+          {status === 'chosen' ? t('codex.obtained') : status === 'reachable' ? t('hero.evolveButton') : t('heroRoster.locked')}
+        </div>
+      </div>
+    );
+  }
+
+  // --- Skill tab -----------------------------------------------------
+  // Every skillConfig.ts entry - owned (hero.ownedSkillIds) vs not yet
+  // pulled from the skill gacha (GachaSystem.pullSkill/pullSkillPremium).
+
+  const skillIds = Object.keys(skillDefinitions);
+  const ownedSkillIds = new Set(protagonist?.ownedSkillIds ?? []);
+  const effectiveSkillId = selectedSkillId && skillDefinitions[selectedSkillId] ? selectedSkillId : skillIds[0] ?? null;
+  const selectedSkill = effectiveSkillId ? skillDefinitions[effectiveSkillId] : undefined;
+
+  function renderSkillGridItem(definition: SkillDefinition) {
+    const isOwned = ownedSkillIds.has(definition.id);
+    const isSelected = definition.id === effectiveSkillId;
 
     return (
       <button
         key={definition.id}
         type="button"
-        className={`roster-grid-item selectable ${RARITY_BORDER_CLASS[definition.rarity]}${isSelected ? ' active' : ''}${isUnlocked ? '' : ' locked'}`}
-        onClick={() => setSelectedHeroId(definition.id)}
+        className={`roster-grid-item selectable ${RARITY_BORDER_CLASS[definition.rarity]}${isSelected ? ' active' : ''}${isOwned ? '' : ' locked'}`}
+        onClick={() => setSelectedSkillId(definition.id)}
       >
-        <SpriteAvatar src={getHeroSpriteSrc(definition.class)} size={56} />
-        <div className={`roster-grid-item-name ${RARITY_CLASS[definition.rarity]}`}>{definition.name}</div>
-        <div className="roster-grid-item-sub">{isUnlocked ? `★${heroStars[definition.id] ?? 0}/${MAX_STAR_LEVEL}` : t('heroRoster.locked')}</div>
+        <span style={{ color: definition.color, fontSize: 24 }}>
+          <IconOrb />
+        </span>
+        <div className={`roster-grid-item-name ${RARITY_CLASS[definition.rarity]}`}>{t(definition.nameKey)}</div>
+        <div className="roster-grid-item-sub">{isOwned ? t('codex.obtained') : t('petRoster.locked')}</div>
       </button>
     );
   }
 
-  function renderHeroDetail(definition: HeroDefinition) {
-    const isUnlocked = unlockedHeroIds.includes(definition.id);
-    const heroInstance = isUnlocked ? heroes.find((hero) => hero.id === definition.id) : undefined;
-    const rarityLabel = t(RARITY_LABEL_KEYS[definition.rarity]);
-
-    if (isUnlocked && heroInstance) {
-      return (
-        <div className={`detail-card ${RARITY_BORDER_CLASS[definition.rarity]}`}>
-          <div className={`detail-title ${RARITY_CLASS[definition.rarity]}`}>{definition.name}</div>
-          <div className="item-detail">
-            {rarityLabel} · {t('codex.obtained')}
-          </div>
-          <div className="item-detail">
-            ★{heroStars[definition.id] ?? 0}/{MAX_STAR_LEVEL} · Lv.{heroInstance.level}
-          </div>
-        </div>
-      );
-    }
-
-    if (definition.unlockConditions) {
-      const statuses = getConditionStatuses(conditionState, definition.unlockConditions);
-      const allMet = statuses.every((status) => status.isMet);
-
-      return (
-        <div className={`detail-card locked ${RARITY_BORDER_CLASS[definition.rarity]}`}>
-          <div className={`detail-title ${RARITY_CLASS[definition.rarity]}`}>{definition.name}</div>
-          <div className="item-detail">{t('unlock.conditionLocked')}</div>
-          {statuses.map((status, index) => (
-            <div key={index} className={status.isMet ? 'text-faint' : 'text-muted'}>
-              {status.isMet ? '✓' : '✗'} {formatUnlockCondition(status.condition)}
-            </div>
-          ))}
-          <div className="item-actions">
-            <button className="btn btn-sm" disabled={!allMet} onClick={() => unlockHeroByCondition(definition.id)}>
-              {t('unlock.unlockButton')}
-            </button>
-          </div>
-        </div>
-      );
-    }
-
+  function renderSkillDetail(definition: SkillDefinition) {
+    const isOwned = ownedSkillIds.has(definition.id);
     return (
-      <div className={`detail-card locked ${RARITY_BORDER_CLASS[definition.rarity]}`}>
-        <div className={`detail-title ${RARITY_CLASS[definition.rarity]}`}>{definition.name}</div>
-        <div className="item-detail">{t('heroRoster.locked')}</div>
-        <div className="item-detail">{t('codex.gachaSource')}</div>
+      <div className={`detail-card ${RARITY_BORDER_CLASS[definition.rarity]}${isOwned ? '' : ' locked'}`}>
+        <div className={`detail-title ${RARITY_CLASS[definition.rarity]}`}>{t(definition.nameKey)}</div>
+        <div className="item-detail">
+          {t(RARITY_LABEL_KEYS[definition.rarity])} · {isOwned ? t('codex.obtained') : t('codex.gachaSource')}
+        </div>
+        <div className="item-detail">
+          {t('codex.skillCooldown')} {definition.cooldownSeconds}s · {t('codex.skillRange')} {definition.range}
+        </div>
       </div>
     );
   }
@@ -274,8 +327,12 @@ function CodexPanel() {
     );
   }
 
+  const chosenBranchCount = protagonist?.evolutionPath.length ?? 0;
+  const ownedSkillCount = ownedSkillIds.size;
+
   const TABS: { id: CodexTab; labelKey: string; count?: string }[] = [
-    { id: 'hero', labelKey: 'codex.heroSection', count: `${unlockedHeroIds.length}/${heroRosterConfig.length}` },
+    { id: 'evolution', labelKey: 'codex.evolutionSection', count: `${chosenBranchCount}/${evolutionBranches.length}` },
+    { id: 'skill', labelKey: 'codex.skillSection', count: `${ownedSkillCount}/${skillIds.length}` },
     { id: 'pet', labelKey: 'codex.petSection', count: `${unlockedPetIds.length}/${petRosterConfig.length}` },
     { id: 'enemy', labelKey: 'codex.enemySection' },
   ];
@@ -295,10 +352,16 @@ function CodexPanel() {
         ))}
       </div>
       <div className="card">
-        {activeTab === 'hero' && (
+        {activeTab === 'evolution' && (
           <div className="roster-grid-detail">
-            <div className="roster-grid">{heroRosterConfig.map(renderHeroGridItem)}</div>
-            <div className="detail-pane">{selectedHeroDefinition && renderHeroDetail(selectedHeroDefinition)}</div>
+            <div className="roster-grid">{evolutionBranches.map(renderBranchGridItem)}</div>
+            <div className="detail-pane">{selectedBranch && renderBranchDetail(selectedBranch)}</div>
+          </div>
+        )}
+        {activeTab === 'skill' && (
+          <div className="roster-grid-detail">
+            <div className="roster-grid">{Object.values(skillDefinitions).map(renderSkillGridItem)}</div>
+            <div className="detail-pane">{selectedSkill && renderSkillDetail(selectedSkill)}</div>
           </div>
         )}
         {activeTab === 'pet' && (

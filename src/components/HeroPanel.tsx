@@ -1,9 +1,6 @@
-import { memo, useCallback, useEffect, useMemo, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
-import { useShallow } from 'zustand/react/shallow';
+import { useState } from 'react';
 import { heroRosterConfig, type HeroDefinition } from '../data/heroRosterConfig';
 import { skillDefinitions } from '../data/skillConfig';
-import { getMaxDeployedHeroes } from '../data/squadConfig';
-import { getGlobalWaveNumber } from '../engine/systems/WaveSystem';
 import { heroUpgradeConfig, type HeroClass, type UpgradeableStat } from '../data/heroConfig';
 import { MAX_STAR_LEVEL, gachaRarityConfig, getStarUpCost, type GachaRarity } from '../data/gachaConfig';
 import { isHeroUpgradeMaxed, previewHeroUpgradeBulk } from '../engine/systems/UpgradeSystem';
@@ -12,7 +9,6 @@ import { formatBigNumber } from '../utils/scaling';
 import type { HeroState } from '../engine/types';
 import { t } from '../locales/i18n';
 import { upgradeableStats, useGameStore } from '../store/useGameStore';
-import { useDeploySlotDrag } from './useDeploySlotDrag';
 import Accordion from './Accordion';
 import PanelHeader from './PanelHeader';
 import StatTile from './StatTile';
@@ -448,25 +444,21 @@ function HeroEvolutionSection({ definition, hero }: { definition: HeroDefinition
   );
 }
 
-// Everything that was previously always-visible in the item-card now lives
-// in the detail pane for whichever hero is selected in the master list -
-// full stats, bond count, skill readiness, and the star-up/deploy actions.
+// Single-protagonist redesign: this is the whole panel's content now, not
+// one card in a roster - there's only ever the one hero (heroRosterConfig.
+// PROTAGONIST_ID), always deployed, so the old master-detail split (pick a
+// hero from a grid, see its stats on the side) and the deploy/undeploy
+// action both stopped meaning anything and are gone.
 function HeroDetail({
   definition,
   hero,
-  isDeployed,
-  squadFull,
   gold,
   materials,
-  onToggleDeploy,
 }: {
   definition: HeroDefinition;
   hero: HeroState;
-  isDeployed: boolean;
-  squadFull: boolean;
   gold: number;
   materials: Materials;
-  onToggleDeploy: (id: string) => void;
 }) {
   const starUpHero = useGameStore((state) => state.starUpHero);
 
@@ -518,14 +510,6 @@ function HeroDetail({
         <StatTile label={t('hero.attackDamage')} value={formatBigNumber(hero.attackDamage)} />
       </div>
 
-      <button
-        className="btn btn-primary btn-block"
-        onClick={() => onToggleDeploy(definition.id)}
-        disabled={!isDeployed && squadFull}
-      >
-        {isDeployed ? t('squad.undeploy') : squadFull ? t('squad.full') : t('squad.deploy')}
-      </button>
-
       <HeroEvolutionSection definition={definition} hero={hero} />
 
       <div className="item-actions" style={{ marginTop: 8, alignItems: 'center' }}>
@@ -557,241 +541,27 @@ function HeroDetail({
   );
 }
 
-interface HeroRosterListProps {
-  ownedHeroes: HeroDefinition[];
-  deployedHeroIds: string[];
-  effectiveSelectedId: string | null;
-  onPointerDown: (id: string) => (event: ReactPointerEvent<HTMLDivElement>) => void;
-  onPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
-  onPointerUp: (event: ReactPointerEvent<HTMLDivElement>) => void;
-  onPointerCancel: () => void;
-}
-
-// Split out of HeroPanel so the compact roster rows (which only need
-// level/attackDamage/name/evolution/star - never live HP or exp) don't
-// re-render 10x/sec purely because HeroPanel's own `heroes` selector does
-// (see that selector's comment - it deliberately stays full-fidelity for the
-// detail pane). React.memo here only pays off because every prop above is
-// now stable across HeroPanel's frequent re-renders: ownedHeroes is
-// useMemo'd, deployedHeroIds/effectiveSelectedId are primitives-or-shallow,
-// and the pointer handlers are useCallback'd/stable - see HeroPanel's own
-// comments on each. Without that prep work this memo would silently never
-// hit (new prop references every render look "changed" to memo's shallow
-// compare regardless of whether the underlying data actually did).
-const HeroRosterList = memo(function HeroRosterList({
-  ownedHeroes,
-  deployedHeroIds,
-  effectiveSelectedId,
-  onPointerDown,
-  onPointerMove,
-  onPointerUp,
-  onPointerCancel,
-}: HeroRosterListProps) {
-  const ownedHeroIds = useMemo(() => ownedHeroes.map((definition) => definition.id), [ownedHeroes]);
-
-  // One string per owned hero ("level|attackDamage|name|evolutionBranchId|
-  // star") instead of selecting the raw HeroState objects - useShallow
-  // compares each array element with Object.is, which only does what you'd
-  // want (value equality) when the elements are primitives. An array of
-  // freshly-cloned hero *objects* (which is what a plain `state.heroes`
-  // selector would hand back every tick, per snapshotGameState) would fail
-  // that same Object.is check every time even when nothing about the hero
-  // actually changed, since it's never the same object reference twice.
-  // Encoding straight to a string sidesteps that entirely.
-  const rosterSignatures = useGameStore(
-    useShallow((state) =>
-      ownedHeroIds.map((id) => {
-        const hero = state.heroes.find((candidate) => candidate.id === id);
-        if (!hero) {
-          return '';
-        }
-        const star = state.heroStars[id] ?? 0;
-        const currentBranchId = hero.evolutionPath[hero.evolutionPath.length - 1] ?? '';
-        return `${hero.level}|${Math.round(hero.attackDamage)}|${hero.name}|${currentBranchId}|${star}`;
-      }),
-    ),
-  );
-
-  return (
-    <div className="roster-grid">
-      {ownedHeroes.map((definition, index) => {
-        const signature = rosterSignatures[index];
-        if (!signature) {
-          return null;
-        }
-        const [levelStr, , name, evolutionBranchId, starStr] = signature.split('|');
-        const effectiveClass = evolutionBranchId
-          ? (definition.evolutionBranches.find((branch) => branch.id === evolutionBranchId)?.resultClass ?? definition.class)
-          : definition.class;
-        const isDeployed = deployedHeroIds.includes(definition.id);
-        const isSelected = definition.id === effectiveSelectedId;
-        const RowClassIcon = CLASS_ICON[effectiveClass];
-        return (
-          <div
-            key={definition.id}
-            className={`roster-grid-item drag-handle selectable ${RARITY_BORDER_CLASS[definition.rarity]}${isSelected ? ' active' : ''}`}
-            onPointerDown={onPointerDown(definition.id)}
-            onPointerMove={onPointerMove}
-            onPointerUp={onPointerUp}
-            onPointerCancel={onPointerCancel}
-          >
-            <span className={`status-dot${isDeployed ? ' on' : ''}`} title={isDeployed ? t('squad.deployed') : t('squad.benched')} />
-            <SpriteAvatar
-              src={heroAvatarSrc(effectiveClass, evolutionBranchId)}
-              size={56}
-              fallback={<RowClassIcon />}
-            />
-            <div className={`roster-grid-item-name ${RARITY_CLASS[definition.rarity]}`}>
-              {name}
-              {evolutionBranchId ? <IconStar /> : ''}
-            </div>
-            <div className="roster-grid-item-sub">
-              Lv.{levelStr} · ★{starStr}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-});
-
-function HeroPanel({ gameScreenRef }: { gameScreenRef: RefObject<HTMLDivElement> }) {
-  // Full-fidelity, unshallowed - the detail pane below needs hero.currentHp/
-  // exp to actually tick up live during combat, so this one deliberately
-  // keeps re-rendering HeroPanel every GameLoop tick. useShallow wouldn't
-  // help here even if applied (its per-element comparison only pays off when
-  // elements are primitives - see HeroRosterList below, which selects a
-  // string-encoded summary specifically so it *can* use it).
+function HeroPanel() {
+  // Full-fidelity, unshallowed - the detail pane needs hero.currentHp/exp to
+  // actually tick up live during combat, so this deliberately keeps
+  // re-rendering every GameLoop tick.
   const heroes = useGameStore((state) => state.heroes);
-  // These two are arrays of *primitive* ids - useShallow's element-wise
-  // comparison means HeroPanel only re-renders when one of them actually
-  // changes (unlock, deploy/undeploy), not on every 10Hz snapshot tick the
-  // way a plain selector would (snapshotGameState always spreads these into
-  // a fresh array reference even when their contents are identical to the
-  // last tick). heroStars isn't read directly here anymore - HeroDetail and
-  // HeroRosterList below each select just their own slice of it.
-  const unlockedHeroIds = useGameStore(useShallow((state) => state.unlockedHeroIds));
-  const deployedHeroIds = useGameStore(useShallow((state) => state.deployedHeroIds));
-  const wave = useGameStore((state) => state.wave);
   const gold = useGameStore((state) => state.gold);
   const epicSourceStone = useGameStore((state) => state.epicSourceStone);
   const legendarySourceStone = useGameStore((state) => state.legendarySourceStone);
   const diamonds = useGameStore((state) => state.diamonds);
-  const deployHero = useGameStore((state) => state.deployHero);
-  const undeployHero = useGameStore((state) => state.undeployHero);
-  const setDragPreviewKind = useGameStore((state) => state.setDragPreviewKind);
-  const [selectedHeroId, setSelectedHeroId] = useState<string | null>(null);
 
   const materials: Materials = { epicSourceStone, legendarySourceStone, diamonds };
-  const maxDeployedHeroes = getMaxDeployedHeroes(getGlobalWaveNumber(wave));
-  const squadFull = deployedHeroIds.length >= maxDeployedHeroes;
-  // Memoized on unlockedHeroIds alone (now stable-by-value via useShallow
-  // above) rather than recomputed every render - heroRosterConfig.filter
-  // would otherwise hand HeroRosterList a fresh array every tick and defeat
-  // its React.memo below regardless of how stable its other props are.
-  const ownedHeroes = useMemo(
-    () => heroRosterConfig.filter((definition) => unlockedHeroIds.includes(definition.id)),
-    [unlockedHeroIds],
-  );
-
-  // useCallback so these stay referentially stable across HeroPanel's own
-  // frequent re-renders (see the `heroes` comment above) - handlePointerUp
-  // depends on both (see useDeploySlotDrag.ts), so an inline arrow here
-  // would silently make *that* unstable too, cascading into HeroRosterList's
-  // memo below never actually skipping a re-render.
-  const handleToggleSelect = useCallback((id: string) => setSelectedHeroId(id), []);
-  const handleDeployDrop = useCallback(
-    (id: string) => {
-      if (!deployedHeroIds.includes(id)) {
-        deployHero(id);
-      }
-    },
-    [deployedHeroIds, deployHero],
-  );
-
-  const { drag, registerGameScreen, handlePointerDown, handlePointerMove, handlePointerUp, handlePointerCancel } = useDeploySlotDrag({
-    // A plain tap now selects the hero into the detail pane instead of
-    // toggling deploy - deploy/undeploy moved to an explicit button in
-    // HeroDetail (the master-detail pattern's "primary action" lives with
-    // the detail, not the compact row). Dragging onto the canvas still
-    // deploys directly via onDeploy below, unchanged.
-    onToggle: handleToggleSelect,
-    onDeploy: handleDeployDrop,
-  });
-
-  useEffect(() => {
-    registerGameScreen(gameScreenRef.current);
-  }, [gameScreenRef, registerGameScreen]);
-
-  // Lets BattleScreen draw the deploy-slot grid over the canvas while (and
-  // only while) a hero card is actually being dragged. Cleanup covers the
-  // panel closing mid-drag, which would otherwise leave the grid stuck on.
-  useEffect(() => {
-    setDragPreviewKind(drag.draggingId ? 'hero' : null);
-    return () => setDragPreviewKind(null);
-  }, [drag.draggingId, setDragPreviewKind]);
-
-  const draggingDefinition = drag.draggingId ? heroRosterConfig.find((d) => d.id === drag.draggingId) : undefined;
-
-  // Default selection - no blank detail pane on first open. Prefers the
-  // currently-selected hero if still owned, otherwise the first deployed
-  // hero (most relevant), otherwise just the first owned hero.
-  const effectiveSelectedId =
-    selectedHeroId && ownedHeroes.some((d) => d.id === selectedHeroId)
-      ? selectedHeroId
-      : ownedHeroes.find((d) => deployedHeroIds.includes(d.id))?.id ?? ownedHeroes[0]?.id ?? null;
-  const selectedDefinition = ownedHeroes.find((d) => d.id === effectiveSelectedId);
-  const selectedHero = selectedDefinition ? heroes.find((h) => h.id === selectedDefinition.id) : undefined;
-
-  function toggleDeploy(id: string) {
-    if (deployedHeroIds.includes(id)) {
-      undeployHero(id);
-    } else {
-      deployHero(id);
-    }
-  }
+  const definition = heroRosterConfig[0];
+  const hero = heroes[0];
 
   return (
     <div className="card">
-      <PanelHeader title={t('heroRoster.title')} trailing={`${deployedHeroIds.length}/${maxDeployedHeroes}`} />
-      {ownedHeroes.length === 0 ? (
-        <div className="empty-state">{t('heroRoster.empty')}</div>
+      <PanelHeader title={t('heroRoster.title')} />
+      {definition && hero ? (
+        <HeroDetail definition={definition} hero={hero} gold={gold} materials={materials} />
       ) : (
-        <>
-          <div className="card-subtitle">{t('squad.dragHint')}</div>
-          <div className="roster-grid-detail">
-            <HeroRosterList
-              ownedHeroes={ownedHeroes}
-              deployedHeroIds={deployedHeroIds}
-              effectiveSelectedId={effectiveSelectedId}
-              onPointerDown={handlePointerDown}
-              onPointerMove={handlePointerMove}
-              onPointerUp={handlePointerUp}
-              onPointerCancel={handlePointerCancel}
-            />
-            <div className="detail-pane">
-              {selectedDefinition && selectedHero ? (
-                <HeroDetail
-                  definition={selectedDefinition}
-                  hero={selectedHero}
-                  isDeployed={deployedHeroIds.includes(selectedDefinition.id)}
-                  squadFull={squadFull}
-                  gold={gold}
-                  materials={materials}
-                  onToggleDeploy={toggleDeploy}
-                />
-              ) : (
-                <div className="empty-state">{t('battle.selectPanel')}</div>
-              )}
-            </div>
-          </div>
-        </>
-      )}
-
-      {draggingDefinition && (
-        <div className="drag-ghost" style={{ left: drag.pointerX, top: drag.pointerY }}>
-          {heroes.find((h) => h.id === draggingDefinition.id)?.name ?? draggingDefinition.name}
-        </div>
+        <div className="empty-state">{t('battle.selectPanel')}</div>
       )}
     </div>
   );

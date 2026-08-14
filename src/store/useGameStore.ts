@@ -241,13 +241,6 @@ interface GameStore {
   // separate from debugSetSpeed, which is debug-only and skips the
   // wave-gate check SPEED_TIERS enforces in the UI.
   setSpeedMultiplier: (multiplier: number) => void;
-  // UI-only, not part of gameState - whether a hero roster card is mid-drag
-  // over the battle canvas, so BattleScreen knows whether to overlay the
-  // deploy-slot grid. Null whenever nothing is being dragged. Pets have no
-  // deploy-drag interaction anymore (see PetSystem.ts), so this is
-  // hero-only now.
-  dragPreviewKind: 'hero' | null;
-  setDragPreviewKind: (kind: 'hero' | null) => void;
   // UI-only, not part of gameState/saved - see App.tsx's window-mode toggle
   // buttons. Never persisted; every launch starts back at 'default'.
   windowMode: WindowMode;
@@ -463,8 +456,6 @@ export const useGameStore = create<GameStore>()(
     gameLoop?.setSpeedMultiplier(multiplier);
     set({ speedMultiplier: multiplier });
   },
-  dragPreviewKind: null,
-  setDragPreviewKind: (kind) => set({ dragPreviewKind: kind }),
   windowMode: 'default',
   setWindowMode: (mode) => set({ windowMode: mode }),
   dismissStory: () => {

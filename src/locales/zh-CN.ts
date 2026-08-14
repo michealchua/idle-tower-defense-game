@@ -290,11 +290,16 @@ const zhCN = {
   },
   codex: {
     title: '图鉴',
-    heroSection: '英雄图鉴',
+    evolutionSection: '进化图鉴',
+    skillSection: '技能图鉴',
     petSection: '宠物图鉴',
     enemySection: '魔物图鉴',
     obtained: '已获得',
     gachaSource: '通过扭蛋获取',
+    evolutionTier: '进化层级',
+    evolutionSkillReward: '进化技能奖励',
+    skillCooldown: '冷却',
+    skillRange: '范围',
   },
   enemyLore: {
     normal: { name: '游荡魔仆', description: '最常见的魔物爪牙,数量庞大却并不难对付。' },

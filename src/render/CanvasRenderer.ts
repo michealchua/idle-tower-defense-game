@@ -21,7 +21,7 @@ import {
   type SpriteImage,
   type HeroSpriteState,
 } from './assetLoader';
-import type { EnemyState, HeroState, PetState, Position, VisualEffect, VisualEffectKind } from '../engine/types';
+import type { EnemyState, HeroState, PetState, VisualEffect, VisualEffectKind } from '../engine/types';
 
 // Exported so BattleScreen's canvas-native drag-to-swap can hit-test pointer
 // coordinates against the same radii these are actually drawn at.
@@ -40,7 +40,6 @@ const CRITICAL_DAMAGE_NUMBER_RISE = 55;
 const HEAL_NUMBER_RISE = 34;
 const LEVEL_UP_RISE = 30;
 const MILESTONE_UNLOCK_RISE = 45;
-const DEPLOY_SLOT_SIZE = 30;
 
 interface HeroVisualStyle {
   color: string;
@@ -1371,96 +1370,6 @@ export function drawVignette(ctx: CanvasRenderingContext2D, canvasWidth: number,
   gradient.addColorStop(1, 'rgba(0, 0, 0, 0.45)');
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-}
-
-type DeploySlotState = 'empty' | 'occupied' | 'locked';
-
-// Drawn on top of everything else, only while a roster card is actively
-// being dragged (BattleScreen decides that, this just draws whatever slot
-// list it's handed). Occupied cells are dimmed, empty cells pulse-glow to
-// read as "drop here", and locked cells (beyond the squad's current
-// wave-gated cap - see mapConfig.layoutSlotPositions' doc comment) render as
-// a flat hatched grey so the full 3x3 shape is always visible, but the
-// player can see at a glance which cells aren't usable yet rather than
-// those cells simply not existing on screen.
-function drawDeploySlot(ctx: CanvasRenderingContext2D, position: Position, state: DeploySlotState): void {
-  const half = DEPLOY_SLOT_SIZE / 2;
-  const x = position.x - half;
-  const y = position.y - half;
-
-  if (state === 'locked') {
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
-    ctx.fillRect(x, y, DEPLOY_SLOT_SIZE, DEPLOY_SLOT_SIZE);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([3, 3]);
-    ctx.strokeRect(x, y, DEPLOY_SLOT_SIZE, DEPLOY_SLOT_SIZE);
-    ctx.setLineDash([]);
-    return;
-  }
-
-  if (state === 'occupied') {
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
-    ctx.fillRect(x, y, DEPLOY_SLOT_SIZE, DEPLOY_SLOT_SIZE);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([]);
-    ctx.strokeRect(x, y, DEPLOY_SLOT_SIZE, DEPLOY_SLOT_SIZE);
-    return;
-  }
-
-  ctx.fillStyle = 'rgba(76, 175, 80, 0.18)';
-  ctx.fillRect(x, y, DEPLOY_SLOT_SIZE, DEPLOY_SLOT_SIZE);
-  ctx.strokeStyle = 'rgba(129, 255, 133, 0.9)';
-  ctx.lineWidth = 2;
-  ctx.setLineDash([5, 4]);
-  ctx.strokeRect(x, y, DEPLOY_SLOT_SIZE, DEPLOY_SLOT_SIZE);
-  ctx.setLineDash([]);
-}
-
-// occupiedSlotIndices is a set of grid-cell indices, not a count - slots are
-// addressed by persistent HeroState.deployedSlotIndex now (see mapConfig.
-// layoutSlotPositions' doc comment), so "the first N slots are occupied"
-// (a simple count) no longer holds once a hero can occupy any specific cell.
-// unlockedCount is separate from that - it's the squad's current wave-gated
-// cap (squadConfig.getMaxDeployedHeroes), not an occupancy count: cells at/
-// after this index are always locked regardless of occupiedSlotIndices
-// (nothing can occupy a cell that isn't unlocked yet).
-export function drawDeploySlots(
-  ctx: CanvasRenderingContext2D,
-  slots: Position[],
-  occupiedSlotIndices: Set<number>,
-  unlockedCount: number,
-): void {
-  slots.forEach((slot, index) => {
-    const state: DeploySlotState = index >= unlockedCount ? 'locked' : occupiedSlotIndices.has(index) ? 'occupied' : 'empty';
-    drawDeploySlot(ctx, slot, state);
-  });
-}
-
-// Drawn while the player is dragging an already-deployed hero/pet around the
-// battle canvas to swap it with another slot (as opposed to drawDeploySlots,
-// which is for dragging a fresh unit in from the roster panel). ringColor
-// distinguishes "this is the one you picked up" from "drop here to swap".
-export function drawSwapHighlight(ctx: CanvasRenderingContext2D, position: Position, radius: number, ringColor: string): void {
-  ctx.strokeStyle = ringColor;
-  ctx.lineWidth = 3;
-  ctx.setLineDash([5, 4]);
-  ctx.beginPath();
-  ctx.arc(position.x, position.y, radius + 6, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.setLineDash([]);
-}
-
-// Faint copy of the dragged unit following the pointer, so it's clear what's
-// being carried even once it's away from its original spot.
-export function drawSwapGhost(ctx: CanvasRenderingContext2D, kind: 'hero' | 'pet', x: number, y: number): void {
-  ctx.globalAlpha = 0.5;
-  ctx.fillStyle = kind === 'hero' ? HERO_VISUAL_TIERS[0].color : PET_VISUAL_COLOR;
-  ctx.beginPath();
-  ctx.arc(x, y, kind === 'hero' ? HERO_RADIUS : PET_RADIUS, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.globalAlpha = 1;
 }
 
 // Below this, a shake is imperceptible - skipping the save/translate/restore
