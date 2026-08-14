@@ -31,6 +31,7 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
   const [displaySize, setDisplaySize] = useState({ width: CANVAS_WIDTH, height: CANVAS_HEIGHT });
   const heroes = useGameStore((state) => state.deployedHeroes);
   const pets = useGameStore((state) => state.pets);
+  const activePetId = useGameStore((state) => state.activePetId);
   const enemies = useGameStore((state) => state.enemies);
   const visualEffects = useGameStore((state) => state.visualEffects);
   const screenShakeIntensity = useGameStore((state) => state.screenShakeIntensity);
@@ -149,14 +150,18 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
     const offsetY = (pixelHeight - CANVAS_HEIGHT * scale) / 2;
     ctx.setTransform(scale, 0, 0, scale, offsetX, offsetY);
 
-    renderScene(ctx, heroes, pets, enemies, visualEffects, screenShakeIntensity, victoryPoseRemaining > 0);
+    // Only the deployed pet (if any) renders on the field - every other
+    // owned pet still contributes its passive bonus (see
+    // HeroStatsSystem.computePetPassiveBonuses), it just isn't drawn here.
+    const activePets = activePetId ? pets.filter((pet) => pet.id === activePetId) : [];
+    renderScene(ctx, heroes, activePets, enemies, visualEffects, screenShakeIntensity, victoryPoseRemaining > 0);
 
     // Drag-in-from-roster preview grid only now (canvas-native reposition
     // drag removed - nothing to rearrange with a single fixed protagonist).
     if (dragPreviewKind === 'hero') {
       drawDeploySlots(ctx, slotPositions, occupiedSlotIndices, maxDeployedHeroes);
     }
-  }, [heroes, pets, enemies, visualEffects, screenShakeIntensity, victoryPoseRemaining, displaySize, biome, dragPreviewKind, wave, slotPositions, occupiedSlotIndices, maxDeployedHeroes]);
+  }, [heroes, pets, activePetId, enemies, visualEffects, screenShakeIntensity, victoryPoseRemaining, displaySize, biome, dragPreviewKind, wave, slotPositions, occupiedSlotIndices, maxDeployedHeroes]);
 
   const aliveHeroCount = heroes.filter((hero) => !hero.isDowned).length;
 

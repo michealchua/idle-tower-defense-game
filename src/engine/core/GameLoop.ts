@@ -3,6 +3,7 @@ import { tickSpawn } from '../systems/SpawnSystem';
 import { tickMovement, tickHeroMovement } from '../systems/MovementSystem';
 import { tickEnemyAbilities } from '../systems/EnemyAbilitySystem';
 import { tickSkills } from '../systems/SkillSystem';
+import { tickPetAura } from '../systems/PetAuraSystem';
 import { tickLevelUp } from '../systems/LevelSystem';
 import { tickEffects, tickScreenShake, tickVictoryPose } from '../systems/EffectsSystem';
 import { tickEquipmentDropFeed } from '../systems/EquipmentSystem';
@@ -83,6 +84,7 @@ export class GameLoop {
           tickCombat(this.state, FIXED_TIMESTEP_SECONDS);
           tickEnemyAttacksOnHeroes(this.state, FIXED_TIMESTEP_SECONDS);
           tickSkills(this.state, FIXED_TIMESTEP_SECONDS);
+          tickPetAura(this.state, FIXED_TIMESTEP_SECONDS);
           tickLevelUp(this.state);
           tickWaveProgress(this.state, FIXED_TIMESTEP_SECONDS);
           tickGachaWelcomeBonus(this.state);

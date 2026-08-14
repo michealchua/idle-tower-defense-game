@@ -93,6 +93,9 @@ interface Materials {
 
 function PetDetail({ definition, gold, materials }: { definition: PetDefinition; gold: number; materials: Materials }) {
   const starUpPet = useGameStore((state) => state.starUpPet);
+  const activePetId = useGameStore((state) => state.activePetId);
+  const deployPet = useGameStore((state) => state.deployPet);
+  const undeployPet = useGameStore((state) => state.undeployPet);
   const currentStar = useGameStore((state) => state.petStars[definition.id] ?? 0);
   const shards = useGameStore((state) => state.petShards[definition.id] ?? 0);
   const nextCost = getStarUpCost(definition.rarity, currentStar);
@@ -103,6 +106,7 @@ function PetDetail({ definition, gold, materials }: { definition: PetDefinition;
     gold >= nextCost.gold &&
     (!nextCost.material || (materialKey !== undefined && materials[materialKey] >= nextCost.material));
   const passiveEntries = Object.entries(definition.passiveBonus) as [UpgradeableStat, number][];
+  const isActive = definition.id === activePetId;
 
   return (
     <div className={`detail-card ${RARITY_BORDER_CLASS[definition.rarity]}`}>
@@ -113,6 +117,22 @@ function PetDetail({ definition, gold, materials }: { definition: PetDefinition;
         </span>
       </div>
       <div className="item-detail">{t('petRoster.active')}</div>
+
+      <button
+        className="btn btn-primary btn-block"
+        style={{ marginTop: 4 }}
+        onClick={() => (isActive ? undeployPet() : deployPet(definition.id))}
+      >
+        {isActive ? t('squad.undeploy') : t('squad.deploy')}
+      </button>
+      <div className="item-detail text-faint">
+        {t(`petRoster.aura.${definition.auraEffect.kind}`)}{' '}
+        {definition.auraEffect.kind === 'healOverTime'
+          ? `+${definition.auraEffect.amount} HP`
+          : `${definition.auraEffect.amount} (${t('petRoster.auraRadius')} ${definition.auraEffect.radius})`}
+        {' · '}
+        {t('petRoster.auraInterval')} {definition.auraEffect.intervalSeconds}s
+      </div>
 
       <div className="stat-grid">
         {passiveEntries.map(([stat, value]) => (
@@ -140,13 +160,16 @@ function PetDetail({ definition, gold, materials }: { definition: PetDefinition;
   );
 }
 
-// Every owned pet is always active (see PetSystem.ts/HeroStatsSystem
-// .computePetPassiveBonuses) - no deploy/undeploy toggle, no squad-slot
-// count, unlike HeroPanel. Still uses the same master-detail shape so the
-// roster reads consistently across panels.
+// Every owned pet always contributes its passiveBonus (see PetSystem.ts/
+// HeroStatsSystem.computePetPassiveBonuses) regardless of deploy state - the
+// deploy/undeploy toggle below (PetDetail) only controls the separate,
+// narrower "which one pet draws its auraEffect and shows on the
+// battlefield" concept (GameState.activePetId), capped at one, unlike
+// HeroPanel's old multi-slot squad.
 function PetPanel() {
   const pets = useGameStore((state) => state.pets);
   const unlockedPetIds = useGameStore((state) => state.unlockedPetIds);
+  const activePetId = useGameStore((state) => state.activePetId);
   const petStars = useGameStore((state) => state.petStars);
   const gold = useGameStore((state) => state.gold);
   const epicSourceStone = useGameStore((state) => state.epicSourceStone);
@@ -188,6 +211,10 @@ function PetPanel() {
                   className={`roster-grid-item selectable ${RARITY_BORDER_CLASS[definition.rarity]}${isSelected ? ' active' : ''}`}
                   onClick={() => setSelectedPetId(definition.id)}
                 >
+                  <span
+                    className={`status-dot${definition.id === activePetId ? ' on' : ''}`}
+                    title={definition.id === activePetId ? t('squad.deployed') : t('squad.benched')}
+                  />
                   <SpriteAvatar src={petAvatarSrc(definition)} size={56} fallback={<PET_ICON />} />
                   <div className={`roster-grid-item-name ${RARITY_CLASS[definition.rarity]}`}>{petLabel(definition)}</div>
                   <div className="roster-grid-item-sub">★{petStars[definition.id] ?? 0}/{MAX_STAR_LEVEL}</div>

@@ -280,7 +280,13 @@ const zhCN = {
     locked: '未拥有',
     passiveBonus: '被动加成',
     empty: '还没有已获得的宠物,去扭蛋抽取吧',
-    active: '已生效 · 无需上阵',
+    active: '被动加成始终生效,持续效果需上阵',
+    auraRadius: '范围',
+    auraInterval: '间隔',
+    aura: {
+      healOverTime: '持续治疗',
+      damageOverTime: '持续伤害',
+    },
   },
   codex: {
     title: '图鉴',

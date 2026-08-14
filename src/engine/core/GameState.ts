@@ -51,6 +51,8 @@ export function createInitialGameState(): GameState {
     unlockedHeroIds: [starterHeroId],
     unlockedPetIds: [],
     deployedHeroIds: [starterHeroId],
+    activePetId: null,
+    petAuraCooldownRemaining: 0,
     skillPoints: 0,
     talentLevels: createInitialTalentLevels(),
     ascensionLevel: 0,

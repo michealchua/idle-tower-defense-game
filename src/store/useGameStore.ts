@@ -30,7 +30,7 @@ import {
   unequipSkill as unequipSkillInEngine,
 } from '../engine/systems/HeroSystem';
 import { skillDefinitions } from '../data/skillConfig';
-import { unlockPet as unlockPetInEngine } from '../engine/systems/PetSystem';
+import { unlockPet as unlockPetInEngine, deployPet as deployPetInEngine, undeployPet as undeployPetInEngine } from '../engine/systems/PetSystem';
 import { upgradeTalent as upgradeTalentInEngine } from '../engine/systems/TalentSystem';
 import { upgradeAscensionShopNode as upgradeAscensionShopNodeInEngine } from '../engine/systems/AscensionShopSystem';
 import { ascend as ascendInEngine, canAscend } from '../engine/systems/AscensionSystem';
@@ -91,6 +91,7 @@ function snapshotGameState(state: GameState) {
     unlockedHeroIds: [...state.unlockedHeroIds],
     unlockedPetIds: [...state.unlockedPetIds],
     deployedHeroIds: [...state.deployedHeroIds],
+    activePetId: state.activePetId,
     // Pre-filtered read-only view for rendering - only the active hero
     // squad gets drawn, a benched hero's stale position would otherwise
     // render. Every pet is always active, so `pets` above already is that
@@ -147,6 +148,9 @@ interface GameStore {
   unlockedPetIds: string[];
   deployedHeroIds: string[];
   deployedHeroes: HeroState[];
+  activePetId: string | null;
+  deployPet: (petId: string) => boolean;
+  undeployPet: () => boolean;
   skillPoints: number;
   talentLevels: Record<string, number>;
   upgradeTalent: (talentId: TalentId) => void;
@@ -311,6 +315,20 @@ export const useGameStore = create<GameStore>()(
     if (unlockPetInEngine(gameState, petId)) {
       set(snapshotGameState(gameState));
     }
+  },
+  deployPet: (petId) => {
+    const didDeploy = deployPetInEngine(gameState, petId);
+    if (didDeploy) {
+      set(snapshotGameState(gameState));
+    }
+    return didDeploy;
+  },
+  undeployPet: () => {
+    const didUndeploy = undeployPetInEngine(gameState);
+    if (didUndeploy) {
+      set(snapshotGameState(gameState));
+    }
+    return didUndeploy;
   },
   deployHero: (heroId) => {
     if (deployHeroInEngine(gameState, heroId)) {

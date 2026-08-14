@@ -316,13 +316,26 @@ export interface GameState {
   // currently fielded. deployedHeroIds (a subset, capped by squadConfig) is
   // who actually fights - see CombatSystem/SkillSystem/LevelSystem/
   // DamageSystem, all of which filter to the deployed subset. Pets have no
-  // such split - every entry in `pets` is always active, see
-  // HeroStatsSystem.computePetPassiveBonuses.
+  // such deployed/benched split for passives - every entry in `pets` always
+  // contributes its passiveBonus, see HeroStatsSystem.computePetPassiveBonuses.
+  // activePetId below is a separate, narrower concept layered on top.
   heroes: HeroState[];
   pets: PetState[];
   unlockedHeroIds: string[];
   unlockedPetIds: string[];
   deployedHeroIds: string[];
+  // The one pet (at most) drawing its auraEffect (petRosterConfig.ts,
+  // PetAuraSystem.tickPetAura) - separate from the passive-bonus split
+  // above, which every owned pet participates in regardless of this. null
+  // = no pet deployed, no aura ticking. Not reset by AscensionSystem.ascend
+  // (same permanent-choice category as HeroState.evolutionPath).
+  activePetId: string | null;
+  // Countdown to activePetId's next auraEffect tick (PetAuraSystem.
+  // tickPetAura) - single shared timer since only one pet can ever be
+  // active at once, unlike hero.skills' per-skill cooldown map. Reset
+  // whenever the active pet changes (PetSystem.deployPet) so switching
+  // pets doesn't inherit a stale countdown from a differently-paced aura.
+  petAuraCooldownRemaining: number;
   // Resource for the talent tree (talentConfig.ts/TalentSystem.ts) - earned
   // only by killing a wave's miniboss/boss (see DamageSystem.handleDeath),
   // never accrues passively. Spent on permanent percentage bonuses that

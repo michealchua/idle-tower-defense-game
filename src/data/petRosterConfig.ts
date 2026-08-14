@@ -2,6 +2,17 @@ import type { UpgradeableStat } from './heroConfig';
 import type { GachaRarity } from './gachaConfig';
 import type { UnlockCondition } from './unlockConditionConfig';
 
+// The one deployed pet's (GameState.activePetId, see PetSystem.deployPet)
+// persistent combat effect - fires on a repeating interval via
+// PetAuraSystem.tickPetAura, not an attack (pets have no auto-attack, see
+// PetDefinition.attackDamage's doc comment - this is the "genuinely
+// different from a hero" mechanic the single-protagonist redesign asked
+// for). Every other owned pet keeps contributing only its passiveBonus,
+// same as before this existed.
+export type PetAuraEffect =
+  | { kind: 'healOverTime'; amount: number; intervalSeconds: number }
+  | { kind: 'damageOverTime'; amount: number; radius: number; intervalSeconds: number };
+
 export interface PetDefinition {
   id: string;
   // Cosmetic sprite key, independent of id - id is save-critical (keys
@@ -17,12 +28,16 @@ export interface PetDefinition {
   // Team-wide passive bonus, added into every deployed hero's effective
   // stats - only from deployed pets, see HeroStatsSystem.computePetPassiveBonuses.
   passiveBonus: Partial<Record<UpgradeableStat, number>>;
-  // Pets don't level in v1 - these are their fixed, independent attack stats
-  // (still scaled by the ascension/star multipliers at recompute time, same
-  // as heroes).
+  // Legacy attack stats - no pet has ever actually auto-attacked (no system
+  // reads these for combat), and the single-protagonist redesign makes that
+  // explicit: the one deployed pet acts through auraEffect below instead.
+  // Kept only because HeroStatsSystem.recomputePetStats still writes scaled
+  // copies onto PetState for star-up/ascension math elsewhere to read.
   attackDamage: number;
   attackSpeed: number;
   attackRange: number;
+  // The deployed-only persistent effect - see PetAuraEffect's doc comment.
+  auraEffect: PetAuraEffect;
   // Same contract as HeroDefinition.unlockConditions - present means
   // excluded from the gacha pool, only obtainable via UnlockSystem.
   unlockConditions?: UnlockCondition[];
@@ -40,6 +55,7 @@ export const petRosterConfig: PetDefinition[] = [
     attackDamage: 4,
     attackSpeed: 0.8,
     attackRange: 90,
+    auraEffect: { kind: 'damageOverTime', amount: 3, radius: 80, intervalSeconds: 2 },
   },
   {
     id: 'pet-2',
@@ -49,6 +65,7 @@ export const petRosterConfig: PetDefinition[] = [
     attackDamage: 3,
     attackSpeed: 1,
     attackRange: 90,
+    auraEffect: { kind: 'healOverTime', amount: 5, intervalSeconds: 3 },
   },
   {
     id: 'pet-3',
@@ -58,6 +75,7 @@ export const petRosterConfig: PetDefinition[] = [
     attackDamage: 6,
     attackSpeed: 0.6,
     attackRange: 90,
+    auraEffect: { kind: 'healOverTime', amount: 12, intervalSeconds: 2.5 },
   },
   {
     id: 'pet-4',
@@ -67,6 +85,7 @@ export const petRosterConfig: PetDefinition[] = [
     attackDamage: 5,
     attackSpeed: 0.9,
     attackRange: 90,
+    auraEffect: { kind: 'damageOverTime', amount: 6, radius: 90, intervalSeconds: 2 },
   },
   // Condition-locked: reach ascension level 1. Never appears in the gacha pool.
   {
@@ -77,6 +96,7 @@ export const petRosterConfig: PetDefinition[] = [
     attackDamage: 8,
     attackSpeed: 0.7,
     attackRange: 90,
+    auraEffect: { kind: 'damageOverTime', amount: 10, radius: 100, intervalSeconds: 2 },
     unlockConditions: [{ type: 'ascensionLevel', level: 1 }],
   },
   // Gacha-obtainable red/rainbow - same reasoning as hero-9/hero-10, gives
@@ -89,6 +109,7 @@ export const petRosterConfig: PetDefinition[] = [
     attackDamage: 12,
     attackSpeed: 0.75,
     attackRange: 90,
+    auraEffect: { kind: 'damageOverTime', amount: 18, radius: 110, intervalSeconds: 1.8 },
   },
   {
     id: 'pet-7',
@@ -98,6 +119,7 @@ export const petRosterConfig: PetDefinition[] = [
     attackDamage: 18,
     attackSpeed: 0.7,
     attackRange: 90,
+    auraEffect: { kind: 'healOverTime', amount: 25, intervalSeconds: 2 },
   },
 ];
 

@@ -31,3 +31,36 @@ export function unlockPet(state: GameState, petId: string): boolean {
   recomputeHeroStats(state);
   return true;
 }
+
+// Sets GameState.activePetId - the one pet drawing its auraEffect
+// (PetAuraSystem.tickPetAura) and shown on the battlefield (see
+// BattleScreen.tsx filtering `pets` down to just this id before handing them
+// to CanvasRenderer.renderScene). Deploying a second pet swaps the first out
+// automatically rather than requiring an explicit undeploy first - "at most
+// one active" is enforced just by activePetId being a single id, not a set.
+// Every owned pet (deployed or not) keeps contributing its passiveBonus
+// regardless - see HeroStatsSystem.computePetPassiveBonuses, untouched by
+// this.
+export function deployPet(state: GameState, petId: string): boolean {
+  if (!state.unlockedPetIds.includes(petId) || state.activePetId === petId) {
+    return false;
+  }
+  state.activePetId = petId;
+  // A differently-paced aura shouldn't inherit whatever countdown was mid-
+  // flight for the previous pet (or none, for the first-ever deploy).
+  state.petAuraCooldownRemaining = 0;
+  const pet = state.pets.find((candidate) => candidate.id === petId);
+  if (pet) {
+    const [position] = layoutPetPositions(1);
+    pet.position = position;
+  }
+  return true;
+}
+
+export function undeployPet(state: GameState): boolean {
+  if (!state.activePetId) {
+    return false;
+  }
+  state.activePetId = null;
+  return true;
+}
