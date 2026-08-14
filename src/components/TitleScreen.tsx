@@ -4,6 +4,7 @@ import { useGameStore } from '../store/useGameStore';
 import { SAVE_SLOTS, getSaveMetadata, hasSave, getMostRecentSlot, type SaveMetadata, type SaveSlot } from '../engine/core/SaveSystem';
 import { IconSave } from './icons';
 import { sfxManager } from '../audio/SfxManager';
+import { audioManager } from '../audio/AudioManager';
 
 interface TitleScreenProps {
   onEnterGame: () => void;
@@ -42,6 +43,7 @@ function TitleScreen({ onEnterGame }: TitleScreenProps) {
     // First guaranteed user gesture in the app - browsers block audio
     // playback until one happens, see SfxManager.unlock's doc comment.
     sfxManager.unlock();
+    audioManager.unlock();
     const recentSlot = getMostRecentSlot();
     if (recentSlot !== null) {
       loadGame(recentSlot);
@@ -64,6 +66,7 @@ function TitleScreen({ onEnterGame }: TitleScreenProps) {
 
   function handleSlotPrimaryAction(slot: SaveSlot): void {
     sfxManager.unlock();
+    audioManager.unlock();
     if (hasSave(slot)) {
       loadGame(slot);
     } else {
@@ -78,6 +81,7 @@ function TitleScreen({ onEnterGame }: TitleScreenProps) {
     }
     if (pendingConfirm.action === 'overwrite') {
       sfxManager.unlock();
+      audioManager.unlock();
       startNewGame(pendingConfirm.slot);
       setPendingConfirm(null);
       onEnterGame();

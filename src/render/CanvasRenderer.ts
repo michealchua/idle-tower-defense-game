@@ -19,6 +19,7 @@ import {
   preloadSprites,
   preloadBackgroundImages,
   type SpriteImage,
+  type HeroSpriteState,
 } from './assetLoader';
 import type { EnemyState, HeroState, PetState, Position, VisualEffect, VisualEffectKind } from '../engine/types';
 
@@ -441,7 +442,7 @@ function drawPetSilhouette(ctx: CanvasRenderingContext2D, x: number, y: number, 
 // A single shared config rather than one per entity keeps this simple; if a
 // real sheet ever needs a different layout, split this into a lookup keyed
 // by sprite src instead of changing the shape wholesale.
-type SpriteAnimationState = 'walk' | 'attack';
+type SpriteAnimationState = 'walk' | 'attack' | 'hurt' | 'down';
 
 interface SpriteAnimationConfig {
   row: number;
@@ -449,12 +450,20 @@ interface SpriteAnimationConfig {
   fps: number;
 }
 
+// 'hurt'/'down' rows are unused today (every sprite in this project is a
+// static single-pose image, see isFrameSheet's doc comment - none of them
+// resolve to this frame-sheet path in the first place) but defined here
+// anyway so drawSpriteFrame's `SPRITE_SHEET_CONFIG.animations[state]` lookup
+// can never come back undefined if a real multi-row sheet is ever dropped in
+// later.
 const SPRITE_SHEET_CONFIG: { frameWidth: number; frameHeight: number; animations: Record<SpriteAnimationState, SpriteAnimationConfig> } = {
   frameWidth: 32,
   frameHeight: 32,
   animations: {
     walk: { row: 0, frameCount: 4, fps: 8 },
     attack: { row: 1, frameCount: 4, fps: 10 },
+    hurt: { row: 2, frameCount: 2, fps: 8 },
+    down: { row: 3, frameCount: 1, fps: 1 },
   },
 };
 
@@ -623,8 +632,18 @@ const ATTACK_ANIM_WINDOW_SECONDS = 0.2;
 // their idle-bob loop, 'attack' takes over for the brief window right after
 // CombatSystem.tickAttackerCombat resets attackCooldownRemaining to
 // 1/attackSpeed. Derived entirely from existing HeroState fields, no new
-// per-hero "am I attacking" state needed.
-function getHeroAnimationState(hero: HeroState): SpriteAnimationState {
+// per-hero "am I attacking" state needed. isDowned > isHurting > attack/walk
+// in priority - a downed hero always shows 'down' regardless of what its
+// cooldown timer happens to read (it's not fighting anymore), and a fresh
+// hit takes over the walk/attack loop for its own short window the same way
+// attack already does.
+function getHeroAnimationState(hero: HeroState, isHurting: boolean): SpriteAnimationState {
+  if (hero.isDowned) {
+    return 'down';
+  }
+  if (isHurting) {
+    return 'hurt';
+  }
   const cooldownDuration = hero.attackSpeed > 0 ? 1 / hero.attackSpeed : 0;
   const justAttacked = cooldownDuration > 0 && hero.attackCooldownRemaining > cooldownDuration - ATTACK_ANIM_WINDOW_SECONDS;
   return justAttacked ? 'attack' : 'walk';
@@ -635,8 +654,13 @@ function getHeroAnimationState(hero: HeroState): SpriteAnimationState {
 // enemyHeroAttackIntervalSeconds when the enemy actually lands a hit (not on
 // every tick), so the same "still within the fresh window" check works here
 // too. An enemy that's just marching (never in range yet) keeps its default
-// 'walk' state.
-function getEnemyAnimationState(enemy: EnemyState): SpriteAnimationState {
+// 'walk' state. No 'down' case - enemies are removed from state.enemies the
+// instant they die (DamageSystem.handleDeath), there's no "downed but still
+// on field" state to show a pose for.
+function getEnemyAnimationState(enemy: EnemyState, isHurting: boolean): SpriteAnimationState {
+  if (isHurting) {
+    return 'hurt';
+  }
   const justAttacked = enemy.heroAttackCooldownRemaining > enemyHeroAttackIntervalSeconds - ATTACK_ANIM_WINDOW_SECONDS;
   return justAttacked ? 'attack' : 'walk';
 }
@@ -665,10 +689,11 @@ function getAllEvolutionBranchIds(): string[] {
 export function preloadBattleSprites(): void {
   const enemySpriteTypes = new Set(Object.values(ENEMY_SPRITE_TYPE));
 
+  const heroPoses: HeroSpriteState[] = ['walk', 'attack', 'hurt', 'down'];
   preloadSprites([
-    ...heroClasses.flatMap((heroClass) => [getHeroSpriteSrc(heroClass, 'walk'), getHeroSpriteSrc(heroClass, 'attack')]),
-    ...getAllEvolutionBranchIds().flatMap((branchId) => [getHeroEvolvedSpriteSrc(branchId, 'walk'), getHeroEvolvedSpriteSrc(branchId, 'attack')]),
-    ...Array.from(enemySpriteTypes).map((type) => getEnemySpriteSrc(type)),
+    ...heroClasses.flatMap((heroClass) => heroPoses.map((pose) => getHeroSpriteSrc(heroClass, pose))),
+    ...getAllEvolutionBranchIds().flatMap((branchId) => heroPoses.map((pose) => getHeroEvolvedSpriteSrc(branchId, pose))),
+    ...Array.from(enemySpriteTypes).flatMap((type) => [getEnemySpriteSrc(type), getEnemySpriteSrc(type, 'hurt')]),
     ...petRosterConfig.map((pet) => getPetSpriteSrc(pet.spriteId ?? pet.id)),
   ]);
   // Backgrounds go through a separate, un-stripped cache - see
@@ -957,14 +982,16 @@ function drawHero(
   const heroRadius = HERO_RADIUS * heroStyle.radiusMultiplier * pulseScale;
 
   // Downed (HeroState.isDowned, see DamageSystem.applyDamageToHero) heroes
-  // stay on the field - dimmed and desaturated rather than removed, so the
-  // squad-wipe lose condition (WaveSystem.tickWaveProgress's checkSquadWipe)
-  // reads visually before it actually triggers, instead of heroes just
-  // vanishing one by one with no feedback.
+  // stay on the field rather than removed, so the squad-wipe lose condition
+  // (WaveSystem.tickWaveProgress's checkSquadWipe) reads visually before it
+  // actually triggers, instead of heroes just vanishing one by one with no
+  // feedback. Now shows a dedicated collapsed-pose sprite (see
+  // scripts/pixel_sprites.py's 'down' pose) instead of the old grayscale-
+  // filter-over-walk-pose placeholder - just a light dim on top since the
+  // pose itself already reads as "down", not desaturated-to-illegible.
   ctx.save();
   if (hero.isDowned) {
-    ctx.globalAlpha = 0.45;
-    ctx.filter = 'grayscale(1)';
+    ctx.globalAlpha = 0.7;
   } else if (heroStyle.glowColor) {
     ctx.fillStyle = heroStyle.glowColor;
     ctx.beginPath();
@@ -986,14 +1013,17 @@ function drawHero(
   // regress a hero from "real sprite" back to "geometric shape" just because
   // its specific evolved art hasn't been dropped in.
   //
-  // Hero art is a walk/attack pair of static illustrations, not a frame
-  // sheet (see getHeroSpriteSrc's doc comment) - the animation state picks
-  // which file to load. Not every class/branch has an attack pose drawn yet,
-  // so a missing attack file falls back to that same source's walk pose
-  // rather than the geometric fallback - a hero mid-swing should still show
-  // its real art, just without the swing itself, instead of regressing to a
-  // colored circle for the ~0.2s attack window (see ATTACK_ANIM_WINDOW_SECONDS).
-  const animState = getHeroAnimationState(hero);
+  // Hero art is a walk/attack/hurt/down set of static illustrations, not a
+  // frame sheet (see getHeroSpriteSrc's doc comment) - the animation state
+  // picks which file to load. Not every class/branch has every pose drawn
+  // yet, so a missing file falls back to that same source's walk pose rather
+  // than the geometric fallback - a hero mid-swing/flinching/downed should
+  // still show its real art, just without that specific pose, instead of
+  // regressing to a colored circle for a brief window (see
+  // ATTACK_ANIM_WINDOW_SECONDS) or for the rest of the wave attempt (down).
+  const hitEffect = hitReactionByEntity.get(heroEntityKey(hero.id));
+  const isHurting = !!hitEffect;
+  const animState = getHeroAnimationState(hero, isHurting);
   const evolvedSprite = hero.evolutionBranchId
     ? (getImage(getHeroEvolvedSpriteSrc(hero.evolutionBranchId, animState)) ?? getImage(getHeroEvolvedSpriteSrc(hero.evolutionBranchId, 'walk')))
     : undefined;
@@ -1006,7 +1036,6 @@ function drawHero(
   ctx.textAlign = 'center';
   ctx.fillText(hero.name, hero.position.x, hero.position.y - heroRadius - 18);
 
-  const hitEffect = hitReactionByEntity.get(heroEntityKey(hero.id));
   drawEntityWithHitReaction(ctx, hitEffect, hero.position.x, hero.position.y, () => {
     if (sprite) {
       const size = heroRadius * 2;
@@ -1102,15 +1131,19 @@ function drawEnemy(
   // directly - hand-authoring one sheet per archetype isn't the intended art
   // budget, so several archetypes intentionally share a visual identity.
   const spriteType = ENEMY_SPRITE_TYPE[enemy.archetypeId];
-  const sprite = getImage(getEnemySpriteSrc(spriteType));
+  const hitEffect = hitReactionByEntity.get(enemyEntityKey(enemy.instanceId));
+  const isHurting = !!hitEffect;
+  // Falls back to the plain (walk) file if a _hurt variant isn't there for
+  // this sprite type yet - same "never regress to the geometric fallback
+  // just because one specific pose is missing" contract as drawHero.
+  const sprite = isHurting ? (getImage(getEnemySpriteSrc(spriteType, 'hurt')) ?? getImage(getEnemySpriteSrc(spriteType))) : getImage(getEnemySpriteSrc(spriteType));
 
   drawGroundShadow(ctx, enemy.position.x, enemy.position.y + enemyRadius * 0.85, enemyRadius * 0.8);
 
-  const hitEffect = hitReactionByEntity.get(enemyEntityKey(enemy.instanceId));
   drawEntityWithHitReaction(ctx, hitEffect, enemy.position.x, enemy.position.y, () => {
     if (sprite) {
       const size = enemyRadius * 2;
-      drawEntitySprite(ctx, sprite, getEnemyAnimationState(enemy), nowSeconds, enemy.position.x, enemy.position.y, size, needsFlip('enemy'));
+      drawEntitySprite(ctx, sprite, getEnemyAnimationState(enemy, isHurting), nowSeconds, enemy.position.x, enemy.position.y, size, needsFlip('enemy'));
     } else {
       drawProceduralEnemySilhouette(ctx, spriteType, enemy.position.x, enemy.position.y, enemyRadius, enemyStyle.color);
       drawFallbackGlyph(ctx, enemy.position.x, enemy.position.y, enemy.archetypeId.charAt(0).toUpperCase(), enemyRadius * 0.75);

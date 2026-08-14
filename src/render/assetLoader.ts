@@ -154,11 +154,15 @@ export function getBackgroundImage(src: string): HTMLImageElement | undefined {
   return undefined;
 }
 
-// Hero art is a pair of high-detail static illustrations per class/branch
-// (walk pose, attack pose), not a 32x32 frame sheet - see CanvasRenderer's
-// drawHeroSprite for how the two get swapped. 'state' defaults to 'walk' so
-// existing call sites that only need the idle pose don't have to pass it.
-export type HeroSpriteState = 'walk' | 'attack';
+// Hero art is a set of static illustrations per class/branch (walk/attack/
+// hurt/down), not a 32x32 frame sheet - see CanvasRenderer's drawEntitySprite
+// for how these get swapped. 'hurt' is a brief flinch shown for the same
+// short window as CanvasRenderer's hitReaction flash/squash (see
+// scripts/pixel_sprites.py's 'hurt' pose); 'down' is HeroState.isDowned's
+// dedicated collapsed pose, replacing the old grayscale-filter-over-walk
+// placeholder. 'state' defaults to 'walk' so existing call sites that only
+// need the idle pose don't have to pass it.
+export type HeroSpriteState = 'walk' | 'attack' | 'hurt' | 'down';
 
 // Single source of truth for the sprite directory convention - CanvasRenderer
 // calls these instead of building paths inline, so every entity type looks
@@ -185,8 +189,13 @@ export function getHeroSpriteSrc(heroClass: string, state: HeroSpriteState = 'wa
 // archetypeId directly - CanvasRenderer's ENEMY_SPRITE_TYPE maps the 14
 // gameplay archetypes onto this small set of shared visual identities, since
 // hand-authoring 14 unique enemy sheets isn't the intended art budget.
-export function getEnemySpriteSrc(type: string): string {
-  return `sprites/enemies/${type}.png`;
+// 'hurt' is an optional suffix (see scripts/pixel_sprites.py) rather than a
+// HeroSpriteState-shaped required param - the base filename (walk pose,
+// unsuffixed) predates this and every existing call site/reference still
+// expects it unsuffixed, so 'walk' deliberately maps to no suffix at all
+// instead of introducing a `${type}_walk.png` rename.
+export function getEnemySpriteSrc(type: string, state: 'walk' | 'hurt' = 'walk'): string {
+  return state === 'hurt' ? `sprites/enemies/${type}_hurt.png` : `sprites/enemies/${type}.png`;
 }
 
 export function getPetSpriteSrc(petId: string): string {

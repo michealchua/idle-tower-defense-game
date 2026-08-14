@@ -1,6 +1,9 @@
-// BGM is off for now - no real tracks have been dropped in yet, so
-// setTrack/unlock below just no-op until this flips back to true.
-const BGM_ENABLED = false;
+// 12 genuinely distinct tracks now exist (scripts/pixel_music.py -
+// procedurally synthesized chiptune loops, see its own doc comment for why
+// this is chiptune-tier rather than commercial-quality) - previously this
+// was off because every file was the same placeholder tone copied under 12
+// names, which was legitimately more annoying than silence.
+const BGM_ENABLED = true;
 
 // Thin wrapper around a single looping <audio> element for the biome BGM.
 // Plain class (not store state) because playback is imperative browser

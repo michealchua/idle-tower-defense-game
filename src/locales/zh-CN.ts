@@ -107,6 +107,8 @@ const zhCN = {
     returnToTitle: '返回主菜单',
     returnToTitleConfirm: '确认返回主菜单?请先保存进度,未保存的内容将会丢失',
     soundSection: '音效',
+    bgmOn: '背景音乐已开启',
+    bgmOff: '背景音乐已关闭',
     sfxOn: '音效已开启',
     sfxOff: '音效已关闭',
     updateSection: '更新',

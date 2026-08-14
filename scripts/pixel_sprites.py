@@ -64,12 +64,15 @@ GW, GH = 26, 34
 
 def draw_humanoid(pal, pose, weapon, headwear, cape=False):
     """pal: dict with keys body, body_dark, skin, trim, weapon, weapon_dark,
-    hair. pose: 'walk' or 'attack'."""
+    hair. pose: 'walk', 'attack', or 'hurt' (a brief recoil/flinch frame -
+    see DamageSystem.spawnHitReaction on the TS side, which triggers this
+    pose for a short window on every hit, not just crits)."""
     img = new_grid(GW, GH)
     d = ImageDraw.Draw(img)
 
     attacking = pose == "attack"
-    lean = 1 if attacking else 0
+    hurting = pose == "hurt"
+    lean = 1 if attacking else (-1 if hurting else 0)
 
     # Cape (drawn first, behind everything else) - derived from body_dark
     # rather than a separate palette entry, so callers just pass cape=True
@@ -94,11 +97,18 @@ def draw_humanoid(pal, pose, weapon, headwear, cape=False):
     if pal.get("trim"):
         px(d, tx, 20, pal["trim"], 10, 2)
 
-    # Off-hand arm (left, static).
-    px(d, 5 - lean, 13, pal["body_dark"], 3, 8)
-    px(d, 5 - lean, 20, pal["skin"], 3, 2)
+    # Off-hand arm (left) - raised defensively in front of the face when
+    # hurting, static at the side otherwise (walk/attack both use the
+    # static position - only the weapon arm changes for attack).
+    if hurting:
+        px(d, 4 - lean, 6, pal["body_dark"], 3, 8)
+        px(d, 4 - lean, 4, pal["skin"], 3, 3)
+    else:
+        px(d, 5 - lean, 13, pal["body_dark"], 3, 8)
+        px(d, 5 - lean, 20, pal["skin"], 3, 2)
 
-    # Weapon arm (right) - repositioned for attack pose.
+    # Weapon arm (right) - repositioned for attack pose, lowered/relaxed
+    # (same as walk) for hurt.
     if attacking:
         px(d, tx + 8, 9, pal["body_dark"], 3, 7)
         px(d, tx + 8, 9, pal["skin"], 3, 2)
@@ -114,8 +124,62 @@ def draw_humanoid(pal, pose, weapon, headwear, cape=False):
     hx, hy = 9 + lean, 2
     px(d, hx, hy, pal["skin"], 8, 8)
     px(d, hx, hy, shade(pal["skin"], 0.2), 8, 2)
-    px(d, hx + 1, hy + 3, (40, 30, 30, 255), 1, 1)
-    px(d, hx + 6, hy + 3, (40, 30, 30, 255), 1, 1)
+    if hurting:
+        # Wincing - flat closed-eye lines instead of the calm round dots,
+        # same "closed eye" language draw_humanoid_down uses for its
+        # collapsed pose.
+        px(d, hx + 1, hy + 3, (40, 30, 30, 255), 2, 1)
+        px(d, hx + 5, hy + 3, (40, 30, 30, 255), 2, 1)
+    else:
+        px(d, hx + 1, hy + 3, (40, 30, 30, 255), 1, 1)
+        px(d, hx + 6, hy + 3, (40, 30, 30, 255), 1, 1)
+
+    draw_headwear(d, headwear, hx, hy, pal)
+
+    outline(img)
+    return img
+
+
+def draw_humanoid_down(pal, headwear, cape=False):
+    """Collapsed/kneeling pose for a hero that's been downed
+    (HeroState.isDowned) - structurally distinct from draw_humanoid rather
+    than another lean variant, since "on the ground" needs a genuinely
+    different silhouette (bent legs, slumped torso, lowered head), not just
+    a repositioned upright figure. No weapon drawn - dropped."""
+    img = new_grid(GW, GH)
+    d = ImageDraw.Draw(img)
+
+    # Legs - bent/kneeling, shorter and wider-set than the standing pose.
+    leg_y = 27
+    px(d, 6, leg_y, pal["body_dark"], 6, 5)
+    px(d, 15, leg_y, pal["body_dark"], 6, 5)
+    px(d, 6, leg_y + 4, (30, 26, 24, 255), 6, 2)
+    px(d, 15, leg_y + 4, (30, 26, 24, 255), 6, 2)
+
+    if cape:
+        cape_color = pal["body_dark"]
+        px(d, 6, 16, cape_color, 14, 10)
+        px(d, 6, 16, shade(cape_color, -0.3), 2, 10)
+
+    # Torso - lower and shorter than standing (y=16..26 vs y=12..23), reads
+    # as slumped forward.
+    px(d, 7, 16, pal["body"], 12, 10)
+    px(d, 7, 16, shade(pal["body"], -0.15), 12, 3)
+    if pal.get("trim"):
+        px(d, 7, 23, pal["trim"], 12, 2)
+
+    # Arms hanging limp at the sides.
+    px(d, 4, 18, pal["body_dark"], 3, 8)
+    px(d, 19, 18, pal["body_dark"], 3, 8)
+    px(d, 4, 25, pal["skin"], 3, 2)
+    px(d, 19, 25, pal["skin"], 3, 2)
+
+    # Head - tilted down, drawn lower than the standing pose's hy=2.
+    hx, hy = 9, 8
+    px(d, hx, hy, pal["skin"], 8, 8)
+    px(d, hx, hy, shade(pal["skin"], 0.2), 8, 2)
+    px(d, hx + 1, hy + 4, (40, 30, 30, 255), 2, 1)
+    px(d, hx + 5, hy + 4, (40, 30, 30, 255), 2, 1)
 
     draw_headwear(d, headwear, hx, hy, pal)
 
@@ -216,6 +280,24 @@ def draw_slime(pal):
     px(d, 6, 8, (255, 255, 255, 160), 3, 2)
     px(d, 8, 12, pal["body_dark"], 1, 1)
     px(d, 13, 12, pal["body_dark"], 1, 1)
+    outline(img)
+    return img
+
+
+def draw_slime_hurt(pal):
+    """Squashed flatter/wider than the normal pose plus wincing (flat-line)
+    eyes instead of the calm dots - same brief hit-recoil moment
+    draw_humanoid's 'hurt' pose covers for the biped enemies, just built
+    from the slime's own blob primitives instead of shared humanoid limbs."""
+    img = new_grid(SW, SH)
+    d = ImageDraw.Draw(img)
+    px(d, 1, 10, pal["body"], 20, 8)
+    px(d, 4, 8, pal["body"], 14, 3)
+    px(d, 1, 10, shade(pal["body"], 0.3), 6, 3)
+    px(d, 16, 16, pal["body_dark"], 5, 3)
+    px(d, 5, 12, (255, 255, 255, 160), 3, 2)
+    px(d, 7, 15, pal["body_dark"], 2, 1)
+    px(d, 13, 15, pal["body_dark"], 2, 1)
     outline(img)
     return img
 
@@ -377,11 +459,26 @@ def hero_frame(pal, pose):
     )
 
 
+def hero_down_frame(pal):
+    # Includes "weapon" even though this pose draws no weapon itself -
+    # draw_headwear's "halo" variant colors the ring from pal["weapon"], and
+    # this pose still draws headwear (helmet/halo/etc stay on a downed hero).
+    return draw_humanoid_down(
+        {k: pal[k] for k in ("body", "body_dark", "skin", "trim", "weapon") if k in pal},
+        pal["headwear"],
+        cape=pal.get("cape", False),
+    )
+
+
 def main():
-    # Base hero classes.
+    # Base hero classes - walk/attack/hurt (brief hit-recoil, ~0.18s window
+    # driven by CanvasRenderer's hitReaction lookup) / down (HeroState.
+    # isDowned, persists until the wave resets).
     for class_id, pal in HERO_CLASSES.items():
         save(hero_frame(pal, "walk"), f"heroes/{class_id}_walk.png")
         save(hero_frame(pal, "attack"), f"heroes/{class_id}_attack.png")
+        save(hero_frame(pal, "hurt"), f"heroes/{class_id}_hurt.png")
+        save(hero_down_frame(pal), f"heroes/{class_id}_down.png")
 
     # Evolution branches - inherit any key not overridden from their base class.
     for branch_id, overrides in EVOLUTION_BRANCHES.items():
@@ -390,13 +487,26 @@ def main():
         file_id = branch_id.replace("-", "_")
         save(hero_frame(pal, "walk"), f"heroes/evolved/{file_id}_walk.png")
         save(hero_frame(pal, "attack"), f"heroes/evolved/{file_id}_attack.png")
+        save(hero_frame(pal, "hurt"), f"heroes/evolved/{file_id}_hurt.png")
+        save(hero_down_frame(pal), f"heroes/evolved/{file_id}_down.png")
 
-    # Enemies.
+    # Enemies - base pose unchanged (still the single file every archetype
+    # sharing that sprite type already used), plus a new _hurt variant for
+    # the same brief hit-recoil window heroes get. No "death" pose - see
+    # scripts/pixel_sprites.py's module doc comment / ART_ASSET_CHECKLIST.md
+    # for why that was scoped out (would need delaying enemy removal from
+    # state.enemies, a bigger engine change than an art pass).
     save(draw_humanoid(GOBLIN_PAL, "walk", "dagger", "cap"), "enemies/goblin.png")
-    save(draw_slime(dict(body=(90, 200, 140, 255), body_dark=(50, 150, 100, 255))), "enemies/slime.png")
+    save(draw_humanoid(GOBLIN_PAL, "hurt", "dagger", "cap"), "enemies/goblin_hurt.png")
+    slime_pal = dict(body=(90, 200, 140, 255), body_dark=(50, 150, 100, 255))
+    save(draw_slime(slime_pal), "enemies/slime.png")
+    save(draw_slime_hurt(slime_pal), "enemies/slime_hurt.png")
     save(draw_humanoid(ZOMBIE_PAL, "attack", None, None), "enemies/zombie.png")
+    save(draw_humanoid(ZOMBIE_PAL, "hurt", None, None), "enemies/zombie_hurt.png")
     save(draw_humanoid(WITCH_PAL, "walk", "staff", "wizard_hat"), "enemies/witch.png")
+    save(draw_humanoid(WITCH_PAL, "hurt", "staff", "wizard_hat"), "enemies/witch_hurt.png")
     save(draw_humanoid(BOSS_PAL, "attack", "sword", "horns"), "enemies/demon_boss.png")
+    save(draw_humanoid(BOSS_PAL, "hurt", "sword", "horns"), "enemies/demon_boss_hurt.png")
 
     # Pets.
     for pet_id, pal in PETS.items():
