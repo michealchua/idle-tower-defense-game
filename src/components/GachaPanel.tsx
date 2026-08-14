@@ -45,10 +45,18 @@ function formatPitySuffix(pityHits: number): string {
   return pityHits > 0 ? ` (${t('gacha.pityTriggered')}${pityHits > 1 ? ` ×${pityHits}` : ''})` : '';
 }
 
-// Roster ids are `<rarity>-<n>` (see heroRosterConfig.ts/petRosterConfig.ts) -
-// this renders as e.g. "白12" instead of the raw id, matching HeroPanel/
-// PetPanel/CodexPanel's display convention.
+// Heroes have a real deterministic name (HeroDefinition.name, see
+// heroRosterConfig.ts's doc comment) already shown everywhere else a hero
+// appears (HeroPanel, CodexPanel) - this used to show "白12"-style rarity+
+// number placeholders here instead, the one place in the whole app that
+// didn't use the real name. Pets have no equivalent name field yet (see
+// PetDefinition - only a cosmetic spriteId), so they keep the rarity+number
+// fallback until pets get real names of their own.
 function formatRosterLabel(rarity: GachaRarity, id: string): string {
+  const heroDefinition = heroRosterConfig.find((hero) => hero.id === id);
+  if (heroDefinition) {
+    return heroDefinition.name;
+  }
   return `${t(RARITY_LABEL_KEYS[rarity])}${id.split('-')[1]}`;
 }
 
@@ -104,6 +112,14 @@ function getBestCelebrationRarity(results: GachaPullResult[]): GachaRarity | nul
   return CELEBRATION_RARITIES.find((rarity) => counts[rarity] > 0) ?? null;
 }
 
+// Actual best rarity in the batch, not just celebration-tier - used to color
+// GachaSummonOverlay's ring so it always reflects what was actually pulled
+// instead of a fixed color regardless of outcome.
+function getBestRarity(results: GachaPullResult[]): GachaRarity {
+  const counts = countByRarity(results);
+  return RARITY_DISPLAY_ORDER.find((rarity) => counts[rarity] > 0) ?? 'white';
+}
+
 // Solid accent color per rarity for the reveal card's front-face border/glow
 // - CSS var references (not raw hex) so this stays in sync with whatever
 // index.css's :root rarity palette is. Rainbow has no single solid color
@@ -140,7 +156,7 @@ const SUMMON_ANIMATION_MS = 1100;
 // payoff is GachaCelebration below, after the cards are actually revealed).
 // Purely a timed pass-through: nothing here is interactive, it just calls
 // onDone once the animation's had time to play.
-function GachaSummonOverlay({ onDone }: { onDone: () => void }) {
+function GachaSummonOverlay({ onDone, accentColor }: { onDone: () => void; accentColor: string }) {
   useEffect(() => {
     const timer = setTimeout(onDone, SUMMON_ANIMATION_MS);
     return () => clearTimeout(timer);
@@ -161,7 +177,13 @@ function GachaSummonOverlay({ onDone }: { onDone: () => void }) {
     <div className="gacha-summon-backdrop">
       <div className="gacha-summon-grow">
         <div className="gacha-summon-circle" />
-        <div className="gacha-summon-circle gacha-summon-circle-outer" />
+        {/* Outer ring's color reflects the actual best rarity in this pull
+            (see getBestRarity) instead of a fixed hardcoded color - a
+            purple ring every time regardless of outcome was misleading. The
+            pull result is already determined by this point (results exist,
+            just not yet flipped face-up), so coloring the ring doesn't
+            reveal anything the reveal-card flip sequence wouldn't anyway. */}
+        <div className="gacha-summon-circle gacha-summon-circle-outer" style={{ borderTopColor: accentColor, borderLeftColor: accentColor }} />
       </div>
       <div className="gacha-summon-flash" />
     </div>
@@ -448,15 +470,15 @@ function GachaPanel() {
     <div className="card">
       <div className="card-title">{t('gacha.title')}</div>
 
-      {summonResults && <GachaSummonOverlay onDone={handleSummonDone} />}
+      {summonResults && <GachaSummonOverlay onDone={handleSummonDone} accentColor={RARITY_ACCENT_VAR[getBestRarity(summonResults)]} />}
 
       {pendingReveal && <GachaRevealOverlay results={pendingReveal} onDone={handleRevealDone} />}
 
-      {celebration && (
-        <div key={celebration.key} className={`gacha-celebration gacha-celebration-${celebration.rarity}`}>
-          <div className="gacha-celebration-label">{t(RARITY_LABEL_KEYS[celebration.rarity])}</div>
-        </div>
-      )}
+      {/* The single gold/red/rainbow character pop (the old
+          .gacha-celebration-label child) was cut per user feedback - the
+          rarity-tinted glow/ring/aurora flourish on this div itself (its
+          ::before/::after, keyed by the rarity-specific class) stays. */}
+      {celebration && <div key={celebration.key} className={`gacha-celebration gacha-celebration-${celebration.rarity}`} />}
 
       <div className="card-grid">
         <PullCard

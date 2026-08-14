@@ -43,6 +43,12 @@ export interface SkillDefinition {
   aoeRadius?: number;
   // chainDamage: how many enemies it hits. healAlly: how many allies it heals.
   targetCount?: number;
+  // Hex accent for this skill's cast-pose spark, impact ring/bolt/pulse, and
+  // particle burst (SkillSystem/CanvasRenderer) - every skill used to share
+  // just 3 fixed colors (one per effectType), so a Fireball and an
+  // Earthquake looked identical mid-cast. Themed per skill's flavor, not its
+  // effectType, so skills sharing an effectType still read as distinct.
+  color: string;
 }
 
 export const skillDefinitions: Record<string, SkillDefinition> = {
@@ -57,6 +63,7 @@ export const skillDefinitions: Record<string, SkillDefinition> = {
     targetingStrategy: 'heroDefault',
     aoeRadius: 60,
     damageMultiplier: 1.5,
+    color: '#ff7043',
   },
   // Same effectType as Fireball - a bigger, slower-cooling nuke. Zero new
   // engine code: SkillSystem's aoeDamage case and the skillImpact visual
@@ -71,6 +78,7 @@ export const skillDefinitions: Record<string, SkillDefinition> = {
     targetingStrategy: 'heroDefault',
     aoeRadius: 100,
     damageMultiplier: 3,
+    color: '#ff3d00',
   },
   'skill-flameNova': {
     id: 'skill-flameNova',
@@ -82,6 +90,7 @@ export const skillDefinitions: Record<string, SkillDefinition> = {
     targetingStrategy: 'closestToHero',
     aoeRadius: 70,
     damageMultiplier: 1.2,
+    color: '#ffab40',
   },
   'skill-iceBurst': {
     id: 'skill-iceBurst',
@@ -93,6 +102,7 @@ export const skillDefinitions: Record<string, SkillDefinition> = {
     targetingStrategy: 'strongest',
     aoeRadius: 80,
     damageMultiplier: 1.7,
+    color: '#4fc3f7',
   },
   'skill-earthquake': {
     id: 'skill-earthquake',
@@ -104,6 +114,7 @@ export const skillDefinitions: Record<string, SkillDefinition> = {
     targetingStrategy: 'closestToBase',
     aoeRadius: 120,
     damageMultiplier: 3.4,
+    color: '#8d6e63',
   },
   'skill-novaBlast': {
     id: 'skill-novaBlast',
@@ -115,6 +126,7 @@ export const skillDefinitions: Record<string, SkillDefinition> = {
     targetingStrategy: 'heroDefault',
     aoeRadius: 55,
     damageMultiplier: 1.4,
+    color: '#ba68c8',
   },
 
   // --- chainDamage (6) ---
@@ -131,6 +143,7 @@ export const skillDefinitions: Record<string, SkillDefinition> = {
     targetingStrategy: 'lowestHp',
     targetCount: 3,
     damageMultiplier: 0.8,
+    color: '#ffee58',
   },
   'skill-arrowRain': {
     id: 'skill-arrowRain',
@@ -142,6 +155,7 @@ export const skillDefinitions: Record<string, SkillDefinition> = {
     targetingStrategy: 'closestToBase',
     targetCount: 4,
     damageMultiplier: 0.6,
+    color: '#9ccc65',
   },
   'skill-chainBlade': {
     id: 'skill-chainBlade',
@@ -153,6 +167,7 @@ export const skillDefinitions: Record<string, SkillDefinition> = {
     targetingStrategy: 'closestToHero',
     targetCount: 2,
     damageMultiplier: 1.1,
+    color: '#b0bec5',
   },
   'skill-thornWhip': {
     id: 'skill-thornWhip',
@@ -164,6 +179,7 @@ export const skillDefinitions: Record<string, SkillDefinition> = {
     targetingStrategy: 'highestHp',
     targetCount: 2,
     damageMultiplier: 1.3,
+    color: '#66bb6a',
   },
   'skill-spiritLink': {
     id: 'skill-spiritLink',
@@ -175,6 +191,7 @@ export const skillDefinitions: Record<string, SkillDefinition> = {
     targetingStrategy: 'strongest',
     targetCount: 3,
     damageMultiplier: 1,
+    color: '#4db6ac',
   },
   'skill-voidChain': {
     id: 'skill-voidChain',
@@ -186,6 +203,7 @@ export const skillDefinitions: Record<string, SkillDefinition> = {
     targetingStrategy: 'random',
     targetCount: 5,
     damageMultiplier: 0.7,
+    color: '#7c4dff',
   },
 
   // --- healAlly (6) - support-flavored heroes' answer to enemy Healer
@@ -201,6 +219,7 @@ export const skillDefinitions: Record<string, SkillDefinition> = {
     targetingStrategy: 'lowestHp',
     targetCount: 1,
     damageMultiplier: 1.2,
+    color: '#ffd54f',
   },
   'skill-natureBlessing': {
     id: 'skill-natureBlessing',
@@ -212,6 +231,7 @@ export const skillDefinitions: Record<string, SkillDefinition> = {
     targetingStrategy: 'lowestHp',
     targetCount: 2,
     damageMultiplier: 0.9,
+    color: '#aed581',
   },
   'skill-sanctuary': {
     id: 'skill-sanctuary',
@@ -223,6 +243,7 @@ export const skillDefinitions: Record<string, SkillDefinition> = {
     targetingStrategy: 'lowestHp',
     targetCount: 5,
     damageMultiplier: 0.6,
+    color: '#fff59d',
   },
   'skill-lifeSpring': {
     id: 'skill-lifeSpring',
@@ -234,6 +255,7 @@ export const skillDefinitions: Record<string, SkillDefinition> = {
     targetingStrategy: 'lowestHp',
     targetCount: 1,
     damageMultiplier: 1.6,
+    color: '#81d4fa',
   },
   'skill-guardianPulse': {
     id: 'skill-guardianPulse',
@@ -245,6 +267,7 @@ export const skillDefinitions: Record<string, SkillDefinition> = {
     targetingStrategy: 'lowestHp',
     targetCount: 3,
     damageMultiplier: 0.8,
+    color: '#90a4ae',
   },
   'skill-phoenixGrace': {
     id: 'skill-phoenixGrace',
@@ -256,5 +279,6 @@ export const skillDefinitions: Record<string, SkillDefinition> = {
     targetingStrategy: 'lowestHp',
     targetCount: 9,
     damageMultiplier: 0.5,
+    color: '#ffca28',
   },
 };

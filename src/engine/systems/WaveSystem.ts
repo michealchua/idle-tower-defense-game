@@ -1,8 +1,6 @@
 import { getBossKindForWave, getBossTimeLimit, getNormalWaveEnemyCount, waveConfig } from '../../data/waveConfig';
 import { effectLifetimes, victoryPoseConfig } from '../../data/effectConfig';
 import { getDiamondChapterClearReward } from '../../data/diamondConfig';
-import { getBiomeForChapter } from '../../data/biomeConfig';
-import { storyScripts } from '../../data/storyConfig';
 import { spawnVisualEffect, queueSfx } from './EffectsSystem';
 import { incrementDailyQuestProgress } from './DailyQuestSystem';
 import { getAliveDeployedHeroes } from './HeroStatsSystem';
@@ -61,7 +59,6 @@ function resetBattlefieldForWave(state: GameState): void {
 
 export function advanceToNextWave(state: GameState): void {
   const wave = state.wave;
-  let enteredNewChapter = false;
   if (wave.waveInChapter >= waveConfig.wavesPerChapter) {
     // Milestone reward for clearing a whole chapter (its wave-10 boss just
     // died) - separate from the per-boss-kill reward in
@@ -69,7 +66,6 @@ export function advanceToNextWave(state: GameState): void {
     state.diamonds += getDiamondChapterClearReward(wave.chapter);
     wave.chapter += 1;
     wave.waveInChapter = 1;
-    enteredNewChapter = true;
   } else {
     wave.waveInChapter += 1;
   }
@@ -78,20 +74,13 @@ export function advanceToNextWave(state: GameState): void {
   incrementDailyQuestProgress(state, 'clearWaves');
   state.highestGlobalWaveReached = Math.max(state.highestGlobalWaveReached, getGlobalWaveNumber(wave));
 
-  // Plan section 21's "剧情以短对话→战斗→Boss→奖励→新地图为主" - the new
-  // chapter's biome gets a short story beat the first time it's ever
-  // entered (biomeConfig's 10-biome cycle repeats every 10 chapters, but
-  // each biome's own beat should only play once - see
-  // GameState.seenChapterStoryIds). forest has no storyScripts entry
-  // (chapter 1's intro is the tutorial script instead), so this silently
-  // no-ops the first time through the cycle.
-  if (enteredNewChapter) {
-    const biomeId = getBiomeForChapter(wave.chapter).id;
-    if (storyScripts[biomeId] && !state.seenChapterStoryIds.includes(biomeId)) {
-      state.seenChapterStoryIds.push(biomeId);
-      state.pendingStoryId = biomeId;
-    }
-  }
+  // Per-biome chapter-intro story beat (plan section 21's "剧情以短对话→
+  // 战斗→Boss→奖励→新地图为主") disabled per user request - used to pause
+  // gameplay for a StoryDialog on the first wave of every newly-entered
+  // biome (biomeConfig.ts's getBiomeForChapter/storyScripts,
+  // GameState.seenChapterStoryIds). That trigger call was removed from here;
+  // seenChapterStoryIds/storyScripts themselves are left alone (still valid
+  // save data/config) in case this gets re-enabled later.
 
   spawnVisualEffect(state, {
     kind: 'waveClear',

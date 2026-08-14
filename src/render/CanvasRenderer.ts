@@ -876,13 +876,17 @@ function drawVisualEffect(ctx: CanvasRenderingContext2D, effect: VisualEffect): 
       return;
     }
     case 'skillImpact': {
+      // Per-skill color (SkillDefinition.color, see SkillSystem.
+      // castAoeDamage) - 6 skills used to all burst the same orange/amber
+      // regardless of whether it was Fireball or Earthquake. Falls back to
+      // that original two-tone orange/amber if a caller ever omits color.
       const maxRadius = effect.radius ?? 40;
       const radius = maxRadius * progress;
-      ctx.fillStyle = `rgba(255, 87, 34, ${fadeAlpha * 0.5})`;
+      ctx.fillStyle = effect.color ? colorWithAlpha(effect.color, fadeAlpha * 0.5) : `rgba(255, 87, 34, ${fadeAlpha * 0.5})`;
       ctx.beginPath();
       ctx.arc(effect.x, effect.y, radius, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = `rgba(255, 193, 7, ${fadeAlpha})`;
+      ctx.strokeStyle = effect.color ? colorWithAlpha(effect.color, fadeAlpha) : `rgba(255, 193, 7, ${fadeAlpha})`;
       ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.arc(effect.x, effect.y, radius, 0, Math.PI * 2);
@@ -893,7 +897,8 @@ function drawVisualEffect(ctx: CanvasRenderingContext2D, effect: VisualEffect): 
       if (effect.targetX === undefined || effect.targetY === undefined) {
         return;
       }
-      ctx.strokeStyle = `rgba(255, 235, 59, ${fadeAlpha})`;
+      // Per-skill color, same as skillImpact - see SkillSystem.castChainDamage.
+      ctx.strokeStyle = effect.color ? colorWithAlpha(effect.color, fadeAlpha) : `rgba(255, 235, 59, ${fadeAlpha})`;
       ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.moveTo(effect.x, effect.y);
@@ -902,9 +907,13 @@ function drawVisualEffect(ctx: CanvasRenderingContext2D, effect: VisualEffect): 
       return;
     }
     case 'healPulse': {
+      // Per-skill color, same as skillImpact - see SkillSystem.castHealAlly.
+      // Deliberately NOT applied to healNumber (stays a fixed green) so a
+      // "+123" reads as "healing" at a glance regardless of which heal
+      // skill produced it.
       const maxRadius = effect.radius ?? 40;
       const radius = maxRadius * progress;
-      ctx.strokeStyle = `rgba(105, 240, 174, ${fadeAlpha})`;
+      ctx.strokeStyle = effect.color ? colorWithAlpha(effect.color, fadeAlpha) : `rgba(105, 240, 174, ${fadeAlpha})`;
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.arc(effect.x, effect.y, radius, 0, Math.PI * 2);

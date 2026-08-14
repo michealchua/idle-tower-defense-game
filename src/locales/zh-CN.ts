@@ -109,6 +109,7 @@ const zhCN = {
     soundSection: '音效',
     bgmOn: '背景音乐已开启',
     bgmOff: '背景音乐已关闭',
+    bgmVolume: '音量',
     sfxOn: '音效已开启',
     sfxOff: '音效已关闭',
     updateSection: '更新',

@@ -1337,8 +1337,9 @@ select {
 .gacha-summon-circle-outer {
   width: 260px;
   height: 260px;
-  border-top-color: var(--rarity-purple);
-  border-left-color: var(--rarity-purple);
+  /* borderTopColor/borderLeftColor set inline per pull (GachaPanel.tsx) -
+     see getBestRarity - no fallback color needed here since the inline
+     style is always present whenever this class is rendered. */
   animation: gacha-summon-spin-reverse 1.4s linear infinite;
 }
 
@@ -2125,4 +2126,20 @@ select {
   font-weight: 700;
   font-size: 13px;
   opacity: 0.8;
+}
+
+.settings-volume-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.settings-volume-slider {
+  flex: 1;
+  accent-color: var(--accent-strong);
+}
+
+.settings-volume-slider:disabled {
+  opacity: 0.4;
 }

@@ -14,15 +14,30 @@ class AudioManager {
   private currentTrack: string | null = null;
   private muted = false;
   private unlocked = false;
+  private volume = 0.4;
 
   private ensureElement(): HTMLAudioElement {
     if (!this.audioEl) {
       this.audioEl = new Audio();
       this.audioEl.loop = true;
-      this.audioEl.volume = 0.4;
+      this.audioEl.volume = this.volume;
       this.audioEl.muted = this.muted;
     }
     return this.audioEl;
+  }
+
+  // Applies immediately to the live element (not just future ones) - the
+  // settings-panel slider calls this on every drag tick, so the volume
+  // change is heard live rather than only on the next track switch.
+  setVolume(volume: number): void {
+    this.volume = Math.max(0, Math.min(1, volume));
+    if (this.audioEl) {
+      this.audioEl.volume = this.volume;
+    }
+  }
+
+  getVolume(): number {
+    return this.volume;
   }
 
   // Switches the loop target. No-ops if it's already the current track, so

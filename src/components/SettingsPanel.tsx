@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ChangeEvent } from 'react';
 import { t } from '../locales/i18n';
 import { useGameStore } from '../store/useGameStore';
 import { getSaveMetadata } from '../engine/core/SaveSystem';
@@ -36,6 +36,7 @@ function SettingsPanel({ onClose, onReturnToTitle }: SettingsPanelProps) {
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
   const [sfxMuted, setSfxMuted] = useState(sfxManager.isMuted());
   const [bgmMuted, setBgmMuted] = useState(audioManager.isMuted());
+  const [bgmVolume, setBgmVolume] = useState(audioManager.getVolume());
 
   const metadata = activeSlot !== null ? getSaveMetadata(activeSlot) : null;
 
@@ -45,6 +46,12 @@ function SettingsPanel({ onClose, onReturnToTitle }: SettingsPanelProps) {
 
   function handleToggleBgm(): void {
     setBgmMuted(audioManager.toggleMute());
+  }
+
+  function handleBgmVolumeChange(event: ChangeEvent<HTMLInputElement>): void {
+    const next = Number(event.target.value);
+    audioManager.setVolume(next);
+    setBgmVolume(next);
   }
 
   // No automatic check-on-launch anymore (see electron/main.cjs's
@@ -111,6 +118,19 @@ function SettingsPanel({ onClose, onReturnToTitle }: SettingsPanelProps) {
             <button className="btn btn-sm" onClick={handleToggleBgm}>
               {t(bgmMuted ? 'settings.bgmOff' : 'settings.bgmOn')}
             </button>
+            <div className="settings-volume-row">
+              <span className="item-detail">{t('settings.bgmVolume')}</span>
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={bgmVolume}
+                disabled={bgmMuted}
+                onChange={handleBgmVolumeChange}
+                className="settings-volume-slider"
+              />
+            </div>
             <button className="btn btn-sm" onClick={handleToggleSfx}>
               {t(sfxMuted ? 'settings.sfxOff' : 'settings.sfxOn')}
             </button>

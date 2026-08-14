@@ -99,9 +99,14 @@ function castAoeDamage(state: GameState, hero: HeroState, definition: SkillDefin
     x: impactTarget.position.x,
     y: impactTarget.position.y,
     radius: aoeRadius,
+    color: definition.color,
     lifetime: effectLifetimes.skillImpact,
   });
-  spawnParticleBurst(state, impactTarget.position.x, impactTarget.position.y, particleBurstConfig.skillImpact);
+  // Skill's own color (definition.color), not the fixed
+  // particleBurstConfig.skillImpact color - every aoeDamage skill used to
+  // burst the same orange regardless of whether it was Fireball or
+  // Earthquake.
+  spawnParticleBurst(state, impactTarget.position.x, impactTarget.position.y, { ...particleBurstConfig.skillImpact, color: definition.color });
 
   // mage bond (bondConfig.ts) - "元素法师可产生元素连锁" (plan section 14),
   // read as "mage bond boosts skill damage" here rather than a literal chain
@@ -136,8 +141,10 @@ function castChainDamage(state: GameState, hero: HeroState, definition: SkillDef
       y: hero.position.y,
       targetX: target.position.x,
       targetY: target.position.y,
+      color: definition.color,
       lifetime: effectLifetimes.lightningBolt,
     });
+    spawnParticleBurst(state, target.position.x, target.position.y, { ...particleBurstConfig.skillImpact, color: definition.color });
 
     const damageResult = calculateDamage(
       hero.attackDamage * definition.damageMultiplier * getBondEffects(state.deployedHeroIds).skillDamageMultiplier,
@@ -176,6 +183,7 @@ function castHealAlly(state: GameState, hero: HeroState, definition: SkillDefini
       x: target.position.x,
       y: target.position.y,
       radius: 30,
+      color: definition.color,
       lifetime: effectLifetimes.healPulse,
     });
     spawnVisualEffect(state, {
