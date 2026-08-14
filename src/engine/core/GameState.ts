@@ -2,6 +2,7 @@ import { createHero } from '../entities/Hero';
 import { createBase } from '../entities/Base';
 import { heroRosterConfig } from '../../data/heroRosterConfig';
 import { petRosterConfig } from '../../data/petRosterConfig';
+import { skillDefinitions } from '../../data/skillConfig';
 import { layoutSlotPositions } from '../../data/mapConfig';
 import { talentConfig, type TalentId } from '../../data/talentConfig';
 import { ascensionShopConfig, type AscensionShopId } from '../../data/ascensionShopConfig';
@@ -60,6 +61,7 @@ export function createInitialGameState(): GameState {
     heroStars: createInitialCounters(heroRosterConfig.map((hero) => hero.id)),
     petShards: createInitialCounters(petRosterConfig.map((pet) => pet.id)),
     petStars: createInitialCounters(petRosterConfig.map((pet) => pet.id)),
+    skillShards: createInitialCounters(Object.keys(skillDefinitions)),
     pityCounters: createInitialPityCounters(),
     isFirstTenPullDone: false,
     hasGrantedFirstGachaBonus: false,

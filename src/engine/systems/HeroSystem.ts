@@ -51,10 +51,10 @@ function relayoutDeployedHeroes(state: GameState): void {
   }
 }
 
-// Free primitive - acquisition (spending gold) now happens one level up, in
-// GachaSystem.pullHero (or UnlockSystem.unlockHeroByCondition for
-// condition-locked heroes). Debug tools and the initial-state bootstrap call
-// this directly too, which is exactly why it stays cost-free here.
+// Free primitive. Single-protagonist redesign removed the hero gacha pool
+// (GachaSystem.pullSkill draws skills now, not heroes) - this is reachable
+// only via UnlockSystem.unlockHeroByCondition, debug tools, and the
+// initial-state bootstrap, which is exactly why it stays cost-free here.
 //
 // A newly unlocked hero auto-deploys if there's a free squad slot; once the
 // squad is full it still joins the collection, just benched, and the player
@@ -284,6 +284,21 @@ export function equipSkill(state: GameState, heroId: string, skillId: string): b
     return false;
   }
   hero.equippedSkillIds.push(skillId);
+  return true;
+}
+
+// GachaSystem.pullSkill/pullSkillPremium's "unlock" callback (see
+// GachaSystem.pullOne's unlock param) - adds the pulled skill to the
+// protagonist's permanent ownedSkillIds collection, returning whether it was
+// actually new (false = duplicate, caller grants skillShards instead - see
+// pullOne). Single-protagonist redesign means there's always exactly one
+// hero to grant to, unlike unlockHero above which picks a roster entry.
+export function ownSkill(state: GameState, skillId: string): boolean {
+  const hero = state.heroes[0];
+  if (!hero || hero.ownedSkillIds.includes(skillId)) {
+    return false;
+  }
+  hero.ownedSkillIds.push(skillId);
   return true;
 }
 

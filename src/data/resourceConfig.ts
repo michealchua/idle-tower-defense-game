@@ -16,7 +16,7 @@
 // | reforgeDust      | Salvaging unequipped gear                  | Reforging an item's substats                  |
 // |                  | (EquipmentSystem.salvageEquipment)         | (EquipmentSystem.reforgeEquipment)            |
 //
-// Gold's gacha pool (GachaSystem.pullHero/pullPet, priced in
+// Gold's gacha pool (GachaSystem.pullSkill/pullPet, priced in
 // gachaConfig.pullCostGold) predates this isolation pass and is left as-is
 // for now - the gacha rate/pity rework is explicitly a separate, later step
 // (see the conversation this file was scoped from), not touched here.

@@ -7,25 +7,40 @@ import { getGlobalWaveNumber } from '../engine/systems/WaveSystem';
 import { t } from '../locales/i18n';
 import { useGameStore } from '../store/useGameStore';
 import type { GachaPullResult } from '../engine/systems/GachaSystem';
-import { IconSword, IconPaw, IconDiamond, type IconProps } from './icons';
+import { IconOrb, IconPaw, IconDiamond, type IconProps } from './icons';
 import SpriteAvatar from './SpriteAvatar';
-import { getHeroSpriteSrc, getPetSpriteSrc } from '../render/assetLoader';
+import { getPetSpriteSrc } from '../render/assetLoader';
 import { sfxManager } from '../audio/SfxManager';
-import { heroRosterConfig } from '../data/heroRosterConfig';
+import { skillDefinitions } from '../data/skillConfig';
 import { petRosterConfig } from '../data/petRosterConfig';
 
-// A pull result's id is unique to exactly one roster (hero ids are
-// `<rarity>-N`, pet ids are `pet-N` - see heroRosterConfig.ts/
-// petRosterConfig.ts's generators, no overlap) - GachaPullResult itself
-// carries no hero/pet tag, so this tries the hero roster first and falls
-// back to pet.
+// A pull result's id is unique to exactly one roster (skill ids are
+// `skill-*`, pet ids are `pet-N` - see skillConfig.ts/petRosterConfig.ts, no
+// overlap) - GachaPullResult itself carries no skill/pet tag, so this tries
+// the skill pool first and falls back to pet. Skills have no sprite art
+// (only a themed accent color, see skillConfig.ts's color field) - '' never
+// resolves via assetLoader.getImage, so SpriteAvatar just shows its fallback
+// icon forever instead (see gachaResultFallback below).
 function gachaResultAvatarSrc(result: GachaPullResult): string {
-  const heroDefinition = heroRosterConfig.find((hero) => hero.id === result.id);
-  if (heroDefinition) {
-    return getHeroSpriteSrc(heroDefinition.class);
+  if (skillDefinitions[result.id]) {
+    return '';
   }
   const petDefinition = petRosterConfig.find((pet) => pet.id === result.id);
   return getPetSpriteSrc(petDefinition?.spriteId ?? petDefinition?.id ?? result.id);
+}
+
+// Skill pulls have no sprite (see gachaResultAvatarSrc above) - this hands
+// SpriteAvatar a themed fallback icon instead so the reveal card still shows
+// something skill-flavored rather than a permanently blank square. Pets
+// always have real sprite art, so this returns undefined for them (no
+// fallback needed - SpriteAvatar's canvas resolves before ever needing one).
+function gachaResultFallback(result: GachaPullResult) {
+  const skillDefinition = skillDefinitions[result.id];
+  return skillDefinition ? (
+    <span style={{ color: skillDefinition.color, fontSize: 20 }}>
+      <IconOrb />
+    </span>
+  ) : undefined;
 }
 
 const RARITY_LABEL_KEYS: Record<GachaRarity, string> = {
@@ -45,17 +60,14 @@ function formatPitySuffix(pityHits: number): string {
   return pityHits > 0 ? ` (${t('gacha.pityTriggered')}${pityHits > 1 ? ` ×${pityHits}` : ''})` : '';
 }
 
-// Heroes have a real deterministic name (HeroDefinition.name, see
-// heroRosterConfig.ts's doc comment) already shown everywhere else a hero
-// appears (HeroPanel, CodexPanel) - this used to show "白12"-style rarity+
-// number placeholders here instead, the one place in the whole app that
-// didn't use the real name. Pets have no equivalent name field yet (see
-// PetDefinition - only a cosmetic spriteId), so they keep the rarity+number
-// fallback until pets get real names of their own.
+// Skills have a real display name (SkillDefinition.nameKey) - looked up
+// directly, same as HeroPanel's skill bag does. Pets have no equivalent name
+// field yet (see PetDefinition - only a cosmetic spriteId), so they keep the
+// rarity+number fallback until pets get real names of their own.
 function formatRosterLabel(rarity: GachaRarity, id: string): string {
-  const heroDefinition = heroRosterConfig.find((hero) => hero.id === id);
-  if (heroDefinition) {
-    return heroDefinition.name;
+  const skillDefinition = skillDefinitions[id];
+  if (skillDefinition) {
+    return t(skillDefinition.nameKey);
   }
   return `${t(RARITY_LABEL_KEYS[rarity])}${id.split('-')[1]}`;
 }
@@ -218,7 +230,7 @@ function GachaRevealOverlay({ results, onDone }: { results: GachaPullResult[]; o
               <div className="gacha-reveal-card-inner">
                 <div className="gacha-reveal-card-back">?</div>
                 <div className="gacha-reveal-card-front" style={{ borderColor: accent, boxShadow: `0 0 10px ${accent}` }}>
-                  <SpriteAvatar src={gachaResultAvatarSrc(result)} size={32} />
+                  <SpriteAvatar src={gachaResultAvatarSrc(result)} size={32} fallback={gachaResultFallback(result)} />
                   <div className={`gacha-reveal-card-label rarity-${result.rarity}`}>{formatRosterLabel(result.rarity, result.id)}</div>
                   {result.isNewUnlock && <div className="gacha-reveal-card-new">{t('gacha.multiResultNew')}</div>}
                 </div>
@@ -280,7 +292,7 @@ function PullCard({
   showFirstTenPullBadge,
   weightField,
 }: {
-  kind: 'hero' | 'pet';
+  kind: 'skill' | 'pet';
   isPremium?: boolean;
   label: string;
   costPerPull: number;
@@ -305,7 +317,7 @@ function PullCard({
   const pityRarityLabel = t(RARITY_LABEL_KEYS[pityRule.rarities[0]]);
   const pityRatio = Math.min(1, pityCurrent / pityRule.pullsUntilGuarantee);
   const oddsBreakdown = getOddsBreakdown(weightField);
-  const KindIcon: (props: IconProps) => JSX.Element = kind === 'hero' ? IconSword : IconPaw;
+  const KindIcon: (props: IconProps) => JSX.Element = kind === 'skill' ? IconOrb : IconPaw;
 
   return (
     <div className="mini-card">
@@ -403,13 +415,13 @@ function GachaPanel() {
   const wave = useGameStore((state) => state.wave);
   const pityCounters = useGameStore((state) => state.pityCounters);
   const isFirstTenPullDone = useGameStore((state) => state.isFirstTenPullDone);
-  const pullHero = useGameStore((state) => state.pullHero);
+  const pullSkill = useGameStore((state) => state.pullSkill);
   const pullPet = useGameStore((state) => state.pullPet);
-  const pullHeroMulti = useGameStore((state) => state.pullHeroMulti);
+  const pullSkillMulti = useGameStore((state) => state.pullSkillMulti);
   const pullPetMulti = useGameStore((state) => state.pullPetMulti);
-  const pullHeroPremium = useGameStore((state) => state.pullHeroPremium);
+  const pullSkillPremium = useGameStore((state) => state.pullSkillPremium);
   const pullPetPremium = useGameStore((state) => state.pullPetPremium);
-  const pullHeroPremiumMulti = useGameStore((state) => state.pullHeroPremiumMulti);
+  const pullSkillPremiumMulti = useGameStore((state) => state.pullSkillPremiumMulti);
   const pullPetPremiumMulti = useGameStore((state) => state.pullPetPremiumMulti);
   const exchangeDiamondsForGold = useGameStore((state) => state.exchangeDiamondsForGold);
   const [lastResult, setLastResult] = useState<string | null>(null);
@@ -482,16 +494,16 @@ function GachaPanel() {
 
       <div className="card-grid">
         <PullCard
-          kind="hero"
-          label={t('gacha.pullHero')}
+          kind="skill"
+          label={t('gacha.pullSkill')}
           costPerPull={gachaPullConfig.pullCostGold}
           currencyLabel={t('battle.gold')}
           balance={gold}
-          pullOne={pullHero}
-          pullMulti={pullHeroMulti}
+          pullOne={pullSkill}
+          pullMulti={pullSkillMulti}
           onResults={handlePullResults}
-          pityPoolId="heroGold"
-          pityCurrent={pityCounters.heroGold}
+          pityPoolId="skillGold"
+          pityCurrent={pityCounters.skillGold}
           showFirstTenPullBadge={false}
           weightField="pullWeight"
         />
@@ -520,17 +532,17 @@ function GachaPanel() {
       </div>
       <div className="card-grid">
         <PullCard
-          kind="hero"
+          kind="skill"
           isPremium
-          label={t('gacha.pullHeroPremium')}
+          label={t('gacha.pullSkillPremium')}
           costPerPull={gachaPullConfig.pullCostDiamonds}
           currencyLabel={t('battle.diamonds')}
           balance={diamonds}
-          pullOne={pullHeroPremium}
-          pullMulti={pullHeroPremiumMulti}
+          pullOne={pullSkillPremium}
+          pullMulti={pullSkillPremiumMulti}
           onResults={handlePullResults}
-          pityPoolId="heroPremium"
-          pityCurrent={pityCounters.heroPremium}
+          pityPoolId="skillPremium"
+          pityCurrent={pityCounters.skillPremium}
           showFirstTenPullBadge={!isFirstTenPullDone}
           weightField="premiumPullWeight"
         />

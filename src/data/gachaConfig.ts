@@ -16,7 +16,7 @@ export interface GachaRarityDefinition {
   // Placeholder odds - not specified by the source tables, tune later.
   pullWeight: number;
   // Odds used by the diamond premium pool (see gachaPullConfig.
-  // pullCostDiamonds/GachaSystem.pullHeroPremium) instead of pullWeight -
+  // pullCostDiamonds/GachaSystem.pullSkillPremium) instead of pullWeight -
   // deliberately front-loaded toward purple+ so spending diamonds visibly
   // beats the gold pool's odds, not just its currency.
   premiumPullWeight: number;
@@ -142,7 +142,7 @@ export const MAX_STAR_LEVEL = 5;
 
 export const gachaPullConfig = {
   pullCostGold: 100,
-  // Diamond premium pool (see GachaSystem.pullHeroPremium/pullPetPremium) -
+  // Diamond premium pool (see GachaSystem.pullSkillPremium/pullPetPremium) -
   // better odds via premiumPullWeight above, same multi-pull sizes/no-bulk-
   // discount shape as the gold pool.
   pullCostDiamonds: 50,

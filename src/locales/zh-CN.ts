@@ -355,7 +355,7 @@ const zhCN = {
   },
   gacha: {
     title: '扭蛋',
-    pullHero: '英雄扭蛋',
+    pullSkill: '技能扭蛋',
     pullPet: '宠物扭蛋',
     petLocked: '宠物系统解锁后开放,需要波次',
     lastResultNew: '获得新',
@@ -364,7 +364,7 @@ const zhCN = {
     multiResultNew: '获得新',
     multiResultNone: '无新角色',
     premiumHint: '钻石扭蛋 - 高品质概率远高于金币扭蛋',
-    pullHeroPremium: '英雄钻石扭蛋',
+    pullSkillPremium: '技能钻石扭蛋',
     pullPetPremium: '宠物钻石扭蛋',
     exchangeHint: '钻石兑换',
     exchange: '兑换金币',

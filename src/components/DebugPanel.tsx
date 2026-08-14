@@ -12,7 +12,7 @@ import {
   debugGrantSkillPoints,
   debugKillAllEnemies,
   debugPause,
-  debugPullHeroMany,
+  debugPullSkillMany,
   debugPullPetMany,
   debugResume,
   debugSetSpeed,
@@ -106,7 +106,7 @@ function DebugPanel() {
         <button onClick={() => debugGrantAscensionPoints(10)}>+10 Ascension Points</button>
         <button onClick={() => debugGrantDiamonds(100)}>+100 Diamonds</button>
         <button onClick={() => debugGrantReforgeDust(500)}>+500 Reforge Dust</button>
-        <button onClick={() => debugPullHeroMany(10)}>Pull Hero x10</button>
+        <button onClick={() => debugPullSkillMany(10)}>Pull Skill x10</button>
         <button onClick={() => debugPullPetMany(10)}>Pull Pet x10</button>
         <button onClick={() => debugKillAllEnemies()}>Kill All</button>
         <button onClick={() => debugForceClearWave()}>Force Clear Wave</button>

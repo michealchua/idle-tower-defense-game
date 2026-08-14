@@ -1,10 +1,10 @@
 import type { GachaRarity } from './gachaConfig';
 
 // One counter per pull pool - gold/premium are tracked separately per
-// roster (hero vs pet) since they're independent currencies/buttons in
+// roster (skill vs pet) since they're independent currencies/buttons in
 // GachaPanel, so exhausting one pool's pity shouldn't silently consume
 // progress toward another's.
-export type PityPoolId = 'heroGold' | 'petGold' | 'heroPremium' | 'petPremium';
+export type PityPoolId = 'skillGold' | 'petGold' | 'skillPremium' | 'petPremium';
 
 export interface PityRule {
   // Landing any of these rarities (naturally or forced) resets the pool's
@@ -25,9 +25,9 @@ export interface PityRule {
 // on top of already-decent odds, while the gold pool's 80 is the longer "so
 // a long free-to-play run never feels completely dry" floor.
 export const gachaPityConfig: Record<PityPoolId, PityRule> = {
-  heroGold: { rarities: ['gold', 'red', 'rainbow'], pullsUntilGuarantee: 80 },
+  skillGold: { rarities: ['gold', 'red', 'rainbow'], pullsUntilGuarantee: 80 },
   petGold: { rarities: ['gold', 'red', 'rainbow'], pullsUntilGuarantee: 80 },
-  heroPremium: { rarities: ['red', 'rainbow'], pullsUntilGuarantee: 30 },
+  skillPremium: { rarities: ['red', 'rainbow'], pullsUntilGuarantee: 30 },
   petPremium: { rarities: ['red', 'rainbow'], pullsUntilGuarantee: 30 },
 };
 
@@ -38,9 +38,9 @@ export const gachaPityConfig: Record<PityPoolId, PityRule> = {
 // nudge at gold-or-above, weaker than premium's own red-or-above hard pity.
 // Only premium (diamond) pools have an entry - gold-currency pools
 // deliberately get no first-10 guarantee at all, so a lookup here for
-// 'heroGold'/'petGold' is undefined and GachaSystem.pullMulti treats that as
+// 'skillGold'/'petGold' is undefined and GachaSystem.pullMulti treats that as
 // "no bonus this batch".
 export const firstTenPullGuaranteeRarities: Partial<Record<PityPoolId, GachaRarity[]>> = {
-  heroPremium: ['gold', 'red', 'rainbow'],
+  skillPremium: ['gold', 'red', 'rainbow'],
   petPremium: ['gold', 'red', 'rainbow'],
 };

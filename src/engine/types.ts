@@ -349,6 +349,11 @@ export interface GameState {
   heroStars: Record<string, number>;
   petShards: Record<string, number>;
   petStars: Record<string, number>;
+  // Skill gacha's duplicate-pull currency (see GachaSystem.pullSkill),
+  // keyed by skillConfig.ts id and pre-seeded to 0 for every skill same as
+  // hero/petShards above. No spend UI yet - tracked so a future skill
+  // upgrade system has a resource to build on rather than needing a new one.
+  skillShards: Record<string, number>;
   // Pulls since each pool's last pity-eligible rarity (see pityConfig.ts) -
   // incremented on every pull that isn't itself a hit, reset to 0 on one
   // (natural or forced). Never reset by ascension, same as goldSpentTotal.

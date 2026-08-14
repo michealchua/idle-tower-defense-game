@@ -4,12 +4,18 @@ import { diamondExchangeConfig, dailyLoginRewardConfig } from '../../data/diamon
 import { gachaPityConfig, firstTenPullGuaranteeRarities, type PityPoolId } from '../../data/pityConfig';
 import { incrementDailyQuestProgress } from './DailyQuestSystem';
 import { panelUnlockWave } from '../../data/unlockConditionConfig';
-import { heroRosterConfig } from '../../data/heroRosterConfig';
+import { skillDefinitions } from '../../data/skillConfig';
 import { petRosterConfig } from '../../data/petRosterConfig';
-import { unlockHero } from './HeroSystem';
+import { ownSkill } from './HeroSystem';
 import { unlockPet } from './PetSystem';
 import { getGlobalWaveNumber } from './WaveSystem';
 import type { GameState } from '../types';
+
+// Flat array form of skillDefinitions - pickRosterEntryByRarity/pullOne below
+// are generic over `{id, rarity, unlockConditions?}[]`, same shape the hero/
+// pet rosters already satisfy, so the skill pool plugs into the exact same
+// pull machinery without any changes to it.
+const skillPool = Object.values(skillDefinitions);
 
 export interface GachaPullResult {
   id: string;
@@ -73,13 +79,30 @@ function pullOne<T extends { id: string; rarity: GachaRarity; unlockConditions?:
   return { id: definition.id, rarity: definition.rarity, isNewUnlock, pityTriggered: forcedRarities !== undefined };
 }
 
-export function pullHero(state: GameState, forcedRarities?: GachaRarity[]): GachaPullResult | null {
+// Every skill pull also trickles a small amount of heroShards to the
+// protagonist (same numbers as a duplicate pull would've granted, see
+// gachaRarityConfig.shardsPerDuplicate) - single-protagonist redesign means
+// the protagonist is never itself pulled from gacha anymore (no more "hero
+// gacha" to duplicate-into-shards), so without this the existing star-up
+// feature (HeroDetail's 升星 button, still reading heroShards) would be
+// permanently stuck at 0 with no way to ever earn shards again.
+function grantProtagonistShardsFromSkillPull(state: GameState, rarity: GachaRarity): void {
+  const hero = state.heroes[0];
+  if (!hero) {
+    return;
+  }
+  state.heroShards[hero.id] = (state.heroShards[hero.id] ?? 0) + gachaRarityConfig[rarity].shardsPerDuplicate;
+}
+
+export function pullSkill(state: GameState, forcedRarities?: GachaRarity[]): GachaPullResult | null {
   if (state.gold < gachaPullConfig.pullCostGold) {
     return null;
   }
   state.gold -= gachaPullConfig.pullCostGold;
   state.goldSpentTotal += gachaPullConfig.pullCostGold;
-  return pullOne(state, heroRosterConfig, 'pullWeight', state.heroShards, unlockHero, 'heroGold', forcedRarities);
+  const result = pullOne(state, skillPool, 'pullWeight', state.skillShards, ownSkill, 'skillGold', forcedRarities);
+  grantProtagonistShardsFromSkillPull(state, result.rarity);
+  return result;
 }
 
 export function pullPet(state: GameState, forcedRarities?: GachaRarity[]): GachaPullResult | null {
@@ -91,14 +114,16 @@ export function pullPet(state: GameState, forcedRarities?: GachaRarity[]): Gacha
   return pullOne(state, petRosterConfig, 'pullWeight', state.petShards, unlockPet, 'petGold', forcedRarities);
 }
 
-// Same shape as pullHero/pullPet, spending diamonds at premiumPullWeight
+// Same shape as pullSkill/pullPet, spending diamonds at premiumPullWeight
 // odds instead of gold at pullWeight odds - see gachaConfig.ts.
-export function pullHeroPremium(state: GameState, forcedRarities?: GachaRarity[]): GachaPullResult | null {
+export function pullSkillPremium(state: GameState, forcedRarities?: GachaRarity[]): GachaPullResult | null {
   if (state.diamonds < gachaPullConfig.pullCostDiamonds) {
     return null;
   }
   state.diamonds -= gachaPullConfig.pullCostDiamonds;
-  return pullOne(state, heroRosterConfig, 'premiumPullWeight', state.heroShards, unlockHero, 'heroPremium', forcedRarities);
+  const result = pullOne(state, skillPool, 'premiumPullWeight', state.skillShards, ownSkill, 'skillPremium', forcedRarities);
+  grantProtagonistShardsFromSkillPull(state, result.rarity);
+  return result;
 }
 
 export function pullPetPremium(state: GameState, forcedRarities?: GachaRarity[]): GachaPullResult | null {
@@ -149,16 +174,16 @@ function pullMulti(
   return results;
 }
 
-export function pullHeroMulti(state: GameState, count: number): GachaPullResult[] {
-  return pullMulti(state, count, gachaPullConfig.pullCostGold * count, 'gold', 'heroGold', pullHero);
+export function pullSkillMulti(state: GameState, count: number): GachaPullResult[] {
+  return pullMulti(state, count, gachaPullConfig.pullCostGold * count, 'gold', 'skillGold', pullSkill);
 }
 
 export function pullPetMulti(state: GameState, count: number): GachaPullResult[] {
   return pullMulti(state, count, gachaPullConfig.pullCostGold * count, 'gold', 'petGold', pullPet);
 }
 
-export function pullHeroPremiumMulti(state: GameState, count: number): GachaPullResult[] {
-  return pullMulti(state, count, gachaPullConfig.pullCostDiamonds * count, 'diamonds', 'heroPremium', pullHeroPremium);
+export function pullSkillPremiumMulti(state: GameState, count: number): GachaPullResult[] {
+  return pullMulti(state, count, gachaPullConfig.pullCostDiamonds * count, 'diamonds', 'skillPremium', pullSkillPremium);
 }
 
 export function pullPetPremiumMulti(state: GameState, count: number): GachaPullResult[] {

@@ -45,13 +45,13 @@ import {
 } from '../engine/core/SaveSystem';
 import { waveConfig } from '../data/waveConfig';
 import {
-  pullHero as pullHeroInEngine,
+  pullSkill as pullSkillInEngine,
   pullPet as pullPetInEngine,
-  pullHeroMulti as pullHeroMultiInEngine,
+  pullSkillMulti as pullSkillMultiInEngine,
   pullPetMulti as pullPetMultiInEngine,
-  pullHeroPremium as pullHeroPremiumInEngine,
+  pullSkillPremium as pullSkillPremiumInEngine,
   pullPetPremium as pullPetPremiumInEngine,
-  pullHeroPremiumMulti as pullHeroPremiumMultiInEngine,
+  pullSkillPremiumMulti as pullSkillPremiumMultiInEngine,
   pullPetPremiumMulti as pullPetPremiumMultiInEngine,
   exchangeDiamondsForGold as exchangeDiamondsForGoldInEngine,
   type GachaPullResult,
@@ -107,6 +107,7 @@ function snapshotGameState(state: GameState) {
     heroStars: { ...state.heroStars },
     petShards: { ...state.petShards },
     petStars: { ...state.petStars },
+    skillShards: { ...state.skillShards },
     pityCounters: { ...state.pityCounters },
     isFirstTenPullDone: state.isFirstTenPullDone,
     epicSourceStone: state.epicSourceStone,
@@ -159,6 +160,7 @@ interface GameStore {
   heroStars: Record<string, number>;
   petShards: Record<string, number>;
   petStars: Record<string, number>;
+  skillShards: Record<string, number>;
   pityCounters: Record<PityPoolId, number>;
   isFirstTenPullDone: boolean;
   epicSourceStone: number;
@@ -218,13 +220,13 @@ interface GameStore {
   unlockHeroByCondition: (heroId: string) => void;
   unlockPetByCondition: (petId: string) => void;
   ascend: () => void;
-  pullHero: () => GachaPullResult | null;
+  pullSkill: () => GachaPullResult | null;
   pullPet: () => GachaPullResult | null;
-  pullHeroMulti: (count: number) => GachaPullResult[];
+  pullSkillMulti: (count: number) => GachaPullResult[];
   pullPetMulti: (count: number) => GachaPullResult[];
-  pullHeroPremium: () => GachaPullResult | null;
+  pullSkillPremium: () => GachaPullResult | null;
   pullPetPremium: () => GachaPullResult | null;
-  pullHeroPremiumMulti: (count: number) => GachaPullResult[];
+  pullSkillPremiumMulti: (count: number) => GachaPullResult[];
   pullPetPremiumMulti: (count: number) => GachaPullResult[];
   exchangeDiamondsForGold: () => void;
   starUpHero: (heroId: string) => void;
@@ -366,8 +368,8 @@ export const useGameStore = create<GameStore>()(
       set(snapshotGameState(gameState));
     }
   },
-  pullHero: () => {
-    const result = pullHeroInEngine(gameState);
+  pullSkill: () => {
+    const result = pullSkillInEngine(gameState);
     if (result) {
       set(snapshotGameState(gameState));
     }
@@ -380,8 +382,8 @@ export const useGameStore = create<GameStore>()(
     }
     return result;
   },
-  pullHeroMulti: (count) => {
-    const results = pullHeroMultiInEngine(gameState, count);
+  pullSkillMulti: (count) => {
+    const results = pullSkillMultiInEngine(gameState, count);
     if (results.length > 0) {
       set(snapshotGameState(gameState));
     }
@@ -394,8 +396,8 @@ export const useGameStore = create<GameStore>()(
     }
     return results;
   },
-  pullHeroPremium: () => {
-    const result = pullHeroPremiumInEngine(gameState);
+  pullSkillPremium: () => {
+    const result = pullSkillPremiumInEngine(gameState);
     if (result) {
       set(snapshotGameState(gameState));
     }
@@ -408,8 +410,8 @@ export const useGameStore = create<GameStore>()(
     }
     return result;
   },
-  pullHeroPremiumMulti: (count) => {
-    const results = pullHeroPremiumMultiInEngine(gameState, count);
+  pullSkillPremiumMulti: (count) => {
+    const results = pullSkillPremiumMultiInEngine(gameState, count);
     if (results.length > 0) {
       set(snapshotGameState(gameState));
     }
@@ -670,9 +672,9 @@ export function debugGrantMaterials(): void {
   useGameStore.setState(snapshotGameState(gameState));
 }
 
-export function debugPullHeroMany(count: number): void {
+export function debugPullSkillMany(count: number): void {
   for (let i = 0; i < count; i += 1) {
-    pullHeroInEngine(gameState);
+    pullSkillInEngine(gameState);
   }
   useGameStore.setState(snapshotGameState(gameState));
 }
