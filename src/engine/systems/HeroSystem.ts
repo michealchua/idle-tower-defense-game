@@ -258,11 +258,45 @@ export function evolveHero(state: GameState, heroId: string, branchId: string): 
   }
 
   hero.evolutionBranchId = branchId;
-  if (!hero.unlockedSkillIds.includes(branch.skillUnlock.skillId)) {
-    hero.unlockedSkillIds.push(branch.skillUnlock.skillId);
+  if (!hero.ownedSkillIds.includes(branch.skillUnlock.skillId)) {
+    hero.ownedSkillIds.push(branch.skillUnlock.skillId);
   }
 
   recomputeHeroStats(state);
+  return true;
+}
+
+// How many of hero.ownedSkillIds can be equipped (actually casting, see
+// SkillSystem.tickHeroSkills) at once - deliberately small so picking a
+// loadout is a real decision, not "equip everything you own".
+export const MAX_EQUIPPED_SKILLS = 4;
+
+// Moves a skill from "owned" into the smaller "equipped" (actually casts)
+// set - unordered membership, not slot-indexed (see HeroState.
+// equippedSkillIds's doc comment), so the UI just needs to show whichever
+// owned skills are/aren't currently in that set.
+export function equipSkill(state: GameState, heroId: string, skillId: string): boolean {
+  const hero = state.heroes.find((candidate) => candidate.id === heroId);
+  if (!hero || !hero.ownedSkillIds.includes(skillId) || hero.equippedSkillIds.includes(skillId)) {
+    return false;
+  }
+  if (hero.equippedSkillIds.length >= MAX_EQUIPPED_SKILLS) {
+    return false;
+  }
+  hero.equippedSkillIds.push(skillId);
+  return true;
+}
+
+export function unequipSkill(state: GameState, heroId: string, skillId: string): boolean {
+  const hero = state.heroes.find((candidate) => candidate.id === heroId);
+  if (!hero) {
+    return false;
+  }
+  const index = hero.equippedSkillIds.indexOf(skillId);
+  if (index === -1) {
+    return false;
+  }
+  hero.equippedSkillIds.splice(index, 1);
   return true;
 }
 

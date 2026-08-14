@@ -44,11 +44,17 @@ export interface HeroState {
   exp: number;
   expToNextLevel: number;
   unlockedMilestoneIds: string[];
-  // Which of this hero's own heroRosterConfig.skillUnlocks entries have
-  // fired - separate from unlockedMilestoneIds (visual evolution tiers
-  // only) since the two are no longer unlocked by the same shared table,
-  // see milestoneConfig.ts.
-  unlockedSkillIds: string[];
+  // Every skill ever drawn from the skill gacha (GachaSystem's skill pool,
+  // see skillConfig.ts) plus whatever HeroSystem.evolveHero grants directly
+  // - permanent collection, never reset by AscensionSystem.ascend (same
+  // category as heroShards). Not all of these necessarily cast in combat -
+  // see equippedSkillIds below for the subset that actually does.
+  ownedSkillIds: string[];
+  // Player-chosen subset of ownedSkillIds that actually ticks/casts (see
+  // SkillSystem.tickHeroSkills) - capped at HeroSystem.MAX_EQUIPPED_SKILLS.
+  // Reset on ascend (level/stats reset too, so re-picking a loadout makes
+  // sense) even though the ownedSkillIds collection itself survives.
+  equippedSkillIds: string[];
   skills: Record<string, SkillRuntimeState>;
   // Gold-purchased per-hero upgrade levels (see UpgradeSystem.ts) - each
   // hero has its own independent track now, replacing the old GameState-

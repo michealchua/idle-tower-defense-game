@@ -1,5 +1,5 @@
 import { getExpToNextLevel, heroBaseConfig, heroUpgradeConfig, type UpgradeableStat } from '../../data/heroConfig';
-import { getHeroDefinition } from '../../data/heroRosterConfig';
+import { getHeroDefinition, STARTER_SKILL_IDS } from '../../data/heroRosterConfig';
 import type { HeroState, Position } from '../types';
 
 function createInitialHeroUpgrades(): Record<UpgradeableStat, number> {
@@ -29,7 +29,8 @@ export function createHero(heroId: string, position: Position): HeroState {
     exp: 0,
     expToNextLevel: getExpToNextLevel(heroBaseConfig.level),
     unlockedMilestoneIds: [],
-    unlockedSkillIds: [],
+    ownedSkillIds: [...STARTER_SKILL_IDS],
+    equippedSkillIds: [...STARTER_SKILL_IDS],
     skills: {},
     upgrades: createInitialHeroUpgrades(),
     position: { ...position },

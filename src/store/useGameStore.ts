@@ -3,7 +3,7 @@ import { subscribeWithSelector } from 'zustand/middleware';
 import { createInitialGameState } from '../engine/core/GameState';
 import { GameLoop } from '../engine/core/GameLoop';
 import { heroUpgradeConfig, type UpgradeableStat } from '../data/heroConfig';
-import { heroRosterConfig, getHeroDefinition } from '../data/heroRosterConfig';
+import { heroRosterConfig } from '../data/heroRosterConfig';
 import { petRosterConfig } from '../data/petRosterConfig';
 import { applyHeroUpgrade } from '../engine/systems/UpgradeSystem';
 import { getDifficultyScore } from '../engine/systems/DifficultySystem';
@@ -26,7 +26,10 @@ import {
   equipStrongestForHero as equipStrongestForHeroInEngine,
   unequipAllForHero as unequipAllForHeroInEngine,
   evolveHero as evolveHeroInEngine,
+  equipSkill as equipSkillInEngine,
+  unequipSkill as unequipSkillInEngine,
 } from '../engine/systems/HeroSystem';
+import { skillDefinitions } from '../data/skillConfig';
 import { unlockPet as unlockPetInEngine } from '../engine/systems/PetSystem';
 import { upgradeTalent as upgradeTalentInEngine } from '../engine/systems/TalentSystem';
 import { upgradeAscensionShopNode as upgradeAscensionShopNodeInEngine } from '../engine/systems/AscensionShopSystem';
@@ -210,6 +213,8 @@ interface GameStore {
   deployHero: (heroId: string) => void;
   undeployHero: (heroId: string) => void;
   evolveHero: (heroId: string, branchId: string) => boolean;
+  equipSkill: (heroId: string, skillId: string) => boolean;
+  unequipSkill: (heroId: string, skillId: string) => boolean;
   unlockHeroByCondition: (heroId: string) => void;
   unlockPetByCondition: (petId: string) => void;
   ascend: () => void;
@@ -321,6 +326,20 @@ export const useGameStore = create<GameStore>()(
       set(snapshotGameState(gameState));
     }
     return didEvolve;
+  },
+  equipSkill: (heroId, skillId) => {
+    const didEquip = equipSkillInEngine(gameState, heroId, skillId);
+    if (didEquip) {
+      set(snapshotGameState(gameState));
+    }
+    return didEquip;
+  },
+  unequipSkill: (heroId, skillId) => {
+    const didUnequip = unequipSkillInEngine(gameState, heroId, skillId);
+    if (didUnequip) {
+      set(snapshotGameState(gameState));
+    }
+    return didUnequip;
   },
   upgradeTalent: (talentId) => {
     if (upgradeTalentInEngine(gameState, talentId)) {
@@ -606,11 +625,15 @@ export function debugSpawnMany(count: number): void {
   useGameStore.setState(snapshotGameState(gameState));
 }
 
+// Grants every skillConfig.ts skill straight into ownedSkillIds (bypassing
+// the gacha entirely) - a dev convenience for testing the skill bag/equip
+// UI without grinding pulls. Doesn't auto-equip any of them - equipping is
+// still a manual choice, same as a real gacha-drawn skill.
 export function debugUnlockAllSkills(): void {
   for (const hero of gameState.heroes) {
-    for (const unlock of getHeroDefinition(hero.id).skillUnlocks) {
-      if (!hero.unlockedSkillIds.includes(unlock.skillId)) {
-        hero.unlockedSkillIds.push(unlock.skillId);
+    for (const skillId of Object.keys(skillDefinitions)) {
+      if (!hero.ownedSkillIds.includes(skillId)) {
+        hero.ownedSkillIds.push(skillId);
       }
     }
   }

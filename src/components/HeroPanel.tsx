@@ -7,7 +7,7 @@ import { getGlobalWaveNumber } from '../engine/systems/WaveSystem';
 import { heroEvolutionConfig, heroUpgradeConfig, type HeroClass, type UpgradeableStat } from '../data/heroConfig';
 import { MAX_STAR_LEVEL, gachaRarityConfig, getStarUpCost, type GachaRarity } from '../data/gachaConfig';
 import { isHeroUpgradeMaxed, previewHeroUpgradeBulk } from '../engine/systems/UpgradeSystem';
-import { canEvolveHero, getEffectiveHeroClass } from '../engine/systems/HeroSystem';
+import { canEvolveHero, getEffectiveHeroClass, MAX_EQUIPPED_SKILLS } from '../engine/systems/HeroSystem';
 import { formatBigNumber } from '../utils/scaling';
 import type { HeroState } from '../engine/types';
 import { t } from '../locales/i18n';
@@ -100,6 +100,62 @@ function HeroUpgradeSection({ hero, gold }: { hero: HeroState; gold: number }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// Skill bag/equip UI - replaces the old "level-gated list" (skills used to
+// unlock automatically at fixed hero levels and cast the moment they did).
+// Now every skill comes from the skill gacha (or an evolution branch) into
+// hero.ownedSkillIds, and only the up-to-MAX_EQUIPPED_SKILLS subset in
+// hero.equippedSkillIds actually casts (see SkillSystem.tickHeroSkills) -
+// this lists both groups with an equip/unequip button each, same pattern
+// HeroEquipmentSection already uses for gear.
+function SkillBagSection({ hero }: { hero: HeroState }) {
+  const equipSkill = useGameStore((state) => state.equipSkill);
+  const unequipSkill = useGameStore((state) => state.unequipSkill);
+
+  const equippedIds = hero.equippedSkillIds;
+  const bagIds = hero.ownedSkillIds.filter((skillId) => !equippedIds.includes(skillId));
+  const equipFull = equippedIds.length >= MAX_EQUIPPED_SKILLS;
+
+  function renderSkillRow(skillId: string, equipped: boolean) {
+    const skillDef = skillDefinitions[skillId];
+    if (!skillDef) {
+      return null;
+    }
+    const cooldownRemaining = hero.skills[skillId]?.cooldownRemaining ?? 0;
+    return (
+      <div key={skillId} className="item-actions" style={{ alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
+        <span className="text-faint" style={{ color: skillDef.color }}>
+          {t(skillDef.nameKey)}
+          {equipped && (
+            <span className="text-faint">
+              {' '}· {cooldownRemaining > 0 ? `${cooldownRemaining.toFixed(1)}s` : t('skill.ready')}
+            </span>
+          )}
+        </span>
+        {equipped ? (
+          <button className="btn btn-sm" onClick={() => unequipSkill(hero.id, skillId)}>
+            {t('skill.unequip')}
+          </button>
+        ) : (
+          <button className="btn btn-sm btn-primary" disabled={equipFull} onClick={() => equipSkill(hero.id, skillId)}>
+            {t('skill.equip')}
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="text-faint">{t('skill.equippedSection')}</div>
+      {equippedIds.length === 0 && <div className="text-faint" style={{ marginTop: 4 }}>{t('skill.noneEquipped')}</div>}
+      {equippedIds.map((skillId) => renderSkillRow(skillId, true))}
+      <div className="text-faint" style={{ marginTop: 10 }}>{t('skill.bagSection')}</div>
+      {bagIds.length === 0 && <div className="text-faint" style={{ marginTop: 4 }}>{t('skill.bagEmpty')}</div>}
+      {bagIds.map((skillId) => renderSkillRow(skillId, false))}
     </div>
   );
 }
@@ -476,34 +532,8 @@ function HeroDetail({
         <HeroEquipmentSection heroId={definition.id} />
       </Accordion>
 
-      <Accordion title={t('hero.skillsSection')}>
-        {definition.skillUnlocks.map((unlock) => {
-          const skillDef = skillDefinitions[unlock.skillId];
-          const isUnlocked = hero.unlockedSkillIds.includes(unlock.skillId);
-          const cooldownRemaining = hero.skills[unlock.skillId]?.cooldownRemaining ?? 0;
-          return (
-            <div key={unlock.skillId} className="text-faint" style={{ marginTop: 2 }}>
-              {isUnlocked
-                ? `${t(skillDef.nameKey)}: ${cooldownRemaining > 0 ? `${cooldownRemaining.toFixed(1)}s` : t('skill.ready')}`
-                : `${t(skillDef.nameKey)} (Lv.${unlock.level})`}
-            </div>
-          );
-        })}
-        {hero.evolutionBranchId &&
-          (() => {
-            const branch = definition.evolutionBranches.find((candidate) => candidate.id === hero.evolutionBranchId);
-            if (!branch) {
-              return null;
-            }
-            const skillDef = skillDefinitions[branch.skillUnlock.skillId];
-            const cooldownRemaining = hero.skills[branch.skillUnlock.skillId]?.cooldownRemaining ?? 0;
-            return (
-              <div className="text-faint" style={{ marginTop: 2 }}>
-                <IconStar /> {t(skillDef.nameKey)} ({t('hero.evolveButton')}):{' '}
-                {cooldownRemaining > 0 ? `${cooldownRemaining.toFixed(1)}s` : t('skill.ready')}
-              </div>
-            );
-          })()}
+      <Accordion title={`${t('hero.skillsSection')} (${hero.equippedSkillIds.length}/${MAX_EQUIPPED_SKILLS})`}>
+        <SkillBagSection hero={hero} />
       </Accordion>
 
       <Accordion title={t('hero.upgradeSection')}>

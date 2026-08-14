@@ -218,6 +218,12 @@ const zhCN = {
     guardianPulse: '守护脉冲',
     phoenixGrace: '凤凰恩泽',
     ready: '就绪',
+    equippedSection: '已装备',
+    bagSection: '技能背包',
+    noneEquipped: '还没有装备任何技能',
+    bagEmpty: '背包是空的,去扭蛋抽技能吧',
+    equip: '装备',
+    unequip: '卸下',
   },
   power: {
     team: '战力',

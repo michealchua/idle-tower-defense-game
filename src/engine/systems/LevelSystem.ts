@@ -1,6 +1,5 @@
 import { getExpToNextLevel } from '../../data/heroConfig';
 import { milestoneDefinitions } from '../../data/milestoneConfig';
-import { getHeroDefinition } from '../../data/heroRosterConfig';
 import { effectLifetimes } from '../../data/effectConfig';
 import { spawnVisualEffect, queueSfx } from './EffectsSystem';
 import { recomputeHeroStats } from './HeroStatsSystem';
@@ -61,24 +60,8 @@ function tickHeroLevelUp(state: GameState, hero: HeroState): boolean {
         queueSfx(state, 'levelUp');
       }
     }
-
-    // Per-hero skill unlocks (heroRosterConfig.ts) - independent of the
-    // shared visualEvolution milestones above, see types.ts's
-    // unlockedSkillIds comment.
-    const skillUnlocks = getHeroDefinition(hero.id).skillUnlocks.filter((unlock) => unlock.level === hero.level);
-    const newlyUnlockedSkills = skillUnlocks.filter((unlock) => !hero.unlockedSkillIds.includes(unlock.skillId));
-    for (const unlock of newlyUnlockedSkills) {
-      hero.unlockedSkillIds.push(unlock.skillId);
-    }
-    if (newlyUnlockedSkills.length > 0 && !milestone) {
-      spawnVisualEffect(state, {
-        kind: 'milestoneUnlock',
-        x: hero.position.x,
-        y: hero.position.y,
-        lifetime: effectLifetimes.milestoneUnlock,
-      });
-      queueSfx(state, 'levelUp');
-    }
+    // Skills no longer unlock by level (single-protagonist redesign) - see
+    // GachaSystem's skill pool / HeroSystem.equipSkill instead.
   }
 
   return leveledUp;

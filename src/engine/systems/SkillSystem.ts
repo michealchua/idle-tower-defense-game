@@ -36,14 +36,12 @@ export function tickSkills(state: GameState, deltaSeconds: number): void {
 }
 
 function tickHeroSkills(state: GameState, hero: HeroState, deltaSeconds: number): void {
-  // hero.unlockedSkillIds is the authoritative "skills this hero currently
-  // has" list - populated from the hero's own heroRosterConfig.skillUnlocks
-  // by LevelSystem, and (for evolved heroes) from its chosen
-  // evolutionBranches entry's exclusive skill by HeroSystem.evolveHero.
-  // Iterating it directly (instead of re-deriving just the level-gated
-  // subset from the roster definition) means a newly evolved hero's branch
-  // skill actually casts, not just shows as unlocked in the UI.
-  for (const skillId of hero.unlockedSkillIds) {
+  // hero.equippedSkillIds is the authoritative "skills this hero currently
+  // casts" list - a player-chosen subset of hero.ownedSkillIds (everything
+  // ever drawn from the skill gacha, plus whatever HeroSystem.evolveHero
+  // grants directly), capped at HeroSystem.MAX_EQUIPPED_SKILLS. Owning a
+  // skill is not enough for it to actually cast - see HeroSystem.equipSkill.
+  for (const skillId of hero.equippedSkillIds) {
     const definition = skillDefinitions[skillId];
 
     let runtime = hero.skills[skillId];

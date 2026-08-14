@@ -1,7 +1,6 @@
 import { getExpToNextLevel } from '../../data/heroConfig';
 import { ascensionConfig } from '../../data/ascensionConfig';
 import { diamondsPerAscend } from '../../data/diamondConfig';
-import { getHeroDefinition } from '../../data/heroRosterConfig';
 import { createInitialHeroUpgrades } from '../entities/Hero';
 import { getStrongestHeroLevel, recomputeHeroStats } from './HeroStatsSystem';
 import { createInitialWaveState, getGlobalWaveNumber } from './WaveSystem';
@@ -35,23 +34,15 @@ export function ascend(state: GameState): boolean {
     hero.exp = 0;
     hero.expToNextLevel = getExpToNextLevel(1);
     hero.unlockedMilestoneIds = [];
-    hero.unlockedSkillIds = [];
+    // ownedSkillIds is NOT reset here - permanent collection, same category
+    // as heroShards (see HeroState.ownedSkillIds's doc comment). Only the
+    // player-chosen equipped loadout resets, since level/stats reset too -
+    // re-picking a loadout for the fresh run is the point, not losing the
+    // skills themselves.
+    hero.equippedSkillIds = [];
     hero.skills = {};
     hero.upgrades = createInitialHeroUpgrades();
     hero.isDowned = false;
-
-    // evolutionBranchId itself is permanent (see its doc comment in
-    // types.ts) - but it was granted its exclusive skill via
-    // unlockedSkillIds, which the reset above just wiped. Re-add it
-    // immediately rather than leaving an already-evolved hero's branch
-    // skill locked behind re-leveling (its level-gated skillUnlocks are
-    // fine relocking, that skill was never level-gated to begin with).
-    if (hero.evolutionBranchId) {
-      const branch = getHeroDefinition(hero.id).evolutionBranches.find((candidate) => candidate.id === hero.evolutionBranchId);
-      if (branch) {
-        hero.unlockedSkillIds.push(branch.skillUnlock.skillId);
-      }
-    }
   }
 
   state.wave = createInitialWaveState();

@@ -2,11 +2,6 @@ import type { UpgradeableStat, HeroClass } from './heroConfig';
 import type { GachaRarity } from './gachaConfig';
 import type { UnlockCondition } from './unlockConditionConfig';
 
-export interface HeroSkillUnlock {
-  level: number;
-  skillId: string;
-}
-
 // One 分支进化 (branch evolution) option. Still the flat "2 branches, one
 // global level gate" shape from before the single-protagonist redesign -
 // Phase D of the redesign replaces this with a multi-tier tree
@@ -24,8 +19,9 @@ export interface HeroEvolutionBranch {
   // makes evolving "获得大幅属性成长" instead of a cosmetic-only change.
   statMultiplier: Record<UpgradeableStat, number>;
   // Exclusive skill granted immediately on evolving, from skillConfig.ts's
-  // existing pool - added straight into hero.unlockedSkillIds by
-  // HeroSystem.evolveHero, no separate level gate of its own.
+  // pool - added straight into hero.ownedSkillIds by HeroSystem.evolveHero
+  // (still has to be manually equipped like any gacha-drawn skill, see
+  // HeroState.equippedSkillIds), no separate level gate of its own.
   skillUnlock: { skillId: string };
 }
 
@@ -51,12 +47,6 @@ export interface HeroDefinition {
   // The 分支进化 options available once this hero reaches
   // heroEvolutionConfig.unlockLevel - see HeroSystem.evolveHero.
   evolutionBranches: HeroEvolutionBranch[];
-  // This hero's own skill unlock schedule (from skillConfig.ts's pool) -
-  // see LevelSystem.tickHeroLevelUp/SkillSystem.tickHeroSkills. Phase B of
-  // the single-protagonist redesign replaces this with gacha-drawn skills
-  // the player manually equips instead; left as-is here so Phase A doesn't
-  // regress skill acquisition before Phase B lands.
-  skillUnlocks: HeroSkillUnlock[];
   // Undefined = always available. Present = condition-locked (see
   // UnlockSystem) - unused now that there's no gacha pool to exclude this
   // single hero from, kept only so the type shape doesn't ripple elsewhere
@@ -200,11 +190,12 @@ const heroClassEvolutionBranches: Record<HeroClass, HeroEvolutionBranch[]> = {
   ],
 };
 
-const startingSkillUnlocks: HeroSkillUnlock[] = [
-  { level: 5, skillId: 'skill-fireball' },
-  { level: 10, skillId: 'skill-lightning' },
-  { level: 15, skillId: 'skill-healingLight' },
-];
+// Skills start in the owned bag AND pre-equipped (not just owned) - without
+// this the protagonist would fight with zero skills until the player draws
+// and manually equips something from the skill gacha (Phase C), which is a
+// rough first few minutes for a fresh save. Hero.ts's createHero seeds both
+// hero.ownedSkillIds and hero.equippedSkillIds from this same list.
+export const STARTER_SKILL_IDS = ['skill-fireball', 'skill-lightning', 'skill-healingLight'];
 
 // Single fixed protagonist replacing the old 100-entry procedurally
 // generated roster (rarity tiers/role profiles/bondId cycling all deleted
@@ -222,7 +213,6 @@ export const heroRosterConfig: HeroDefinition[] = [
     statMultiplier: { attackDamage: 1, maxHp: 1, attackSpeed: 1, criticalChance: 1 },
     class: 'warrior',
     evolutionBranches: heroClassEvolutionBranches.warrior,
-    skillUnlocks: startingSkillUnlocks,
   },
 ];
 
