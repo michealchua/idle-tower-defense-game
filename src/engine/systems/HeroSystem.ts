@@ -28,32 +28,23 @@ function firstFreeSlotIndex(state: GameState, cap: number): number | null {
   return null;
 }
 
-// Repositions every currently-deployed hero from its own deployedSlotIndex
-// (not array order - see HeroState.deployedSlotIndex's doc comment) against
-// the current squad-cap-sized grid. Benched heroes keep whatever stale
-// position they last had - harmless, since combat/skills/leveling/rendering
-// all filter to deployedHeroIds and never read a benched hero's position.
+// Single-protagonist redesign: mapConfig.layoutSlotPositions() now always
+// hands back exactly one position (mapConfig.heroPosition) since there's
+// only ever one hero - no more per-hero deployedSlotIndex bookkeeping
+// needed to figure out where it goes.
 function relayoutDeployedHeroes(state: GameState): void {
-  const cap = getMaxDeployedHeroes(getGlobalWaveNumber(state.wave));
-  const positions = layoutSlotPositions();
+  const [position] = layoutSlotPositions();
 
   for (const heroId of state.deployedHeroIds) {
     const hero = state.heroes.find((candidate) => candidate.id === heroId);
     if (!hero) {
       continue;
     }
-    // Self-healing fallback for a deployed hero missing a valid slot (an
-    // old save migrated without one, or the cap has otherwise moved out
-    // from under it) - claims the first free cell rather than leaving it
-    // unpositioned.
-    if (hero.deployedSlotIndex === null || hero.deployedSlotIndex >= positions.length) {
-      hero.deployedSlotIndex = firstFreeSlotIndex(state, cap);
-    }
-    const position = hero.deployedSlotIndex !== null ? positions[hero.deployedSlotIndex] : positions[0];
-    // Snaps both - a hero mid-walk when the squad's rearranged (deploy/
-    // undeploy/moveHeroToSlot) reappears at its new slot immediately rather
-    // than finishing its old walk first, same "no interpolation, always
-    // authoritative" contract position already had before movement existed.
+    hero.deployedSlotIndex = 0;
+    // Snaps both - a hero mid-walk when redeployed reappears at its slot
+    // immediately rather than finishing its old walk first, same "no
+    // interpolation, always authoritative" contract position already had
+    // before movement existed.
     hero.position = { ...position };
     hero.homePosition = { ...position };
     hero.moveTargetEnemyInstanceId = null;
@@ -124,41 +115,6 @@ export function undeployHero(state: GameState, heroId: string): boolean {
   state.deployedHeroIds.splice(index, 1);
   relayoutDeployedHeroes(state);
   recomputeHeroStats(state);
-  return true;
-}
-
-// Moves a deployed hero to a specific cell of the fixed slot grid (see
-// mapConfig.layoutSlotPositions) - the canvas-native drag gesture
-// (BattleScreen) resolves the drop point to a targetSlotIndex and calls this
-// unconditionally, whether that cell is empty or occupied:
-//  - empty cell: heroId just claims it.
-//  - occupied cell: the two heroes trade deployedSlotIndex values (this is
-//    the only case the old swapDeployedHeroes handled - dragging onto
-//    another hero to swap places is now just this function's special case,
-//    not a separate code path).
-// Squad membership (deployedHeroIds) is unaffected either way, so no
-// recomputeHeroStats needed - only on-field position changes.
-export function moveHeroToSlot(state: GameState, heroId: string, targetSlotIndex: number): boolean {
-  const hero = state.heroes.find((candidate) => candidate.id === heroId);
-  if (!hero || !state.deployedHeroIds.includes(heroId)) {
-    return false;
-  }
-  const cap = getMaxDeployedHeroes(getGlobalWaveNumber(state.wave));
-  if (targetSlotIndex < 0 || targetSlotIndex >= cap) {
-    return false;
-  }
-  if (hero.deployedSlotIndex === targetSlotIndex) {
-    return false;
-  }
-
-  const occupant = state.heroes.find(
-    (candidate) => candidate.id !== heroId && state.deployedHeroIds.includes(candidate.id) && candidate.deployedSlotIndex === targetSlotIndex,
-  );
-  if (occupant) {
-    occupant.deployedSlotIndex = hero.deployedSlotIndex;
-  }
-  hero.deployedSlotIndex = targetSlotIndex;
-  relayoutDeployedHeroes(state);
   return true;
 }
 

@@ -21,7 +21,6 @@ import {
   unlockHero as unlockHeroInEngine,
   deployHero as deployHeroInEngine,
   undeployHero as undeployHeroInEngine,
-  moveHeroToSlot as moveHeroToSlotInEngine,
   equipItemToHero as equipItemToHeroInEngine,
   unequipHeroSlot as unequipHeroSlotInEngine,
   equipStrongestForHero as equipStrongestForHeroInEngine,
@@ -210,7 +209,6 @@ interface GameStore {
   unlockPet: (petId: string) => void;
   deployHero: (heroId: string) => void;
   undeployHero: (heroId: string) => void;
-  moveHeroToSlot: (heroId: string, slotIndex: number) => void;
   evolveHero: (heroId: string, branchId: string) => boolean;
   unlockHeroByCondition: (heroId: string) => void;
   unlockPetByCondition: (petId: string) => void;
@@ -314,11 +312,6 @@ export const useGameStore = create<GameStore>()(
   },
   undeployHero: (heroId) => {
     if (undeployHeroInEngine(gameState, heroId)) {
-      set(snapshotGameState(gameState));
-    }
-  },
-  moveHeroToSlot: (heroId, slotIndex) => {
-    if (moveHeroToSlotInEngine(gameState, heroId, slotIndex)) {
       set(snapshotGameState(gameState));
     }
   },

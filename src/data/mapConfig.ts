@@ -1,5 +1,4 @@
 import type { Position } from '../engine/types';
-import { maxDeployedHeroesCap } from './squadConfig';
 
 export const mapConfig = {
   spawnPosition: { x: 370, y: 150 },
@@ -7,9 +6,10 @@ export const mapConfig = {
   heroPosition: { x: 150, y: 150 },
   baseArrivalDistance: 10,
   heroRowSpacing: 40,
-  // 3-wide grid instead of a single column, so a growing squad
-  // (squadConfig's wave-gated slot unlocks) wraps into more rows instead of
-  // one ever-taller column. See layoutHeroPositions.
+  // Single-protagonist redesign: no longer describes a hero grid (nothing
+  // uses heroColumns/heroColSpacing for hero layout anymore, see
+  // layoutSlotPositions below) - kept only because layoutPetPositions still
+  // anchors the pet trail off "where the hero grid's left edge used to be".
   heroColumns: 3,
   heroColSpacing: 44,
   // Pets trail the hero GRID's left edge toward the base (smaller x =
@@ -23,43 +23,15 @@ export const mapConfig = {
   petRowSpacing: 24,
 };
 
-// Heroes are laid out in a fixed-width grid (mapConfig.heroColumns) centered
-// on the anchor, wrapping to additional rows as the deployed count grows.
-// Called whenever the deployed hero count changes (initial spawn, every new
-// unlock/deploy/undeploy) so the whole grid stays centered rather than
-// growing lopsided.
-export function layoutHeroPositions(count: number): Position[] {
-  const { x, y } = mapConfig.heroPosition;
-  const { heroColumns, heroColSpacing, heroRowSpacing } = mapConfig;
-  const rows = Math.max(1, Math.ceil(count / heroColumns));
-  return Array.from({ length: count }, (_, index) => {
-    const col = index % heroColumns;
-    const row = Math.floor(index / heroColumns);
-    return {
-      x: x + (col - (heroColumns - 1) / 2) * heroColSpacing,
-      y: y + (row - (rows - 1) / 2) * heroRowSpacing,
-    };
-  });
-}
-
-// Always the full 9-cell grid (maxDeployedHeroesCap), regardless of the
-// squad's current wave-gated cap (squadConfig.getMaxDeployedHeroes) or how
-// many heroes are actually deployed - unlike layoutHeroPositions(count)
-// above, whose row count (and therefore every cell's y) shifts on every
-// single deploy/undeploy/cap-growth. Slot index is persistent per hero
-// (HeroState.deployedSlotIndex, see HeroSystem.relayoutDeployedHeroes)
-// rather than derived from array order, so a hero's cell must stay fixed
-// across squad changes for the "drag to any of the 9 cells" gesture
-// (BattleScreen's canvas-native drag) to feel stable - and the player needs
-// to see the real, complete 3x3 shape (including cells locked behind a
-// later squadSlotUnlockWaves milestone) to understand what they're dragging
-// into, not a partial grid that only shows as many cells as they've
-// currently unlocked. BattleScreen is responsible for drawing cells at/
-// beyond the current cap as locked and rejecting drops onto them (see
-// HeroSystem.moveHeroToSlot's own cap check) - this function only ever
-// hands back geometry, never gates by unlock state.
+// Single-protagonist redesign: was a 9-cell grid (maxDeployedHeroesCap) for
+// the old multi-hero squad, with a drag-to-any-cell UI on top. There's now
+// exactly one hero ever (see heroRosterConfig.ts's PROTAGONIST_ID) so this
+// just hands back mapConfig.heroPosition itself - kept as an array (rather
+// than changing every call site to expect a single Position) since
+// GameState.ts/HeroSystem.ts both index into this by
+// HeroState.deployedSlotIndex, which is always 0 for the one hero.
 export function layoutSlotPositions(): Position[] {
-  return layoutHeroPositions(maxDeployedHeroesCap);
+  return [mapConfig.heroPosition];
 }
 
 // Pets sit behind the hero GRID's actual left edge (toward the base, away

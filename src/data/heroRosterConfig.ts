@@ -1,19 +1,17 @@
 import type { UpgradeableStat, HeroClass } from './heroConfig';
-import { heroClasses } from './heroConfig';
 import type { GachaRarity } from './gachaConfig';
 import type { UnlockCondition } from './unlockConditionConfig';
-import { bondIds, type BondId } from './bondConfig';
-import { generateDeterministicHeroName } from './NameGenerator';
 
 export interface HeroSkillUnlock {
   level: number;
   skillId: string;
 }
 
-// One 分支进化 (branch evolution) option - see heroConfig.ts's
-// heroEvolutionConfig doc comment for the full mechanic. Every hero of a
-// given class shares the same two branches (see heroClassEvolutionBranches
-// below) rather than each of the 100 heroes needing bespoke branch content.
+// One 分支进化 (branch evolution) option. Still the flat "2 branches, one
+// global level gate" shape from before the single-protagonist redesign -
+// Phase D of the redesign replaces this with a multi-tier tree
+// (tier/parentBranchId/per-branch unlockLevel); left as-is here so Phase A
+// doesn't regress the one evolution path that already works.
 export interface HeroEvolutionBranch {
   id: string;
   nameKey: string;
@@ -39,39 +37,38 @@ export interface HeroDefinition {
   // copies this same value onto the actual HeroState.name once unlocked, so
   // it never changes at that point.
   name: string;
-  // Drives gacha pull odds, shard-per-duplicate rate, and star-up cost
-  // schedule - see gachaConfig.ts. Still set (for the star-up cost table)
-  // even on condition-locked heroes below, they just never come out of the
-  // pull pool itself.
+  // Drives the name-color styling (CanvasRenderer's RARITY_NAME_COLOR,
+  // HeroPanel's rarity border) - no longer drives gacha odds/pull weight
+  // since heroes are no longer pulled via gacha (single fixed protagonist).
   rarity: GachaRarity;
-  // Multiplies heroBaseConfig per stat, giving each hero a distinct flavor
-  // (glass cannon, tanky, balanced) without a separate stat table per hero.
+  // Multiplies heroBaseConfig per stat, giving the protagonist a distinct
+  // flavor (glass cannon, tanky, balanced) without a separate stat table.
   statMultiplier: Record<UpgradeableStat, number>;
-  // Class/theme tag - see bondConfig.ts. Fielding several heroes sharing a
-  // bond grants a team-wide bonus (HeroStatsSystem.recomputeHeroStats).
-  bondId: BondId;
-  // Archetype tag (heroConfig.ts's HeroClass) - independent axis from
-  // bondId, drives which two evolutionBranches this hero can pick from.
+  // Archetype tag (heroConfig.ts's HeroClass) - drives which evolutionBranches
+  // this hero can pick from. Starts 'warrior'; evolution can shift it (see
+  // HeroEvolutionBranch.resultClass).
   class: HeroClass;
-  // The two 分支进化 options available once this hero reaches
+  // The 分支进化 options available once this hero reaches
   // heroEvolutionConfig.unlockLevel - see HeroSystem.evolveHero.
   evolutionBranches: HeroEvolutionBranch[];
-  // This hero's own skill unlock schedule - unlike the old shared
-  // milestoneConfig skillUnlock rewards, every hero now has an independent
-  // set of skills (from skillConfig.ts's pool) coming online at these
-  // levels. See LevelSystem.tickHeroLevelUp/SkillSystem.tickHeroSkills.
+  // This hero's own skill unlock schedule (from skillConfig.ts's pool) -
+  // see LevelSystem.tickHeroLevelUp/SkillSystem.tickHeroSkills. Phase B of
+  // the single-protagonist redesign replaces this with gacha-drawn skills
+  // the player manually equips instead; left as-is here so Phase A doesn't
+  // regress skill acquisition before Phase B lands.
   skillUnlocks: HeroSkillUnlock[];
-  // Undefined = normal gacha pull. Present = condition-locked: excluded from
-  // the pull pool (see GachaSystem) and only obtainable through
-  // UnlockSystem.unlockHeroByCondition once every entry here is satisfied.
+  // Undefined = always available. Present = condition-locked (see
+  // UnlockSystem) - unused now that there's no gacha pool to exclude this
+  // single hero from, kept only so the type shape doesn't ripple elsewhere
+  // before Phase C removes hero-gacha entirely.
   unlockConditions?: UnlockCondition[];
 }
 
-// Two branches per class (8 total), shared by every hero of that class
-// instead of hand-authoring branch content per roster entry - same
-// "compact table reused across the roster" approach the rarity/role tables
-// above already use. Each branch buffs two stats hard and holds/lightly
-// trims a third, giving each evolved hero a clear build identity.
+// Two branches per class (8 total) - kept in full even though only
+// 'warrior' is reachable today, since HeroEvolutionBranch's flat "2
+// branches, one global level gate" shape and this whole table get replaced
+// by Phase D's multi-tier tree. Removing the other 7 classes' branches now
+// would just be work Phase D immediately redoes.
 const heroClassEvolutionBranches: Record<HeroClass, HeroEvolutionBranch[]> = {
   warrior: [
     {
@@ -203,150 +200,31 @@ const heroClassEvolutionBranches: Record<HeroClass, HeroEvolutionBranch[]> = {
   ],
 };
 
-interface RoleProfile {
-  attackDamage: number;
-  maxHp: number;
-  attackSpeed: number;
-  criticalChance: number;
-}
-
-// Cycled by global roster index so heroes within the same rarity still read
-// as different builds instead of clones - same shape hero-1..hero-10 used to
-// hand-author (glass cannon/tanky/balanced/crit-focused examples), just
-// generated instead of copy-pasted.
-const roleProfiles: RoleProfile[] = [
-  { attackDamage: 1, maxHp: 1, attackSpeed: 1, criticalChance: 1 }, // balanced
-  { attackDamage: 1.35, maxHp: 0.7, attackSpeed: 1, criticalChance: 1.3 }, // glass cannon
-  { attackDamage: 0.7, maxHp: 1.6, attackSpeed: 0.9, criticalChance: 0.8 }, // tank
-  { attackDamage: 1.1, maxHp: 0.9, attackSpeed: 1, criticalChance: 1.6 }, // crit-focused
-  { attackDamage: 0.95, maxHp: 0.85, attackSpeed: 1.35, criticalChance: 1 }, // fast attacker
+const startingSkillUnlocks: HeroSkillUnlock[] = [
+  { level: 5, skillId: 'skill-fireball' },
+  { level: 10, skillId: 'skill-lightning' },
+  { level: 15, skillId: 'skill-healingLight' },
 ];
 
-interface RarityTierConfig {
-  rarity: GachaRarity;
-  count: number;
-  // Overall power baseline for this rarity - multiplied by a roleProfile
-  // above to get the hero's actual per-stat statMultiplier. Continues the
-  // curve the old hero-1..hero-10 placeholders already established (white
-  // ~1.0 up through rainbow ~2.4-2.7).
-  powerMultiplier: number;
-  // How many skillUnlocks entries a hero of this rarity gets (levels are
-  // always the first N of skillUnlockLevels below).
-  skillCount: number;
-}
+// Single fixed protagonist replacing the old 100-entry procedurally
+// generated roster (rarity tiers/role profiles/bondId cycling all deleted
+// along with it - see project memory for the full removal rationale). id
+// kept stable/exported since several systems (SaveSystem migrations,
+// GameState's initial deployedHeroIds/unlockedHeroIds) need a fixed
+// reference to "the protagonist".
+export const PROTAGONIST_ID = 'protagonist';
 
-// Rarity counts confirmed with the user: white20/green20/blue25/purple20/
-// gold10/red4/rainbow1 = 100.
-const rarityTiers: RarityTierConfig[] = [
-  { rarity: 'white', count: 20, powerMultiplier: 1.0, skillCount: 1 },
-  { rarity: 'green', count: 20, powerMultiplier: 1.15, skillCount: 1 },
-  { rarity: 'blue', count: 25, powerMultiplier: 1.35, skillCount: 2 },
-  { rarity: 'purple', count: 20, powerMultiplier: 1.6, skillCount: 2 },
-  { rarity: 'gold', count: 10, powerMultiplier: 1.9, skillCount: 2 },
-  { rarity: 'red', count: 4, powerMultiplier: 2.3, skillCount: 3 },
-  { rarity: 'rainbow', count: 1, powerMultiplier: 2.7, skillCount: 3 },
+export const heroRosterConfig: HeroDefinition[] = [
+  {
+    id: PROTAGONIST_ID,
+    name: '凯尔',
+    rarity: 'gold',
+    statMultiplier: { attackDamage: 1, maxHp: 1, attackSpeed: 1, criticalChance: 1 },
+    class: 'warrior',
+    evolutionBranches: heroClassEvolutionBranches.warrior,
+    skillUnlocks: startingSkillUnlocks,
+  },
 ];
-
-const skillUnlockLevels = [5, 10, 15];
-
-// Every skillConfig.ts id, aoeDamage/chainDamage/healAlly grouped together -
-// see buildSkillUnlocks for how heroes draw from this shared pool.
-const skillPool = [
-  'skill-fireball',
-  'skill-meteor',
-  'skill-flameNova',
-  'skill-iceBurst',
-  'skill-earthquake',
-  'skill-novaBlast',
-  'skill-lightning',
-  'skill-arrowRain',
-  'skill-chainBlade',
-  'skill-thornWhip',
-  'skill-spiritLink',
-  'skill-voidChain',
-  'skill-healingLight',
-  'skill-natureBlessing',
-  'skill-sanctuary',
-  'skill-lifeSpring',
-  'skill-guardianPulse',
-  'skill-phoenixGrace',
-];
-
-// Deterministic (no Math.random) - the same globalIndex always produces the
-// same skill loadout across reloads. Stride 7 is coprime with the pool's
-// length (18), so a single hero never draws the same skill twice even at
-// skillCount 3, while different heroes' starting offsets (globalIndex) still
-// spread combinations across the whole pool instead of every hero drawing
-// from the same few entries.
-function buildSkillUnlocks(globalIndex: number, count: number): HeroSkillUnlock[] {
-  const stride = 7;
-  const unlocks: HeroSkillUnlock[] = [];
-  for (let k = 0; k < count; k += 1) {
-    const skillId = skillPool[(globalIndex + k * stride) % skillPool.length];
-    unlocks.push({ level: skillUnlockLevels[k], skillId });
-  }
-  return unlocks;
-}
-
-function buildStatMultiplier(power: number, role: RoleProfile): Record<UpgradeableStat, number> {
-  return {
-    attackDamage: Math.round(power * role.attackDamage * 1000) / 1000,
-    maxHp: Math.round(power * role.maxHp * 1000) / 1000,
-    attackSpeed: Math.round(power * role.attackSpeed * 1000) / 1000,
-    criticalChance: Math.round(power * role.criticalChance * 1000) / 1000,
-  };
-}
-
-// The old hand-authored chain-unlock example (hero-6/7/8: a heroUpgradeLevel
-// gate, a goldSpent gate, and a requiresHero+heroLevel chain built on top of
-// the goldSpent one) re-pointed at three generated ids instead. Same
-// "excluded from the gacha pool, only reachable via UnlockSystem" behavior -
-// see GachaSystem.pickRosterEntryByRarity.
-const unlockConditionOverrides: Record<string, UnlockCondition[]> = {
-  'purple-19': [{ type: 'heroUpgradeLevel', stat: 'attackDamage', level: 20 }],
-  'purple-20': [{ type: 'goldSpent', amount: 50000 }],
-  'gold-10': [
-    { type: 'requiresHero', heroId: 'purple-20' },
-    { type: 'heroLevel', heroId: 'purple-20', level: 15 },
-  ],
-};
-
-// 100 heroes generated from the compact tables above instead of hand-
-// authored, so the per-rarity power curve and role variety stay consistent
-// across all of them instead of drifting the way 100 hand-written literals
-// would. ids stay the plain `<rarity>-<n>` scheme; names are the one thing
-// generated per-entry via generateDeterministicHeroName instead (real art
-// still comes later - see ART_ASSET_CHECKLIST.md).
-function generateHeroRoster(): HeroDefinition[] {
-  const roster: HeroDefinition[] = [];
-  let globalIndex = 0;
-
-  for (const tier of rarityTiers) {
-    for (let n = 1; n <= tier.count; n += 1) {
-      const id = `${tier.rarity}-${n}`;
-      const role = roleProfiles[globalIndex % roleProfiles.length];
-      const heroClass = heroClasses[globalIndex % heroClasses.length];
-
-      roster.push({
-        id,
-        name: generateDeterministicHeroName(globalIndex),
-        rarity: tier.rarity,
-        statMultiplier: buildStatMultiplier(tier.powerMultiplier, role),
-        bondId: bondIds[globalIndex % bondIds.length],
-        class: heroClass,
-        evolutionBranches: heroClassEvolutionBranches[heroClass],
-        skillUnlocks: buildSkillUnlocks(globalIndex, tier.skillCount),
-        unlockConditions: unlockConditionOverrides[id],
-      });
-
-      globalIndex += 1;
-    }
-  }
-
-  return roster;
-}
-
-export const heroRosterConfig: HeroDefinition[] = generateHeroRoster();
 
 export function getHeroDefinition(heroId: string): HeroDefinition {
   const definition = heroRosterConfig.find((hero) => hero.id === heroId);

@@ -6,7 +6,6 @@ import { getMaxDeployedHeroes } from '../data/squadConfig';
 import { getGlobalWaveNumber } from '../engine/systems/WaveSystem';
 import { heroEvolutionConfig, heroUpgradeConfig, type HeroClass, type UpgradeableStat } from '../data/heroConfig';
 import { MAX_STAR_LEVEL, gachaRarityConfig, getStarUpCost, type GachaRarity } from '../data/gachaConfig';
-import { getActiveBondCounts, type BondId } from '../data/bondConfig';
 import { isHeroUpgradeMaxed, previewHeroUpgradeBulk } from '../engine/systems/UpgradeSystem';
 import { canEvolveHero, getEffectiveHeroClass } from '../engine/systems/HeroSystem';
 import { formatBigNumber } from '../utils/scaling';
@@ -105,44 +104,6 @@ function HeroUpgradeSection({ hero, gold }: { hero: HeroState; gold: number }) {
   );
 }
 
-// Plan section 14's "羁绊不应只有+Attack" - each bond boosts a different
-// mechanic (see bondConfig.ts's BondEffectId), surfaced here as a tooltip so
-// the difference is actually visible, not just under-the-hood math.
-const BOND_EFFECT_LABEL_KEYS: Record<BondId, string> = {
-  warrior: 'bondEffect.warrior',
-  guardian: 'bondEffect.guardian',
-  mage: 'bondEffect.mage',
-  archer: 'bondEffect.archer',
-  assassin: 'bondEffect.assassin',
-  support: 'bondEffect.support',
-  summoner: 'bondEffect.summoner',
-  special: 'bondEffect.special',
-};
-
-const BOND_LABEL_KEYS: Record<BondId, string> = {
-  warrior: 'bond.warrior',
-  mage: 'bond.mage',
-  archer: 'bond.archer',
-  guardian: 'bond.guardian',
-  support: 'bond.support',
-  assassin: 'bond.assassin',
-  summoner: 'bond.summoner',
-  special: 'bond.special',
-};
-
-// Quick-scan glyph per bond archetype - lets the compact roster row read at
-// a glance instead of relying on the rarity color alone.
-const BOND_ICON: Record<BondId, (props: IconProps) => JSX.Element> = {
-  warrior: IconSword,
-  mage: IconOrb,
-  archer: IconBow,
-  guardian: IconShield,
-  support: IconStar,
-  assassin: IconDagger,
-  summoner: IconGhost,
-  special: IconStar,
-};
-
 const CLASS_LABEL_KEYS: Record<HeroClass, string> = {
   warrior: 'class.warrior',
   mage: 'class.mage',
@@ -203,10 +164,6 @@ const MATERIAL_LABEL_KEYS = {
   legendarySourceStone: 'material.legendarySourceStone',
   diamonds: 'material.diamonds',
 } as const;
-
-function heroLabel(definition: HeroDefinition): string {
-  return `${t(RARITY_LABEL_KEYS[definition.rarity])}${definition.id.split('-')[1]}`;
-}
 
 // Avatar granularity is per-class/per-evolution-branch, not per individual
 // hero - same sprites CanvasRenderer.drawHero draws on the field (see
@@ -431,7 +388,6 @@ function HeroDetail({
   squadFull,
   gold,
   materials,
-  activeBondCounts,
   onToggleDeploy,
 }: {
   definition: HeroDefinition;
@@ -440,7 +396,6 @@ function HeroDetail({
   squadFull: boolean;
   gold: number;
   materials: Materials;
-  activeBondCounts: Partial<Record<BondId, number>>;
   onToggleDeploy: (id: string) => void;
 }) {
   const starUpHero = useGameStore((state) => state.starUpHero);
@@ -457,7 +412,6 @@ function HeroDetail({
     (!nextCost.material || (materialKey !== undefined && materials[materialKey] >= nextCost.material));
 
   const effectiveClass = getEffectiveHeroClass(hero);
-  const BondIcon = BOND_ICON[definition.bondId];
   const HeroClassIcon = CLASS_ICON[effectiveClass];
 
   return (
@@ -469,13 +423,12 @@ function HeroDetail({
           fallback={<HeroClassIcon />}
         />
         <span>
-          <BondIcon /> {hero.name}{' '}
+          {hero.name}{' '}
           <span className="text-faint">Lv.{hero.level} · ★{currentStar}/{MAX_STAR_LEVEL}</span>
         </span>
       </div>
       <div className="item-detail">
         <HeroClassIcon /> {t(CLASS_LABEL_KEYS[effectiveClass])}
-        <span className="text-faint"> · {heroLabel(definition)}</span>
       </div>
 
       <div className="bar-track">
@@ -493,11 +446,6 @@ function HeroDetail({
 
       <div className="stat-grid">
         <StatTile label={t('hero.attackDamage')} value={formatBigNumber(hero.attackDamage)} />
-        <StatTile
-          label={t('hero.bond')}
-          value={`${t(BOND_LABEL_KEYS[definition.bondId])} (${activeBondCounts[definition.bondId] ?? 0})`}
-          tooltip={t(BOND_EFFECT_LABEL_KEYS[definition.bondId])}
-        />
       </div>
 
       <button
@@ -632,7 +580,6 @@ const HeroRosterList = memo(function HeroRosterList({
           : definition.class;
         const isDeployed = deployedHeroIds.includes(definition.id);
         const isSelected = definition.id === effectiveSelectedId;
-        const RowBondIcon = BOND_ICON[definition.bondId];
         const RowClassIcon = CLASS_ICON[effectiveClass];
         return (
           <div
@@ -650,7 +597,7 @@ const HeroRosterList = memo(function HeroRosterList({
               fallback={<RowClassIcon />}
             />
             <div className={`roster-grid-item-name ${RARITY_CLASS[definition.rarity]}`}>
-              <RowBondIcon /> {name}
+              {name}
               {evolutionBranchId ? <IconStar /> : ''}
             </div>
             <div className="roster-grid-item-sub">
@@ -701,7 +648,6 @@ function HeroPanel({ gameScreenRef }: { gameScreenRef: RefObject<HTMLDivElement>
     () => heroRosterConfig.filter((definition) => unlockedHeroIds.includes(definition.id)),
     [unlockedHeroIds],
   );
-  const activeBondCounts = getActiveBondCounts(deployedHeroIds);
 
   // useCallback so these stay referentially stable across HeroPanel's own
   // frequent re-renders (see the `heroes` comment above) - handlePointerUp
@@ -787,7 +733,6 @@ function HeroPanel({ gameScreenRef }: { gameScreenRef: RefObject<HTMLDivElement>
                   squadFull={squadFull}
                   gold={gold}
                   materials={materials}
-                  activeBondCounts={activeBondCounts}
                   onToggleDeploy={toggleDeploy}
                 />
               ) : (
@@ -800,11 +745,7 @@ function HeroPanel({ gameScreenRef }: { gameScreenRef: RefObject<HTMLDivElement>
 
       {draggingDefinition && (
         <div className="drag-ghost" style={{ left: drag.pointerX, top: drag.pointerY }}>
-          {(() => {
-            const DragBondIcon = BOND_ICON[draggingDefinition.bondId];
-            return <DragBondIcon />;
-          })()}{' '}
-          {heroes.find((h) => h.id === draggingDefinition.id)?.name ?? heroLabel(draggingDefinition)}
+          {heroes.find((h) => h.id === draggingDefinition.id)?.name ?? draggingDefinition.name}
         </div>
       )}
     </div>
