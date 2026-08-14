@@ -11,8 +11,8 @@ const namePrefixes = [
   '荒野', '深渊', '血色', '星辰', '不朽', '狂暴', '永夜', '破晓',
 ];
 
-// Drawn by Hero.ts's createHero for every hero (starter hero and every
-// gacha-unlocked one) - see HeroState.name.
+// Drawn by generateDeterministicHeroName below for every roster entry - see
+// HeroDefinition.name/HeroState.name.
 const heroTitles = [
   '守护者', '先知', '游侠', '斩溃者', '圣裁官', '破军', '流星', '战魂',
   '御风者', '铁壁', '影刃', '战歌', '光辉使徒', '不屈者',
@@ -32,8 +32,21 @@ function pickRandom<T>(pool: T[]): T {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
-export function generateHeroName(): string {
-  return `${pickRandom(namePrefixes)}${pickRandom(heroTitles)}`;
+// Deterministic (no Math.random) - drawn by heroRosterConfig.ts's roster
+// generator so every HeroDefinition carries a fixed name from module load,
+// independent of whether the player has ever unlocked it. CodexPanel needs
+// this: showing a real name for a not-yet-owned hero (rather than a rarity+
+// number placeholder) only works if that name exists before any HeroState
+// instance does. Prefix cycles every index, title every namePrefixes.length
+// indices - covers namePrefixes.length * heroTitles.length (224) unique
+// combinations before repeating, comfortably above the 100-hero roster this
+// backs. createHero (Hero.ts) reads this same value off the definition
+// rather than rolling its own, so a hero's name never changes the moment
+// it's actually unlocked - same identity, codex through roster.
+export function generateDeterministicHeroName(index: number): string {
+  const prefix = namePrefixes[index % namePrefixes.length];
+  const title = heroTitles[Math.floor(index / namePrefixes.length) % heroTitles.length];
+  return `${prefix}${title}`;
 }
 
 export function generateMonsterName(): string {

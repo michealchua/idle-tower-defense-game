@@ -22,10 +22,11 @@ export interface HeroState {
   // Matches a heroRosterConfig id - which template's rarity/statMultiplier
   // this hero uses. Roster entries are 1:1 with deployed heroes.
   id: string;
-  // Procedurally rolled once at createHero (see NameGenerator.generateHeroName)
-  // - flavor only, never used to look anything up. Per-playthrough, not part
-  // of heroRosterConfig, so two players' copies of the same hero id read as
-  // individuals instead of clones.
+  // Copied from HeroDefinition.name (heroRosterConfig.ts) at createHero -
+  // flavor only, never used to look anything up. Fixed per roster id (not
+  // per-playthrough anymore) so CodexPanel can show the same name for a
+  // hero the player hasn't unlocked yet, see HeroDefinition.name's doc
+  // comment for why that requires it to be deterministic.
   name: string;
   level: number;
   maxHp: number;

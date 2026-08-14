@@ -1,5 +1,5 @@
 import { getExpToNextLevel, heroBaseConfig, heroUpgradeConfig, type UpgradeableStat } from '../../data/heroConfig';
-import { generateHeroName } from '../../data/NameGenerator';
+import { getHeroDefinition } from '../../data/heroRosterConfig';
 import type { HeroState, Position } from '../types';
 
 function createInitialHeroUpgrades(): Record<UpgradeableStat, number> {
@@ -12,7 +12,12 @@ function createInitialHeroUpgrades(): Record<UpgradeableStat, number> {
 export function createHero(heroId: string, position: Position): HeroState {
   return {
     id: heroId,
-    name: generateHeroName(),
+    // Fixed per roster id (see HeroDefinition.name's doc comment), not
+    // rolled fresh here anymore - CodexPanel needs to show the same name
+    // before this hero is ever unlocked, so the identity has to already
+    // exist on the definition rather than being invented at instance-
+    // creation time.
+    name: getHeroDefinition(heroId).name,
     level: heroBaseConfig.level,
     maxHp: heroBaseConfig.maxHp,
     currentHp: heroBaseConfig.maxHp,

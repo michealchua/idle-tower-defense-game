@@ -3,6 +3,7 @@ import { heroClasses } from './heroConfig';
 import type { GachaRarity } from './gachaConfig';
 import type { UnlockCondition } from './unlockConditionConfig';
 import { bondIds, type BondId } from './bondConfig';
+import { generateDeterministicHeroName } from './NameGenerator';
 
 export interface HeroSkillUnlock {
   level: number;
@@ -32,6 +33,12 @@ export interface HeroEvolutionBranch {
 
 export interface HeroDefinition {
   id: string;
+  // Deterministic per roster id (see NameGenerator.generateDeterministicHeroName) -
+  // CodexPanel shows this for every hero, owned or not, instead of a rarity+
+  // number placeholder for the ones not yet unlocked. Hero.ts's createHero
+  // copies this same value onto the actual HeroState.name once unlocked, so
+  // it never changes at that point.
+  name: string;
   // Drives gacha pull odds, shard-per-duplicate rate, and star-up cost
   // schedule - see gachaConfig.ts. Still set (for the star-up cost table)
   // even on condition-locked heroes below, they just never come out of the
@@ -304,11 +311,12 @@ const unlockConditionOverrides: Record<string, UnlockCondition[]> = {
   ],
 };
 
-// Placeholder ids/numbers only - real names/art come later, same precedent
-// as the old hero-1..hero-10 stand-ins this generator replaces. 100 heroes
-// generated from the compact tables above instead of hand-authored, so the
-// per-rarity power curve and role variety stay consistent across all of
-// them instead of drifting the way 100 hand-written literals would.
+// 100 heroes generated from the compact tables above instead of hand-
+// authored, so the per-rarity power curve and role variety stay consistent
+// across all of them instead of drifting the way 100 hand-written literals
+// would. ids stay the plain `<rarity>-<n>` scheme; names are the one thing
+// generated per-entry via generateDeterministicHeroName instead (real art
+// still comes later - see ART_ASSET_CHECKLIST.md).
 function generateHeroRoster(): HeroDefinition[] {
   const roster: HeroDefinition[] = [];
   let globalIndex = 0;
@@ -321,6 +329,7 @@ function generateHeroRoster(): HeroDefinition[] {
 
       roster.push({
         id,
+        name: generateDeterministicHeroName(globalIndex),
         rarity: tier.rarity,
         statMultiplier: buildStatMultiplier(tier.powerMultiplier, role),
         bondId: bondIds[globalIndex % bondIds.length],

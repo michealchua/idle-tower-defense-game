@@ -99,8 +99,6 @@ function CodexPanel() {
 
   function renderHeroGridItem(definition: HeroDefinition) {
     const isUnlocked = unlockedHeroIds.includes(definition.id);
-    const heroInstance = isUnlocked ? heroes.find((hero) => hero.id === definition.id) : undefined;
-    const label = heroInstance ? heroInstance.name : rarityNumberLabel(definition.rarity, definition.id);
     const isSelected = definition.id === effectiveHeroId;
 
     return (
@@ -111,7 +109,7 @@ function CodexPanel() {
         onClick={() => setSelectedHeroId(definition.id)}
       >
         <SpriteAvatar src={getHeroSpriteSrc(definition.class)} size={56} />
-        <div className={`roster-grid-item-name ${RARITY_CLASS[definition.rarity]}`}>{label}</div>
+        <div className={`roster-grid-item-name ${RARITY_CLASS[definition.rarity]}`}>{definition.name}</div>
         <div className="roster-grid-item-sub">{isUnlocked ? `★${heroStars[definition.id] ?? 0}/${MAX_STAR_LEVEL}` : t('heroRoster.locked')}</div>
       </button>
     );
@@ -125,7 +123,7 @@ function CodexPanel() {
     if (isUnlocked && heroInstance) {
       return (
         <div className={`detail-card ${RARITY_BORDER_CLASS[definition.rarity]}`}>
-          <div className={`detail-title ${RARITY_CLASS[definition.rarity]}`}>{heroInstance.name}</div>
+          <div className={`detail-title ${RARITY_CLASS[definition.rarity]}`}>{definition.name}</div>
           <div className="item-detail">
             {rarityLabel} · {t('codex.obtained')}
           </div>
@@ -142,7 +140,7 @@ function CodexPanel() {
 
       return (
         <div className={`detail-card locked ${RARITY_BORDER_CLASS[definition.rarity]}`}>
-          <div className={`detail-title ${RARITY_CLASS[definition.rarity]}`}>{rarityNumberLabel(definition.rarity, definition.id)}</div>
+          <div className={`detail-title ${RARITY_CLASS[definition.rarity]}`}>{definition.name}</div>
           <div className="item-detail">{t('unlock.conditionLocked')}</div>
           {statuses.map((status, index) => (
             <div key={index} className={status.isMet ? 'text-faint' : 'text-muted'}>
@@ -160,7 +158,7 @@ function CodexPanel() {
 
     return (
       <div className={`detail-card locked ${RARITY_BORDER_CLASS[definition.rarity]}`}>
-        <div className={`detail-title ${RARITY_CLASS[definition.rarity]}`}>{rarityNumberLabel(definition.rarity, definition.id)}</div>
+        <div className={`detail-title ${RARITY_CLASS[definition.rarity]}`}>{definition.name}</div>
         <div className="item-detail">{t('heroRoster.locked')}</div>
         <div className="item-detail">{t('codex.gachaSource')}</div>
       </div>

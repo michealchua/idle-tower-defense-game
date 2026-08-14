@@ -218,21 +218,22 @@ ipcMain.on('update:check-now', () => {
 // STEALTH_WINDOW_WIDTH/HEIGHT's doc comment above. Always drops out of
 // fullscreen before resizing to 'default'/'stealth' - setSize while still
 // fullscreen doesn't reliably take effect on Windows.
-//
-// setResizable(true)/(false) bracket every setSize call below - a window
-// created with resizable:false (see createWindow) can silently ignore
-// programmatic setSize on some Electron/Windows combinations, not just
-// user drag-resize (this is the reported "全屏/摸鱼模式按钮完全没反应,窗口
-// 永远只有一个大小" bug: the IPC round-trip completes with no error on
-// either side, setSize is genuinely called, the OS just declines to honor
-// it on a non-resizable window). Toggling resizable true only for the
-// duration of the call keeps the "no user drag-resize" contract intact
-// (resizable stays false at rest, in every mode) while making the
-// programmatic resize itself reliable.
 ipcMain.on('app:set-window-mode', (_event, mode) => {
   if (!mainWindow) {
     return;
   }
+  // Set true unconditionally, up front - covers setFullScreen(true) below
+  // as well as the setSize calls further down, both of which can be
+  // silently ignored on a resizable:false window on some Electron/Windows
+  // combinations (this is the reported "全屏/摸鱼模式按钮完全没反应" bug: no
+  // error either side of the IPC round-trip, the call is genuinely made,
+  // the OS just declines to honor it on a non-resizable window). Left true
+  // for the rest of a fullscreen session rather than immediately toggled
+  // back - a fullscreen window has no visible edges to drag anyway, so
+  // there's nothing user-facing to protect against while it's on; it's
+  // only set back to false once actually landing on 'default'/'stealth'
+  // below, keeping the "no user drag-resize" contract intact at rest.
+  mainWindow.setResizable(true);
   if (mode === 'fullscreen') {
     mainWindow.setFullScreen(true);
     return;
@@ -240,7 +241,6 @@ ipcMain.on('app:set-window-mode', (_event, mode) => {
   if (mainWindow.isFullScreen()) {
     mainWindow.setFullScreen(false);
   }
-  mainWindow.setResizable(true);
   if (mode === 'stealth') {
     mainWindow.setSize(STEALTH_WINDOW_WIDTH, STEALTH_WINDOW_HEIGHT);
   } else {
