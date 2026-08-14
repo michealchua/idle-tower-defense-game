@@ -246,7 +246,16 @@ export type VisualEffectKind =
   | 'shieldBreak'
   | 'revive'
   | 'summon'
-  | 'waveClear';
+  | 'waveClear'
+  // Not drawn as its own shape - a short-lived marker CanvasRenderer looks up
+  // by entityKey to flash/squash the specific hero/enemy that was just hit.
+  // See DamageSystem.applyDamage/applyDamageToHero (spawn) and
+  // CanvasRenderer.drawEntityWithHitReaction (consume).
+  | 'hitReaction'
+  // A single effect object carrying a small pre-generated particle set (see
+  // `particles` below) rather than one VisualEffect per particle - keeps a
+  // crit/kill/boss-kill burst to one MAX_VISUAL_EFFECTS slot instead of N.
+  | 'particleBurst';
 
 export interface VisualEffect {
   id: number;
@@ -256,11 +265,40 @@ export interface VisualEffect {
   targetX?: number;
   targetY?: number;
   amount?: number;
+  // damageNumber only - amount as a fraction of the target's maxHp at the
+  // moment of the hit, so CanvasRenderer can scale a number's size/reach by
+  // how much it actually mattered rather than a fixed font size for every
+  // hit regardless of magnitude. See DamageSystem.applyDamage/
+  // applyDamageToHero (the only two spawn sites).
+  amountRatio?: number;
   isCritical?: boolean;
   radius?: number;
+  // attackFlash (owner = the attacking hero) / hitReaction (owner = the hero
+  // or enemy that was hit) only - see engine/entityKey.ts for the key
+  // convention. Effects that don't attribute to one specific rendered entity
+  // (deathBurst, skillImpact, etc.) leave this undefined.
+  entityKey?: string;
+  // particleBurst only - each entry's on-screen position at a given age is
+  // derived (x + cos(angle)*speed*age, ...), not stored per-frame, so this
+  // stays a small fixed array generated once at spawn (see
+  // EffectsSystem.spawnParticleBurst).
+  particles?: { angle: number; speed: number }[];
+  // particleBurst only - hex color for this burst's particles (crit/kill/
+  // boss-kill/skill-impact/hero-down each get their own, see
+  // effectConfig.particleBurstConfig).
+  color?: string;
   age: number;
   lifetime: number;
 }
+
+// One-shot audio cues the engine wants played - see SfxManager.ts (the only
+// consumer, in the React layer via App.tsx) for what each one sounds like.
+// Deliberately a flat id list, not parametrized (e.g. no per-rarity gacha
+// ids here) - gacha/equipment-drop sfx are triggered straight from
+// GachaPanel.tsx/EquipmentDropToast.tsx instead, since those already have
+// the result data client-side; this queue is only for events that happen
+// deep in engine ticks with no other React-visible signal to hook.
+export type SfxEventId = 'hit' | 'crit' | 'enemyDeath' | 'bossKill' | 'heroDown' | 'levelUp' | 'waveClear' | 'bossIntro';
 
 export interface GameState {
   // The full collection: every unlocked hero/pet, regardless of whether it's
@@ -344,6 +382,19 @@ export interface GameState {
   // deliberate freeze-frame on a killing blow or crit. See
   // effectConfig.hitStopConfig for trigger durations.
   hitStopRemaining: number;
+  // Counts down in GameLoop.step exactly like hitStopRemaining (skips every
+  // gameplay system, including re-running tickSpawn, while this is above 0)
+  // but for a much longer "boss just appeared" dramatic pause instead of a
+  // punchy freeze-frame - set once by SpawnSystem.tickSpawn the tick a
+  // boss/miniboss spawns. See effectConfig.bossIntroConfig and
+  // BattleScreen.tsx's banner overlay, which is only shown while this is > 0.
+  bossIntroRemaining: number;
+  // Queued by EffectsSystem.queueSfx from wherever a combat/progression beat
+  // happens (DamageSystem/LevelSystem/WaveSystem/SpawnSystem) - App.tsx's
+  // sfx-consuming effect drains this every time the store snapshot's array
+  // reference changes (GameLoop.step clears it right after each onTick), so
+  // the engine itself never touches Web Audio directly.
+  pendingSfxEvents: SfxEventId[];
   // Unequipped items only - equipped gear lives on the owning hero's own
   // HeroState.equipment instead (see EquipmentSystem.ts/HeroSystem.ts).
   inventory: EquipmentItem[];

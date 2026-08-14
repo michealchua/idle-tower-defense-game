@@ -3,6 +3,7 @@ import { t } from '../locales/i18n';
 import { useGameStore } from '../store/useGameStore';
 import { SAVE_SLOTS, getSaveMetadata, hasSave, getMostRecentSlot, type SaveMetadata, type SaveSlot } from '../engine/core/SaveSystem';
 import { IconSave } from './icons';
+import { sfxManager } from '../audio/SfxManager';
 
 interface TitleScreenProps {
   onEnterGame: () => void;
@@ -38,6 +39,9 @@ function TitleScreen({ onEnterGame }: TitleScreenProps) {
   const deleteSave = useGameStore((state) => state.deleteSave);
 
   function handleQuickStart(): void {
+    // First guaranteed user gesture in the app - browsers block audio
+    // playback until one happens, see SfxManager.unlock's doc comment.
+    sfxManager.unlock();
     const recentSlot = getMostRecentSlot();
     if (recentSlot !== null) {
       loadGame(recentSlot);
@@ -59,6 +63,7 @@ function TitleScreen({ onEnterGame }: TitleScreenProps) {
   });
 
   function handleSlotPrimaryAction(slot: SaveSlot): void {
+    sfxManager.unlock();
     if (hasSave(slot)) {
       loadGame(slot);
     } else {
@@ -72,6 +77,7 @@ function TitleScreen({ onEnterGame }: TitleScreenProps) {
       return;
     }
     if (pendingConfirm.action === 'overwrite') {
+      sfxManager.unlock();
       startNewGame(pendingConfirm.slot);
       setPendingConfirm(null);
       onEnterGame();

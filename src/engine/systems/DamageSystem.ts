@@ -1,13 +1,14 @@
-import { spawnVisualEffect, triggerHitStop, triggerScreenShake } from './EffectsSystem';
+import { spawnVisualEffect, spawnParticleBurst, spawnHitReaction, queueSfx, triggerHitStop, triggerScreenShake } from './EffectsSystem';
 import { rollEquipmentDrop } from './EquipmentSystem';
 import { getAliveDeployedHeroes } from './HeroStatsSystem';
 import { enemyArchetypes } from '../../data/enemyArchetypes';
-import { effectLifetimes, hitStopConfig, screenShakeConfig } from '../../data/effectConfig';
+import { effectLifetimes, hitStopConfig, screenShakeConfig, particleBurstConfig } from '../../data/effectConfig';
 import { getTalentMultiplier, talentPointRewardConfig } from '../../data/talentConfig';
 import { getAscensionShopMultiplier } from '../../data/ascensionShopConfig';
 import { getBondEffects } from '../../data/bondConfig';
 import { diamondRewardConfig } from '../../data/diamondConfig';
 import { incrementDailyQuestProgress } from './DailyQuestSystem';
+import { enemyEntityKey, heroEntityKey } from '../entityKey';
 import type { EnemyState, GameState, HeroState } from '../types';
 
 export interface DamageResult {
@@ -44,9 +45,15 @@ export function applyDamage(state: GameState, target: EnemyState, damage: Damage
     x: target.position.x,
     y: target.position.y,
     amount: damage.amount,
+    amountRatio: target.maxHp > 0 ? damage.amount / target.maxHp : 0,
     isCritical: damage.isCritical,
     lifetime: effectLifetimes.damageNumber,
   });
+
+  // Local flash/squash on the specific enemy that was hit, on every hit (not
+  // just crits) - see spawnHitReaction's doc comment.
+  spawnHitReaction(state, enemyEntityKey(target.instanceId), target.position.x, target.position.y, damage.isCritical);
+  queueSfx(state, damage.isCritical ? 'crit' : 'hit');
 
   // A crit is always hero-dealt (applyDamage is only ever called against
   // enemies - enemy-on-hero chip damage goes through applyDamageToHero below,
@@ -55,6 +62,7 @@ export function applyDamage(state: GameState, target: EnemyState, damage: Damage
   if (damage.isCritical) {
     triggerScreenShake(state, screenShakeConfig.criticalIntensity);
     triggerHitStop(state, hitStopConfig.criticalHitSeconds);
+    spawnParticleBurst(state, target.position.x, target.position.y, particleBurstConfig.crit);
   }
 
   if (target.currentHp <= 0) {
@@ -91,7 +99,12 @@ export function applyDamage(state: GameState, target: EnemyState, damage: Damage
 // heals everyone) on the next attempt.
 export function applyDamageToHero(state: GameState, hero: HeroState, amount: number): void {
   hero.currentHp = Math.max(0, hero.currentHp - amount);
-  if (hero.currentHp === 0) {
+  // getAliveDeployedHeroes already excludes downed heroes from ever reaching
+  // this function (see tickEnemyAttacksOnHeroes' `heroes` list) - so hitting
+  // 0 here always means "just went down this call", never "still down from
+  // before".
+  const justDowned = hero.currentHp === 0;
+  if (justDowned) {
     hero.isDowned = true;
   }
 
@@ -100,9 +113,24 @@ export function applyDamageToHero(state: GameState, hero: HeroState, amount: num
     x: hero.position.x,
     y: hero.position.y,
     amount,
+    amountRatio: hero.maxHp > 0 ? amount / hero.maxHp : 0,
     isCritical: false,
     lifetime: effectLifetimes.damageNumber,
   });
+  spawnHitReaction(state, heroEntityKey(hero.id), hero.position.x, hero.position.y, justDowned);
+
+  // Enemy chip damage previously produced zero game-feel feedback at all - a
+  // light ambient shake on every hit, escalating hard the moment a hero
+  // actually goes down (the squad-wipe lose condition getting one step
+  // closer deserves to read as a real beat, not just another number).
+  if (justDowned) {
+    triggerScreenShake(state, screenShakeConfig.heroDownIntensity);
+    triggerHitStop(state, hitStopConfig.heroDownSeconds);
+    spawnParticleBurst(state, hero.position.x, hero.position.y, particleBurstConfig.heroDown);
+    queueSfx(state, 'heroDown');
+  } else {
+    triggerScreenShake(state, screenShakeConfig.heroHitIntensity);
+  }
 }
 
 export function handleDeath(state: GameState, target: EnemyState): void {
@@ -141,6 +169,8 @@ export function handleDeath(state: GameState, target: EnemyState): void {
     state.totalBossKills += 1;
     triggerScreenShake(state, screenShakeConfig.bossImpactIntensity);
     triggerHitStop(state, hitStopConfig.bossKillSeconds);
+    spawnParticleBurst(state, target.position.x, target.position.y, particleBurstConfig.bossKill);
+    queueSfx(state, 'bossKill');
   }
 
   spawnVisualEffect(state, {
@@ -149,6 +179,8 @@ export function handleDeath(state: GameState, target: EnemyState): void {
     y: target.position.y,
     lifetime: effectLifetimes.deathBurst,
   });
+  spawnParticleBurst(state, target.position.x, target.position.y, particleBurstConfig.kill);
+  queueSfx(state, 'enemyDeath');
 
   state.enemies = state.enemies.filter((enemy) => enemy.instanceId !== target.instanceId);
 }

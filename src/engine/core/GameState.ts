@@ -77,6 +77,8 @@ export function createInitialGameState(): GameState {
     spawnCooldownRemaining: 0,
     screenShakeIntensity: 0,
     hitStopRemaining: 0,
+    bossIntroRemaining: 0,
+    pendingSfxEvents: [],
     inventory: [],
     nextEquipmentInstanceId: 1,
     equipmentDropFeed: [],

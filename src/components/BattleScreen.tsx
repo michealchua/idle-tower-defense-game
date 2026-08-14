@@ -11,6 +11,7 @@ import { formatBigNumber } from '../utils/scaling';
 import { audioManager } from '../audio/AudioManager';
 import { speedTiers } from '../data/speedConfig';
 import { getGlobalWaveNumber } from '../engine/systems/WaveSystem';
+import { useAnimatedNumber } from './useAnimatedNumber';
 
 // Logical simulation/coordinate space - every entity position in
 // mapConfig.ts and every fixed pixel size in CanvasRenderer.ts is authored
@@ -95,11 +96,13 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
   const enemies = useGameStore((state) => state.enemies);
   const visualEffects = useGameStore((state) => state.visualEffects);
   const screenShakeIntensity = useGameStore((state) => state.screenShakeIntensity);
+  const bossIntroRemaining = useGameStore((state) => state.bossIntroRemaining);
   const isGameOver = useGameStore((state) => state.isGameOver);
   const wave = useGameStore((state) => state.wave);
   const dragPreviewKind = useGameStore((state) => state.dragPreviewKind);
   const teamPower = useGameStore((state) => state.teamPower);
   const recommendedPower = useGameStore((state) => state.recommendedPower);
+  const displayedTeamPower = useAnimatedNumber(teamPower);
   const speedMultiplier = useGameStore((state) => state.speedMultiplier);
   const setSpeedMultiplier = useGameStore((state) => state.setSpeedMultiplier);
   const isStealthMode = useGameStore((state) => state.windowMode === 'stealth');
@@ -368,7 +371,7 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
             {t('power.recommended')} {formatBigNumber(recommendedPower)}
             {' · '}
             <span className={teamPower >= recommendedPower ? 'text-power-ok' : 'text-power-low'}>
-              {t('power.team')} {formatBigNumber(teamPower)}
+              {t('power.team')} {formatBigNumber(displayedTeamPower)}
             </span>
           </div>
           <div className="hud-label" style={{ marginTop: 4 }}>
@@ -410,6 +413,16 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
           onPointerCancel={handleCanvasPointerCancel}
         />
         {isGameOver && <div className="game-over-overlay">{t('battle.gameOver')}</div>}
+        {/* Boss-appeared dramatic pause (GameState.bossIntroRemaining, set by
+            SpawnSystem.tickSpawn) - GameLoop freezes every gameplay system
+            for the same duration, so this banner is on screen for the exact
+            window nothing can act yet. */}
+        {bossIntroRemaining > 0 && bossKind && (
+          <div className="boss-intro-banner">
+            <div className="boss-intro-banner-kind">{t(bossKind === 'boss' ? 'wave.boss' : 'wave.miniboss')}</div>
+            <div className="boss-intro-banner-label">{t('wave.incoming')}</div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -2,7 +2,7 @@ import { getExpToNextLevel } from '../../data/heroConfig';
 import { milestoneDefinitions } from '../../data/milestoneConfig';
 import { getHeroDefinition } from '../../data/heroRosterConfig';
 import { effectLifetimes } from '../../data/effectConfig';
-import { spawnVisualEffect } from './EffectsSystem';
+import { spawnVisualEffect, queueSfx } from './EffectsSystem';
 import { recomputeHeroStats } from './HeroStatsSystem';
 import type { GameState, HeroState } from '../types';
 
@@ -58,6 +58,7 @@ function tickHeroLevelUp(state: GameState, hero: HeroState): boolean {
           y: hero.position.y,
           lifetime: effectLifetimes.milestoneUnlock,
         });
+        queueSfx(state, 'levelUp');
       }
     }
 
@@ -76,6 +77,7 @@ function tickHeroLevelUp(state: GameState, hero: HeroState): boolean {
         y: hero.position.y,
         lifetime: effectLifetimes.milestoneUnlock,
       });
+      queueSfx(state, 'levelUp');
     }
   }
 

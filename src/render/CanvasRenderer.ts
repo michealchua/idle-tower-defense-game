@@ -8,6 +8,7 @@ import { petRosterConfig, getPetDefinition } from '../data/petRosterConfig';
 import { enemyHeroAttackIntervalSeconds } from '../data/enemyConfig';
 import { biomeDefinitions, type BiomeDefinition } from '../data/biomeConfig';
 import { getEffectiveHeroClass } from '../engine/systems/HeroSystem';
+import { heroEntityKey, enemyEntityKey } from '../engine/entityKey';
 import {
   getImage,
   getBackgroundImage,
@@ -19,7 +20,7 @@ import {
   preloadBackgroundImages,
   type SpriteImage,
 } from './assetLoader';
-import type { EnemyState, HeroState, PetState, Position, VisualEffect } from '../engine/types';
+import type { EnemyState, HeroState, PetState, Position, VisualEffect, VisualEffectKind } from '../engine/types';
 
 // Exported so BattleScreen's canvas-native drag-to-swap can hit-test pointer
 // coordinates against the same radii these are actually drawn at.
@@ -246,6 +247,14 @@ function shadeColor(hex: string, percent: number): string {
   const p = Math.min(1, Math.abs(percent));
   const mix = (channel: number) => Math.round((target - channel) * p) + channel;
   return `rgb(${mix(r)}, ${mix(g)}, ${mix(b)})`;
+}
+
+// Used by the 'particleBurst' draw case - every other per-particle color
+// here is a fixed hex from effectConfig.particleBurstConfig, only the alpha
+// (fade-out) varies per frame.
+function colorWithAlpha(hex: string, alpha: number): string {
+  const [r, g, b] = hexToRgb(hex);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 // Upper-left-lit radial gradient from a single base color - this one call is
@@ -668,13 +677,63 @@ export function preloadBattleSprites(): void {
   preloadBackgroundImages(Object.values(biomeDefinitions).map((biome) => biome.backgroundImage));
 }
 
-function getHeroPulseScale(visualEffects: VisualEffect[]): number {
-  const activeFlash = visualEffects.find((effect) => effect.kind === 'attackFlash');
-  if (!activeFlash) {
+// Builds a "latest effect of this kind, per entityKey" index in one pass
+// over visualEffects - used so drawHero/drawEnemy can look up "the effect
+// that belongs to ME" in O(1) instead of each re-scanning the whole array.
+// Smallest age wins on a collision (freshest hit), though in practice a
+// given entityKey only ever has one live attackFlash/hitReaction at a time
+// given their short lifetimes.
+function buildEntityEffectIndex(visualEffects: VisualEffect[], kind: VisualEffectKind): Map<string, VisualEffect> {
+  const index = new Map<string, VisualEffect>();
+  for (const effect of visualEffects) {
+    if (effect.kind !== kind || !effect.entityKey) {
+      continue;
+    }
+    const existing = index.get(effect.entityKey);
+    if (!existing || effect.age < existing.age) {
+      index.set(effect.entityKey, effect);
+    }
+  }
+  return index;
+}
+
+function pulseScaleFromEffect(effect: VisualEffect | undefined): number {
+  if (!effect) {
     return 1;
   }
-  const remainingRatio = 1 - activeFlash.age / activeFlash.lifetime;
+  const remainingRatio = 1 - effect.age / effect.lifetime;
   return 1 + ATTACK_PULSE_SCALE * remainingRatio;
+}
+
+// Brief white flash + squash/stretch on whichever specific hero/enemy sprite
+// a 'hitReaction' effect is attributed to (see VisualEffectKind's doc
+// comment) - wraps just the sprite/silhouette draw call, not the whole
+// entity (shadow/name label stay undistorted). heavy hits (crit landed, or a
+// hero going down) get a stronger flash+squash than a plain hit.
+const HIT_FLASH_BRIGHTNESS = 1.6;
+const HIT_SQUASH_AMOUNT = 0.14;
+
+function drawEntityWithHitReaction(
+  ctx: CanvasRenderingContext2D,
+  hitEffect: VisualEffect | undefined,
+  x: number,
+  y: number,
+  draw: () => void,
+): void {
+  if (!hitEffect) {
+    draw();
+    return;
+  }
+  const intensity = Math.max(0, 1 - hitEffect.age / hitEffect.lifetime);
+  const heavyMultiplier = hitEffect.isCritical ? 1.5 : 1;
+  ctx.save();
+  ctx.translate(x, y);
+  const squash = HIT_SQUASH_AMOUNT * intensity * heavyMultiplier;
+  ctx.scale(1 + squash, 1 - squash);
+  ctx.translate(-x, -y);
+  ctx.filter = `brightness(${1 + intensity * HIT_FLASH_BRIGHTNESS * heavyMultiplier})`;
+  draw();
+  ctx.restore();
 }
 
 function drawVisualEffect(ctx: CanvasRenderingContext2D, effect: VisualEffect): void {
@@ -704,11 +763,23 @@ function drawVisualEffect(ctx: CanvasRenderingContext2D, effect: VisualEffect): 
       return;
     }
     case 'damageNumber': {
+      // How much of the target's max HP this single hit was - 0 for a
+      // graze, saturating at 1 once a hit is ~25%+ of maxHp ("execute"-sized)
+      // - see DamageSystem.applyDamage/applyDamageToHero for where this is
+      // computed. Drives font size/rise/punch on top of the existing crit-
+      // vs-plain split, so a genuinely huge hit still reads as huge even if
+      // it wasn't a crit roll.
+      const magnitude = Math.min(1, (effect.amountRatio ?? 0) * 4);
+
       if (!effect.isCritical) {
         // Plain hits: small, white, no scale animation - kept cheap since
-        // these are by far the most common effect in a busy fight.
-        const y = effect.y - progress * DAMAGE_NUMBER_RISE;
-        ctx.font = '13px sans-serif';
+        // these are by far the most common effect in a busy fight. Still
+        // grows a little with magnitude so a heavy non-crit hit doesn't look
+        // identical to a graze.
+        const fontSize = 13 + magnitude * 9;
+        const rise = DAMAGE_NUMBER_RISE + magnitude * 18;
+        const y = effect.y - progress * rise;
+        ctx.font = `${Math.round(fontSize)}px sans-serif`;
         ctx.fillStyle = `rgba(255, 255, 255, ${fadeAlpha})`;
         ctx.textAlign = 'center';
         ctx.fillText(`-${Math.round(effect.amount ?? 0)}`, effect.x, y);
@@ -719,16 +790,17 @@ function drawVisualEffect(ctx: CanvasRenderingContext2D, effect: VisualEffect): 
       // color shift itself reads as "impact fading"), with a punch-in scale
       // that overshoots then settles - the whole "hit harder" read comes from
       // stacking size + color + this motion, not any one of them alone.
-      const y = effect.y - progress * CRITICAL_DAMAGE_NUMBER_RISE;
+      const rise = CRITICAL_DAMAGE_NUMBER_RISE + magnitude * 25;
+      const y = effect.y - progress * rise;
       const punch = Math.max(0, 1 - progress * 3);
-      const scale = 1 + punch * 0.9;
+      const scale = 1 + punch * (0.9 + magnitude * 0.7);
       const colorMix = Math.min(1, progress * 1.5);
       const red = 255;
       const green = Math.round(214 * (1 - colorMix));
       ctx.save();
       ctx.translate(effect.x, y);
       ctx.scale(scale, scale);
-      ctx.font = 'bold 24px sans-serif';
+      ctx.font = `bold ${24 + Math.round(magnitude * 8)}px sans-serif`;
       ctx.fillStyle = `rgba(${red}, ${green}, 0, ${fadeAlpha})`;
       ctx.textAlign = 'center';
       ctx.fillText(`-${Math.round(effect.amount ?? 0)}`, 0, 0);
@@ -831,6 +903,29 @@ function drawVisualEffect(ctx: CanvasRenderingContext2D, effect: VisualEffect): 
       ctx.fillText(t('wave.cleared'), effect.x, y);
       return;
     }
+    case 'hitReaction': {
+      // Never drawn directly - CanvasRenderer looks these up by entityKey
+      // (see buildEntityEffectIndex/drawEntityWithHitReaction) and reacts on
+      // the specific hero/enemy sprite instead of drawing a standalone shape.
+      return;
+    }
+    case 'particleBurst': {
+      const particles = effect.particles ?? [];
+      const color = effect.color ?? '#ffffff';
+      for (const particle of particles) {
+        const traveled = particle.speed * effect.age;
+        const px = effect.x + Math.cos(particle.angle) * traveled;
+        // Slight upward drift on top of the radial spread - reads as a
+        // "pop" rather than particles just sliding outward flat.
+        const py = effect.y + Math.sin(particle.angle) * traveled - effect.age * 24;
+        const particleSize = Math.max(0.5, 2.2 * fadeAlpha);
+        ctx.fillStyle = colorWithAlpha(color, fadeAlpha);
+        ctx.beginPath();
+        ctx.arc(px, py, particleSize, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      return;
+    }
   }
 }
 
@@ -850,8 +945,15 @@ const RARITY_NAME_COLOR: Record<GachaRarity, string> = {
   rainbow: '#69f0ae',
 };
 
-function drawHero(ctx: CanvasRenderingContext2D, hero: HeroState, pulseScale: number, nowSeconds: number): HpBarRequest {
+function drawHero(
+  ctx: CanvasRenderingContext2D,
+  hero: HeroState,
+  attackFlashByEntity: Map<string, VisualEffect>,
+  hitReactionByEntity: Map<string, VisualEffect>,
+  nowSeconds: number,
+): HpBarRequest {
   const heroStyle = getHeroVisualStyle(getVisualTierForLevel(hero.level));
+  const pulseScale = pulseScaleFromEffect(attackFlashByEntity.get(heroEntityKey(hero.id)));
   const heroRadius = HERO_RADIUS * heroStyle.radiusMultiplier * pulseScale;
 
   // Downed (HeroState.isDowned, see DamageSystem.applyDamageToHero) heroes
@@ -904,17 +1006,20 @@ function drawHero(ctx: CanvasRenderingContext2D, hero: HeroState, pulseScale: nu
   ctx.textAlign = 'center';
   ctx.fillText(hero.name, hero.position.x, hero.position.y - heroRadius - 18);
 
-  if (sprite) {
-    const size = heroRadius * 2;
-    // smooth=false (not true) - hero art is pixel art now (see
-    // scripts/pixel_sprites.py), so it wants the same crisp nearest-
-    // neighbor scaling as every other sprite category, not the bilinear
-    // smoothing a hi-res illustration would've wanted.
-    drawEntitySprite(ctx, sprite, animState, nowSeconds, hero.position.x, hero.position.y, size, needsFlip('hero'), false);
-  } else {
-    drawHeroSilhouette(ctx, heroClass, hero.position.x, hero.position.y, heroRadius, heroStyle.color);
-    drawFallbackGlyph(ctx, hero.position.x, hero.position.y, heroClass.charAt(0).toUpperCase(), heroRadius * 0.75);
-  }
+  const hitEffect = hitReactionByEntity.get(heroEntityKey(hero.id));
+  drawEntityWithHitReaction(ctx, hitEffect, hero.position.x, hero.position.y, () => {
+    if (sprite) {
+      const size = heroRadius * 2;
+      // smooth=false (not true) - hero art is pixel art now (see
+      // scripts/pixel_sprites.py), so it wants the same crisp nearest-
+      // neighbor scaling as every other sprite category, not the bilinear
+      // smoothing a hi-res illustration would've wanted.
+      drawEntitySprite(ctx, sprite, animState, nowSeconds, hero.position.x, hero.position.y, size, needsFlip('hero'), false);
+    } else {
+      drawHeroSilhouette(ctx, heroClass, hero.position.x, hero.position.y, heroRadius, heroStyle.color);
+      drawFallbackGlyph(ctx, hero.position.x, hero.position.y, heroClass.charAt(0).toUpperCase(), heroRadius * 0.75);
+    }
+  });
 
   ctx.restore();
 
@@ -962,7 +1067,12 @@ function drawPet(ctx: CanvasRenderingContext2D, pet: PetState, bobSeed: number, 
 // instead of just "another colored circle" - each one ties directly to the
 // condition driving the actual behavior (MovementSystem/DamageSystem read
 // the exact same archetype fields).
-function drawEnemy(ctx: CanvasRenderingContext2D, enemy: EnemyState, nowSeconds: number): HpBarRequest {
+function drawEnemy(
+  ctx: CanvasRenderingContext2D,
+  enemy: EnemyState,
+  hitReactionByEntity: Map<string, VisualEffect>,
+  nowSeconds: number,
+): HpBarRequest {
   const archetype = enemyArchetypes[enemy.archetypeId];
   const enemyStyle = getEnemyVisualStyle(enemy.visualId);
   const enemyRadius = ENEMY_RADIUS * enemyStyle.radiusMultiplier;
@@ -996,13 +1106,16 @@ function drawEnemy(ctx: CanvasRenderingContext2D, enemy: EnemyState, nowSeconds:
 
   drawGroundShadow(ctx, enemy.position.x, enemy.position.y + enemyRadius * 0.85, enemyRadius * 0.8);
 
-  if (sprite) {
-    const size = enemyRadius * 2;
-    drawEntitySprite(ctx, sprite, getEnemyAnimationState(enemy), nowSeconds, enemy.position.x, enemy.position.y, size, needsFlip('enemy'));
-  } else {
-    drawProceduralEnemySilhouette(ctx, spriteType, enemy.position.x, enemy.position.y, enemyRadius, enemyStyle.color);
-    drawFallbackGlyph(ctx, enemy.position.x, enemy.position.y, enemy.archetypeId.charAt(0).toUpperCase(), enemyRadius * 0.75);
-  }
+  const hitEffect = hitReactionByEntity.get(enemyEntityKey(enemy.instanceId));
+  drawEntityWithHitReaction(ctx, hitEffect, enemy.position.x, enemy.position.y, () => {
+    if (sprite) {
+      const size = enemyRadius * 2;
+      drawEntitySprite(ctx, sprite, getEnemyAnimationState(enemy), nowSeconds, enemy.position.x, enemy.position.y, size, needsFlip('enemy'));
+    } else {
+      drawProceduralEnemySilhouette(ctx, spriteType, enemy.position.x, enemy.position.y, enemyRadius, enemyStyle.color);
+      drawFallbackGlyph(ctx, enemy.position.x, enemy.position.y, enemy.archetypeId.charAt(0).toUpperCase(), enemyRadius * 0.75);
+    }
+  });
 
   const isEnraged = !!archetype.berserker && enemy.currentHp / enemy.maxHp <= archetype.berserker.hpRatioThreshold;
   if (isEnraged) {
@@ -1322,11 +1435,11 @@ export function renderScene(
     );
   }
 
-  // One shared pulse (any active attack flash) rather than per-hero
-  // attribution - visual effects don't carry an owner id in v1, and a
-  // slightly-off shared pulse is a fine tradeoff to avoid extending that
-  // system just for this.
-  const pulseScale = getHeroPulseScale(visualEffects);
+  // Per-entity attribution (see buildEntityEffectIndex) rather than a single
+  // shared pulse/flash - each hero only pulses on its own attack, each hero/
+  // enemy only flashes on its own hit, not the whole squad's.
+  const attackFlashByEntity = buildEntityEffectIndex(visualEffects, 'attackFlash');
+  const hitReactionByEntity = buildEntityEffectIndex(visualEffects, 'hitReaction');
   // Bodies first, then every collected bar in one batched pass (see
   // drawHpBarsBatched's doc comment for what this saves and the draw-order
   // trade-off that comes with it) - heroes and enemies batch separately so
@@ -1334,7 +1447,7 @@ export function renderScene(
   // already existed.
   const heroHpBars: HpBarRequest[] = [];
   for (const hero of heroes) {
-    heroHpBars.push(drawHero(ctx, hero, pulseScale, nowSeconds));
+    heroHpBars.push(drawHero(ctx, hero, attackFlashByEntity, hitReactionByEntity, nowSeconds));
   }
   drawHpBarsBatched(ctx, heroHpBars);
 
@@ -1344,7 +1457,7 @@ export function renderScene(
 
   const enemyHpBars: HpBarRequest[] = [];
   for (const enemy of enemies) {
-    enemyHpBars.push(drawEnemy(ctx, enemy, nowSeconds));
+    enemyHpBars.push(drawEnemy(ctx, enemy, hitReactionByEntity, nowSeconds));
   }
   drawHpBarsBatched(ctx, enemyHpBars);
 

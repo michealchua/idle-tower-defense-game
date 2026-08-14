@@ -369,6 +369,55 @@ select {
   letter-spacing: 1px;
 }
 
+/* Boss-appeared banner (BattleScreen, gated by GameState.bossIntroRemaining)
+   - deliberately NOT a full-screen dimmer like .game-over-overlay so the
+   frozen battlefield (see GameLoop.step's bossIntroRemaining branch) stays
+   visible behind it instead of being hidden the moment it matters most. */
+.boss-intro-banner {
+  position: absolute;
+  top: 38%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+  text-align: center;
+  animation: boss-banner-pop 0.4s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+
+.boss-intro-banner-kind {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: 3px;
+  color: #ff5252;
+  text-shadow: 0 0 12px rgba(255, 82, 82, 0.85), 0 2px 4px rgba(0, 0, 0, 0.9);
+}
+
+.boss-intro-banner-label {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 6px;
+  color: rgba(255, 255, 255, 0.9);
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.9);
+}
+
+@keyframes boss-banner-pop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.6);
+  }
+  60% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.08);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
 /* Centered frosted-glass modal - every panel (Hero/Equipment/Talent/Pet/
    Gacha/Castle/Ascension/AscensionShop/Codex) opens here instead of a
    bottom-sheet or docked console. Backdrop blur pulls focus off the battle
@@ -566,10 +615,26 @@ select {
   padding: 6px 10px;
   font-size: 12px;
   cursor: pointer;
+  transition: transform 0.08s ease-out, border-color 0.15s ease-out;
 }
 
 .btn:hover:not(:disabled) {
   border-color: var(--accent-strong);
+}
+
+/* Every .btn/.hud-btn in the app previously had zero press feedback - a
+   click and a hover looked identical until the result appeared. Scoped to
+   :not(:disabled) so a disabled button (speed-tier locks, etc.) never looks
+   pressable. */
+.btn:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+/* .hud-btn:hover already lifts (-2px) - stack the press scale on top of that
+   lift instead of replacing it, so pressing a hovered nav button doesn't
+   visually snap back down before the click even registers. */
+.hud-btn:active:not(:disabled) {
+  transform: translateY(-2px) scale(0.94);
 }
 
 .btn:disabled {

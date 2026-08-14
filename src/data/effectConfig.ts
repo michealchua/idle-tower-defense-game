@@ -12,6 +12,8 @@ export const effectLifetimes = {
   revive: 0.5,
   summon: 0.4,
   waveClear: 1.5,
+  hitReaction: 0.18,
+  particleBurst: 0.55,
 } as const;
 
 // Hard cap on state.visualEffects - a busy horde fight (spawnConfig's late
@@ -31,6 +33,14 @@ export const MAX_VISUAL_EFFECTS = 80;
 export const screenShakeConfig = {
   criticalIntensity: 2,
   bossImpactIntensity: 9,
+  // Enemy-on-hero chip damage (CombatSystem.tickEnemyAttacksOnHeroes) - much
+  // lighter than a hero's own crit shake so a long fight's steady trickle of
+  // enemy hits reads as an ambient rumble, not a constant jolt.
+  heroHitIntensity: 1,
+  // A hero actually going down (HeroState.isDowned flipping true) - the
+  // squad-wipe lose condition is creeping closer, so this is the second-
+  // strongest shake in the game after a boss impact.
+  heroDownIntensity: 7,
   // Linear decay applied every tick (EffectsSystem.tickScreenShake) - at this
   // rate a criticalIntensity shake clears in ~0.1s (barely perceptible jitter)
   // and a bossImpactIntensity one in ~0.45s (a real jolt).
@@ -47,4 +57,25 @@ export const hitStopConfig = {
   criticalHitSeconds: 0.05,
   killSeconds: 0.06,
   bossKillSeconds: 0.1,
+  heroDownSeconds: 0.12,
+} as const;
+
+// Per-preset particle counts/speed/color for EffectsSystem.spawnParticleBurst
+// - speed is logical px/sec (particles travel outward in a straight line
+// from spawn point, see CanvasRenderer's 'particleBurst' draw case), count is
+// deliberately small (one VisualEffect slot holds the whole burst, but a
+// dense multi-fight scene still redraws every particle every frame).
+export const particleBurstConfig = {
+  crit: { count: 6, speed: 90, color: '#ffd54f' },
+  kill: { count: 8, speed: 70, color: '#e0e0e0' },
+  bossKill: { count: 16, speed: 130, color: '#ff6d00' },
+  skillImpact: { count: 5, speed: 60, color: '#ff8a65' },
+  heroDown: { count: 10, speed: 65, color: '#ff5252' },
+} as const;
+
+// How long the "a boss/miniboss just appeared" dramatic pause lasts (see
+// GameState.bossIntroRemaining) - long enough for BattleScreen's banner to
+// actually be readable, short enough not to feel like the game hung.
+export const bossIntroConfig = {
+  seconds: 1.4,
 } as const;

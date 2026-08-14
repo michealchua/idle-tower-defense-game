@@ -24,6 +24,8 @@ import { getMaxDeployedHeroes } from './data/squadConfig';
 import { setWindowMode as applyWindowMode } from './utils/windowMode';
 import { t } from './locales/i18n';
 import { useGameStore } from './store/useGameStore';
+import { sfxManager } from './audio/SfxManager';
+import { useAnimatedNumber } from './components/useAnimatedNumber';
 import {
   IconStar,
   IconDiamond,
@@ -88,13 +90,45 @@ function App() {
   const gold = useGameStore((state) => state.gold);
   const diamonds = useGameStore((state) => state.diamonds);
   const teamPower = useGameStore((state) => state.teamPower);
+  // Eased count-up instead of an instant digit snap - see
+  // components/useAnimatedNumber.ts.
+  const displayedGold = useAnimatedNumber(gold);
+  const displayedDiamonds = useAnimatedNumber(diamonds);
+  const displayedTeamPower = useAnimatedNumber(teamPower);
   const deployedHeroIds = useGameStore((state) => state.deployedHeroIds);
   const wave = useGameStore((state) => state.wave);
   const activeTutorialStep = useGameStore((state) => getActiveTutorialStep(state));
   const completeTutorialStep = useGameStore((state) => state.completeTutorialStep);
   const windowMode = useGameStore((state) => state.windowMode);
   const setWindowModeState = useGameStore((state) => state.setWindowMode);
+  const pendingSfxEvents = useGameStore((state) => state.pendingSfxEvents);
   const biome = getBiomeForChapter(wave.chapter);
+
+  // Drains GameState.pendingSfxEvents every time GameLoop's onTick produces a
+  // new snapshot with a non-empty queue - the engine only ever pushes event
+  // ids onto it (see EffectsSystem.queueSfx), this is the one place they
+  // actually turn into sound. Keyed on the array reference itself (a fresh
+  // array every tick, see useGameStore's snapshotGameState), not its
+  // contents, so an empty-to-empty tick is a no-op dependency change.
+  useEffect(() => {
+    for (const event of pendingSfxEvents) {
+      sfxManager.play(event);
+    }
+  }, [pendingSfxEvents]);
+
+  // Click feedback on every .btn-class button in the app, without touching
+  // each of the ~40 call sites individually - capture-phase so it still
+  // fires even when a button's own onClick calls stopPropagation (several
+  // modal buttons do, see e.g. SettingsPanel's confirm/cancel rows).
+  useEffect(() => {
+    function handleClickSfx(event: MouseEvent): void {
+      if (event.target instanceof Element && event.target.closest('.btn, .hud-btn')) {
+        sfxManager.playClick();
+      }
+    }
+    document.addEventListener('click', handleClickSfx, true);
+    return () => document.removeEventListener('click', handleClickSfx, true);
+  }, []);
   // "剥洋葱" pacing (unlockConditionConfig.panelUnlockWave) - only render tab
   // buttons for panels the run has actually reached, instead of exposing
   // every system from wave 1.
@@ -247,8 +281,8 @@ function App() {
         <div className="hud-corner top-right">
           <div className="hud-widget">
             <div className="hud-widget-row">
-              <span className="hud-gold"><IconCoin /> {formatBigNumber(gold)}</span>
-              <span className="hud-diamond"><IconDiamond /> {formatBigNumber(diamonds)}</span>
+              <span className="hud-gold"><IconCoin /> {formatBigNumber(displayedGold)}</span>
+              <span className="hud-diamond"><IconDiamond /> {formatBigNumber(displayedDiamonds)}</span>
               {activeSlot !== null && (
                 <button className="btn btn-sm mute-toggle-btn" data-tutorial="save-button" onClick={handleSaveClick} title={t('save.saveButton')}>
                   {justSaved ? '✓' : <IconSave />}
@@ -259,7 +293,7 @@ function App() {
               </button>
             </div>
             <div className="hud-label">
-              {t('power.team')}: {formatBigNumber(teamPower)}
+              {t('power.team')}: {formatBigNumber(displayedTeamPower)}
             </div>
           </div>
         </div>

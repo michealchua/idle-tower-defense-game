@@ -11,9 +11,10 @@ import {
   type TargetingContext,
 } from './TargetingSystem';
 import { calculateDamage, applyDamage } from './DamageSystem';
-import { spawnVisualEffect } from './EffectsSystem';
+import { spawnVisualEffect, spawnParticleBurst } from './EffectsSystem';
 import { getAliveDeployedHeroes } from './HeroStatsSystem';
 import { getBondEffects } from '../../data/bondConfig';
+import { particleBurstConfig } from '../../data/effectConfig';
 import type { GameState, HeroState } from '../types';
 
 const strategyLookup: Record<SkillTargetingStrategyKey, TargetComparator> = {
@@ -99,6 +100,7 @@ function castAoeDamage(state: GameState, hero: HeroState, definition: SkillDefin
     radius: aoeRadius,
     lifetime: effectLifetimes.skillImpact,
   });
+  spawnParticleBurst(state, impactTarget.position.x, impactTarget.position.y, particleBurstConfig.skillImpact);
 
   // mage bond (bondConfig.ts) - "元素法师可产生元素连锁" (plan section 14),
   // read as "mage bond boosts skill damage" here rather than a literal chain

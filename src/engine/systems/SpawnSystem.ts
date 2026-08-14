@@ -4,8 +4,8 @@ import { pickArchetypeForScore } from '../../data/enemySpawnTable';
 import { getDifficultyScore } from './DifficultySystem';
 import { mapConfig } from '../../data/mapConfig';
 import { getBiomeForChapter } from '../../data/biomeConfig';
-import { triggerScreenShake } from './EffectsSystem';
-import { screenShakeConfig } from '../../data/effectConfig';
+import { triggerScreenShake, queueSfx } from './EffectsSystem';
+import { screenShakeConfig, bossIntroConfig } from '../../data/effectConfig';
 import type { EnemyArchetypeId } from '../../data/enemyArchetypes';
 import type { GameState, Position } from '../types';
 
@@ -56,6 +56,14 @@ export function tickSpawn(state: GameState, deltaSeconds: number): void {
     spawnEnemyNow(state, wave.bossKind);
     wave.bossSpawned = true;
     triggerScreenShake(state, screenShakeConfig.bossImpactIntensity);
+    // Dramatic pause (GameLoop.step skips the rest of gameplay for this
+    // duration) so the boss doesn't just start swinging the instant it
+    // appears - see GameState.bossIntroRemaining's doc comment for how
+    // GameLoop consumes this, and its own careful ordering so this same
+    // tick's combat systems don't sneak in a free hit before the pause
+    // actually engages.
+    state.bossIntroRemaining = bossIntroConfig.seconds;
+    queueSfx(state, 'bossIntro');
     return;
   }
 

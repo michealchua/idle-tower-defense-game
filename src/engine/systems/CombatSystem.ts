@@ -7,6 +7,7 @@ import { enemyHeroAttackIntervalSeconds } from '../../data/enemyConfig';
 import { heroBaseConfig } from '../../data/heroConfig';
 import { getTalentFlatBonus } from '../../data/talentConfig';
 import { getAscensionShopFlatBonus } from '../../data/ascensionShopConfig';
+import { heroEntityKey } from '../entityKey';
 import type { GameState, Position } from '../types';
 
 interface Attacker {
@@ -50,6 +51,10 @@ function tickAttackerCombat(state: GameState, attacker: Attacker, deltaSeconds: 
     y: attacker.position.y,
     targetX: target.position.x,
     targetY: target.position.y,
+    // Owner id for CanvasRenderer's per-hero attack pulse - see
+    // drawHero/buildEntityEffectIndex. Only heroes ever reach here (see this
+    // function's own doc comment), so attacker.id is always a HeroState.id.
+    entityKey: heroEntityKey(attacker.id),
     lifetime: effectLifetimes.attackFlash,
   });
 

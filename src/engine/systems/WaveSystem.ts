@@ -3,7 +3,7 @@ import { effectLifetimes } from '../../data/effectConfig';
 import { getDiamondChapterClearReward } from '../../data/diamondConfig';
 import { getBiomeForChapter } from '../../data/biomeConfig';
 import { storyScripts } from '../../data/storyConfig';
-import { spawnVisualEffect } from './EffectsSystem';
+import { spawnVisualEffect, queueSfx } from './EffectsSystem';
 import { incrementDailyQuestProgress } from './DailyQuestSystem';
 import { getAliveDeployedHeroes } from './HeroStatsSystem';
 import type { GameState, WaveState } from '../types';
@@ -99,6 +99,7 @@ export function advanceToNextWave(state: GameState): void {
     y: state.base.position.y,
     lifetime: effectLifetimes.waveClear,
   });
+  queueSfx(state, 'waveClear');
 }
 
 // What a failed wave (timer expired without clearing, or the whole squad

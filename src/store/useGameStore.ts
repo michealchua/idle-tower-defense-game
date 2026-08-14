@@ -66,7 +66,7 @@ import type { EquipmentSlot } from '../data/equipmentConfig';
 import type { TalentId } from '../data/talentConfig';
 import type { AscensionShopId } from '../data/ascensionShopConfig';
 import type { PityPoolId } from '../data/pityConfig';
-import type { BaseState, EnemyState, EquipmentDropEvent, EquipmentItem, GameState, HeroState, PetState, VisualEffect, WaveState } from '../engine/types';
+import type { BaseState, EnemyState, EquipmentDropEvent, EquipmentItem, GameState, HeroState, PetState, SfxEventId, VisualEffect, WaveState } from '../engine/types';
 import type { WindowMode } from '../utils/windowMode';
 
 // Single mutable simulation state, shared by the GameLoop and by upgrade
@@ -115,6 +115,8 @@ function snapshotGameState(state: GameState) {
     base: { ...state.base },
     visualEffects: state.visualEffects.map((effect) => ({ ...effect })),
     screenShakeIntensity: state.screenShakeIntensity,
+    bossIntroRemaining: state.bossIntroRemaining,
+    pendingSfxEvents: [...state.pendingSfxEvents],
     gold: state.gold,
     isGameOver: state.isGameOver,
     difficultyScore: getDifficultyScore(state),
@@ -164,6 +166,8 @@ interface GameStore {
   base: BaseState;
   visualEffects: VisualEffect[];
   screenShakeIntensity: number;
+  bossIntroRemaining: number;
+  pendingSfxEvents: SfxEventId[];
   gold: number;
   isGameOver: boolean;
   difficultyScore: number;
@@ -507,6 +511,8 @@ export const useGameStore = create<GameStore>()(
     gameState.nextEquipmentDropEventId = gameState.nextEquipmentDropEventId ?? 1;
     gameState.screenShakeIntensity = 0;
     gameState.hitStopRemaining = 0;
+    gameState.bossIntroRemaining = 0;
+    gameState.pendingSfxEvents = [];
     gameState.isGameOver = false;
     gameState.pendingStoryId = null;
     recomputeHeroStats(gameState);

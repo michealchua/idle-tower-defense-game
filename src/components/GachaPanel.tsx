@@ -10,6 +10,7 @@ import type { GachaPullResult } from '../engine/systems/GachaSystem';
 import { IconSword, IconPaw, IconDiamond, type IconProps } from './icons';
 import SpriteAvatar from './SpriteAvatar';
 import { getHeroSpriteSrc, getPetSpriteSrc } from '../render/assetLoader';
+import { sfxManager } from '../audio/SfxManager';
 import { heroRosterConfig } from '../data/heroRosterConfig';
 import { petRosterConfig } from '../data/petRosterConfig';
 
@@ -415,6 +416,7 @@ function GachaPanel() {
   }, [celebration]);
 
   function handlePullResults(results: GachaPullResult[]): void {
+    sfxManager.playGachaWhoosh();
     setSummonResults(results);
   }
 
@@ -435,6 +437,9 @@ function GachaPanel() {
     const bestRarity = getBestCelebrationRarity(pendingReveal);
     if (bestRarity) {
       setCelebration({ rarity: bestRarity, key: Date.now() });
+      sfxManager.playGachaRareChime();
+    } else {
+      sfxManager.playGachaChime();
     }
     setPendingReveal(null);
   }

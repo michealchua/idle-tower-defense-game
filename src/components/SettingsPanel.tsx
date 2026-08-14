@@ -3,6 +3,7 @@ import { t } from '../locales/i18n';
 import { useGameStore } from '../store/useGameStore';
 import { getSaveMetadata } from '../engine/core/SaveSystem';
 import type { UpdateStatus } from '../utils/updater';
+import { sfxManager } from '../audio/SfxManager';
 
 function formatSavedAt(iso: string): string {
   return new Date(iso).toLocaleString('zh-CN', {
@@ -32,8 +33,13 @@ function SettingsPanel({ onClose, onReturnToTitle }: SettingsPanelProps) {
   const [confirmingReturn, setConfirmingReturn] = useState(false);
   const [confirmingExit, setConfirmingExit] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
+  const [sfxMuted, setSfxMuted] = useState(sfxManager.isMuted());
 
   const metadata = activeSlot !== null ? getSaveMetadata(activeSlot) : null;
+
+  function handleToggleSfx(): void {
+    setSfxMuted(sfxManager.toggleMute());
+  }
 
   // No automatic check-on-launch anymore (see electron/main.cjs's
   // app.whenReady) - this is the only way a check ever fires, so this
@@ -92,6 +98,13 @@ function SettingsPanel({ onClose, onReturnToTitle }: SettingsPanelProps) {
                 {t('settings.returnToTitle')}
               </button>
             )}
+          </div>
+
+          <div className="settings-section">
+            <div className="settings-section-title">{t('settings.soundSection')}</div>
+            <button className="btn btn-sm" onClick={handleToggleSfx}>
+              {t(sfxMuted ? 'settings.sfxOff' : 'settings.sfxOn')}
+            </button>
           </div>
 
           <div className="settings-section">

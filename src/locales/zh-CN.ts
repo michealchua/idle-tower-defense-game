@@ -106,6 +106,9 @@ const zhCN = {
     neverSaved: '尚未保存',
     returnToTitle: '返回主菜单',
     returnToTitleConfirm: '确认返回主菜单?请先保存进度,未保存的内容将会丢失',
+    soundSection: '音效',
+    sfxOn: '音效已开启',
+    sfxOff: '音效已关闭',
     updateSection: '更新',
     checkUpdate: '检查更新',
     exitSection: '退出',
@@ -389,6 +392,7 @@ const zhCN = {
     timeRemaining: '剩余时间',
     cleared: '过关!',
     killProgress: '击杀进度',
+    incoming: '降临!',
   },
   talent: {
     title: '天赋',
