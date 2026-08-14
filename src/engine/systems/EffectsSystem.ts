@@ -88,3 +88,23 @@ export function spawnHitReaction(state: GameState, entityKey: string, x: number,
 export function queueSfx(state: GameState, event: SfxEventId): void {
   state.pendingSfxEvents.push(event);
 }
+
+// Same "marker only, not drawn" contract as spawnHitReaction - see
+// VisualEffectKind's 'castPose' doc comment.
+export function spawnCastPose(state: GameState, entityKey: string, x: number, y: number): void {
+  spawnVisualEffect(state, {
+    kind: 'castPose',
+    x,
+    y,
+    entityKey,
+    lifetime: effectLifetimes.castPose,
+  });
+}
+
+// Pure countdown, no max-semantics needed (only one trigger site) and no
+// gameplay-pausing side effect - see GameState.victoryPoseRemaining's doc
+// comment for why this ticks unconditionally alongside tickEffects/
+// tickScreenShake rather than being gated in GameLoop's pause branches.
+export function tickVictoryPose(state: GameState, deltaSeconds: number): void {
+  state.victoryPoseRemaining = Math.max(0, state.victoryPoseRemaining - deltaSeconds);
+}

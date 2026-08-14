@@ -11,10 +11,11 @@ import {
   type TargetingContext,
 } from './TargetingSystem';
 import { calculateDamage, applyDamage } from './DamageSystem';
-import { spawnVisualEffect, spawnParticleBurst } from './EffectsSystem';
+import { spawnVisualEffect, spawnParticleBurst, spawnCastPose } from './EffectsSystem';
 import { getAliveDeployedHeroes } from './HeroStatsSystem';
 import { getBondEffects } from '../../data/bondConfig';
 import { particleBurstConfig } from '../../data/effectConfig';
+import { heroEntityKey } from '../entityKey';
 import type { GameState, HeroState } from '../types';
 
 const strategyLookup: Record<SkillTargetingStrategyKey, TargetComparator> = {
@@ -114,6 +115,7 @@ function castAoeDamage(state: GameState, hero: HeroState, definition: SkillDefin
     applyDamage(state, enemy, damageResult);
   }
 
+  spawnCastPose(state, heroEntityKey(hero.id), hero.position.x, hero.position.y);
   return true;
 }
 
@@ -144,6 +146,7 @@ function castChainDamage(state: GameState, hero: HeroState, definition: SkillDef
     applyDamage(state, target, damageResult);
   }
 
+  spawnCastPose(state, heroEntityKey(hero.id), hero.position.x, hero.position.y);
   return true;
 }
 
@@ -184,5 +187,6 @@ function castHealAlly(state: GameState, hero: HeroState, definition: SkillDefini
     });
   }
 
+  spawnCastPose(state, heroEntityKey(hero.id), hero.position.x, hero.position.y);
   return true;
 }

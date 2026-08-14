@@ -252,6 +252,11 @@ export type VisualEffectKind =
   // See DamageSystem.applyDamage/applyDamageToHero (spawn) and
   // CanvasRenderer.drawEntityWithHitReaction (consume).
   | 'hitReaction'
+  // Same "marker only, not drawn" contract as hitReaction - CanvasRenderer
+  // looks this up by entityKey to swap the caster's sprite to its 'cast'
+  // pose for a moment. See SkillSystem's three cast-success paths (spawn)
+  // and CanvasRenderer.drawHero (consume).
+  | 'castPose'
   // A single effect object carrying a small pre-generated particle set (see
   // `particles` below) rather than one VisualEffect per particle - keeps a
   // crit/kill/boss-kill burst to one MAX_VISUAL_EFFECTS slot instead of N.
@@ -395,6 +400,13 @@ export interface GameState {
   // reference changes (GameLoop.step clears it right after each onTick), so
   // the engine itself never touches Web Audio directly.
   pendingSfxEvents: SfxEventId[];
+  // Counts down every tick regardless of pause state (EffectsSystem.
+  // tickVictoryPose, called alongside tickEffects/tickScreenShake - does NOT
+  // gate gameplay like hitStopRemaining/bossIntroRemaining, purely a display
+  // timer) - while > 0, every deployed hero shows its 'victory' sprite pose.
+  // Set once by WaveSystem.advanceToNextWave. See effectConfig.
+  // victoryPoseConfig for the duration.
+  victoryPoseRemaining: number;
   // Unequipped items only - equipped gear lives on the owning hero's own
   // HeroState.equipment instead (see EquipmentSystem.ts/HeroSystem.ts).
   inventory: EquipmentItem[];

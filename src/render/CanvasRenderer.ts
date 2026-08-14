@@ -442,7 +442,7 @@ function drawPetSilhouette(ctx: CanvasRenderingContext2D, x: number, y: number, 
 // A single shared config rather than one per entity keeps this simple; if a
 // real sheet ever needs a different layout, split this into a lookup keyed
 // by sprite src instead of changing the shape wholesale.
-type SpriteAnimationState = 'walk' | 'attack' | 'hurt' | 'down';
+type SpriteAnimationState = 'walk' | 'attack' | 'hurt' | 'down' | 'cast' | 'victory' | 'idle2';
 
 interface SpriteAnimationConfig {
   row: number;
@@ -464,6 +464,9 @@ const SPRITE_SHEET_CONFIG: { frameWidth: number; frameHeight: number; animations
     attack: { row: 1, frameCount: 4, fps: 10 },
     hurt: { row: 2, frameCount: 2, fps: 8 },
     down: { row: 3, frameCount: 1, fps: 1 },
+    cast: { row: 4, frameCount: 2, fps: 6 },
+    victory: { row: 5, frameCount: 2, fps: 4 },
+    idle2: { row: 0, frameCount: 4, fps: 8 },
   },
 };
 
@@ -628,25 +631,41 @@ function drawEntitySprite(
 // swing on any reasonable attack speed.
 const ATTACK_ANIM_WINDOW_SECONDS = 0.2;
 
-// Heroes never move (mapConfig.heroPosition is fixed) - 'walk' functions as
-// their idle-bob loop, 'attack' takes over for the brief window right after
-// CombatSystem.tickAttackerCombat resets attackCooldownRemaining to
-// 1/attackSpeed. Derived entirely from existing HeroState fields, no new
-// per-hero "am I attacking" state needed. isDowned > isHurting > attack/walk
-// in priority - a downed hero always shows 'down' regardless of what its
-// cooldown timer happens to read (it's not fighting anymore), and a fresh
-// hit takes over the walk/attack loop for its own short window the same way
-// attack already does.
-function getHeroAnimationState(hero: HeroState, isHurting: boolean): SpriteAnimationState {
+// How often drawHero alternates the idle sprite between 'walk' and 'idle2' -
+// see scripts/pixel_sprites.py's 'idle2' pose (a 1px head-bob) for what the
+// second frame actually looks like. Long enough to read as a slow breath,
+// not a jitter.
+const IDLE_BREATHE_CYCLE_SECONDS = 1.6;
+
+function getIdleFrame(nowSeconds: number): SpriteAnimationState {
+  return Math.floor(nowSeconds / IDLE_BREATHE_CYCLE_SECONDS) % 2 === 0 ? 'walk' : 'idle2';
+}
+
+// Heroes never move (mapConfig.heroPosition is fixed) - the idle loop
+// (walk/idle2 alternation, see getIdleFrame) stands in for what a real
+// walk-cycle would otherwise be; 'attack'/'cast' take over for their own
+// brief windows right after CombatSystem/SkillSystem trigger them.
+// Priority, highest first: isDowned (not fighting anymore, always shows
+// regardless of what its cooldown timer reads) > isHurting (a fresh hit
+// always interrupts whatever else was happening) > isCasting > isVictory
+// (a wave-clear celebration shouldn't get preempted by the idle loop, but
+// shouldn't interrupt anything more urgent above it either) > attack/idle.
+function getHeroAnimationState(hero: HeroState, isHurting: boolean, isCasting: boolean, isVictory: boolean, nowSeconds: number): SpriteAnimationState {
   if (hero.isDowned) {
     return 'down';
   }
   if (isHurting) {
     return 'hurt';
   }
+  if (isCasting) {
+    return 'cast';
+  }
+  if (isVictory) {
+    return 'victory';
+  }
   const cooldownDuration = hero.attackSpeed > 0 ? 1 / hero.attackSpeed : 0;
   const justAttacked = cooldownDuration > 0 && hero.attackCooldownRemaining > cooldownDuration - ATTACK_ANIM_WINDOW_SECONDS;
-  return justAttacked ? 'attack' : 'walk';
+  return justAttacked ? 'attack' : getIdleFrame(nowSeconds);
 }
 
 // Mirror of getHeroAnimationState, enemy-side - CombatSystem.
@@ -689,7 +708,7 @@ function getAllEvolutionBranchIds(): string[] {
 export function preloadBattleSprites(): void {
   const enemySpriteTypes = new Set(Object.values(ENEMY_SPRITE_TYPE));
 
-  const heroPoses: HeroSpriteState[] = ['walk', 'attack', 'hurt', 'down'];
+  const heroPoses: HeroSpriteState[] = ['walk', 'attack', 'hurt', 'down', 'cast', 'victory', 'idle2'];
   preloadSprites([
     ...heroClasses.flatMap((heroClass) => heroPoses.map((pose) => getHeroSpriteSrc(heroClass, pose))),
     ...getAllEvolutionBranchIds().flatMap((branchId) => heroPoses.map((pose) => getHeroEvolvedSpriteSrc(branchId, pose))),
@@ -934,6 +953,11 @@ function drawVisualEffect(ctx: CanvasRenderingContext2D, effect: VisualEffect): 
       // the specific hero/enemy sprite instead of drawing a standalone shape.
       return;
     }
+    case 'castPose': {
+      // Same "never drawn directly" contract as hitReaction - looked up by
+      // entityKey in drawHero to pick the 'cast' sprite pose instead.
+      return;
+    }
     case 'particleBurst': {
       const particles = effect.particles ?? [];
       const color = effect.color ?? '#ffffff';
@@ -975,6 +999,8 @@ function drawHero(
   hero: HeroState,
   attackFlashByEntity: Map<string, VisualEffect>,
   hitReactionByEntity: Map<string, VisualEffect>,
+  castPoseByEntity: Map<string, VisualEffect>,
+  isVictoryActive: boolean,
   nowSeconds: number,
 ): HpBarRequest {
   const heroStyle = getHeroVisualStyle(getVisualTierForLevel(hero.level));
@@ -1023,7 +1049,8 @@ function drawHero(
   // ATTACK_ANIM_WINDOW_SECONDS) or for the rest of the wave attempt (down).
   const hitEffect = hitReactionByEntity.get(heroEntityKey(hero.id));
   const isHurting = !!hitEffect;
-  const animState = getHeroAnimationState(hero, isHurting);
+  const isCasting = castPoseByEntity.has(heroEntityKey(hero.id));
+  const animState = getHeroAnimationState(hero, isHurting, isCasting, isVictoryActive, nowSeconds);
   const evolvedSprite = hero.evolutionBranchId
     ? (getImage(getHeroEvolvedSpriteSrc(hero.evolutionBranchId, animState)) ?? getImage(getHeroEvolvedSpriteSrc(hero.evolutionBranchId, 'walk')))
     : undefined;
@@ -1446,6 +1473,7 @@ export function renderScene(
   enemies: EnemyState[],
   visualEffects: VisualEffect[],
   screenShakeIntensity: number,
+  isVictoryActive: boolean,
 ): void {
   const nowMs = performance.now();
   const nowSeconds = nowMs / 1000;
@@ -1473,6 +1501,7 @@ export function renderScene(
   // enemy only flashes on its own hit, not the whole squad's.
   const attackFlashByEntity = buildEntityEffectIndex(visualEffects, 'attackFlash');
   const hitReactionByEntity = buildEntityEffectIndex(visualEffects, 'hitReaction');
+  const castPoseByEntity = buildEntityEffectIndex(visualEffects, 'castPose');
   // Bodies first, then every collected bar in one batched pass (see
   // drawHpBarsBatched's doc comment for what this saves and the draw-order
   // trade-off that comes with it) - heroes and enemies batch separately so
@@ -1480,7 +1509,7 @@ export function renderScene(
   // already existed.
   const heroHpBars: HpBarRequest[] = [];
   for (const hero of heroes) {
-    heroHpBars.push(drawHero(ctx, hero, attackFlashByEntity, hitReactionByEntity, nowSeconds));
+    heroHpBars.push(drawHero(ctx, hero, attackFlashByEntity, hitReactionByEntity, castPoseByEntity, isVictoryActive, nowSeconds));
   }
   drawHpBarsBatched(ctx, heroHpBars);
 

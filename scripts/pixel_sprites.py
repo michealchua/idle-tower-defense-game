@@ -64,14 +64,21 @@ GW, GH = 26, 34
 
 def draw_humanoid(pal, pose, weapon, headwear, cape=False):
     """pal: dict with keys body, body_dark, skin, trim, weapon, weapon_dark,
-    hair. pose: 'walk', 'attack', or 'hurt' (a brief recoil/flinch frame -
-    see DamageSystem.spawnHitReaction on the TS side, which triggers this
-    pose for a short window on every hit, not just crits)."""
+    hair. pose: 'walk', 'attack', 'hurt' (brief recoil/flinch - see
+    DamageSystem.spawnHitReaction on the TS side, triggered for a short
+    window on every hit, not just crits), 'cast' (SkillSystem successfully
+    casting - one arm raised with a small glowing spark, weapon left
+    resting), 'victory' (wave-clear celebration - both arms raised, weapon
+    held high), or 'idle2' (a subtle head-bob alternated with 'walk' every
+    ~1.6s for a breathing idle instead of one static frame the whole time -
+    see CanvasRenderer's IDLE_BREATHE_CYCLE_SECONDS)."""
     img = new_grid(GW, GH)
     d = ImageDraw.Draw(img)
 
     attacking = pose == "attack"
     hurting = pose == "hurt"
+    casting = pose == "cast"
+    celebrating = pose == "victory"
     lean = 1 if attacking else (-1 if hurting else 0)
 
     # Cape (drawn first, behind everything else) - derived from body_dark
@@ -98,30 +105,48 @@ def draw_humanoid(pal, pose, weapon, headwear, cape=False):
         px(d, tx, 20, pal["trim"], 10, 2)
 
     # Off-hand arm (left) - raised defensively in front of the face when
-    # hurting, static at the side otherwise (walk/attack both use the
-    # static position - only the weapon arm changes for attack).
+    # hurting, raised overhead with a glowing spark when casting, raised
+    # overhead (no spark - the weapon arm carries the flourish instead) when
+    # celebrating, static at the side otherwise.
     if hurting:
         px(d, 4 - lean, 6, pal["body_dark"], 3, 8)
         px(d, 4 - lean, 4, pal["skin"], 3, 3)
+    elif casting:
+        px(d, 5 - lean, 6, pal["body_dark"], 3, 8)
+        px(d, 5 - lean, 3, pal["skin"], 3, 3)
+        spark_color = pal.get("trim") or pal["weapon"]
+        px(d, 5 - lean, 0, spark_color, 3, 3)
+    elif celebrating:
+        px(d, 5 - lean, 6, pal["body_dark"], 3, 8)
+        px(d, 5 - lean, 3, pal["skin"], 3, 3)
     else:
         px(d, 5 - lean, 13, pal["body_dark"], 3, 8)
         px(d, 5 - lean, 20, pal["skin"], 3, 2)
 
-    # Weapon arm (right) - repositioned for attack pose, lowered/relaxed
-    # (same as walk) for hurt.
+    # Weapon arm (right) - raised for attack (mid-swing) and victory (held
+    # high, longer/fuller weapon variant same as attack's), lowered/relaxed
+    # for everything else including cast (the free hand carries that pose's
+    # flourish, not the weapon arm).
     if attacking:
         px(d, tx + 8, 9, pal["body_dark"], 3, 7)
         px(d, tx + 8, 9, pal["skin"], 3, 2)
         weapon_anchor = (tx + 9, 3)
+        draw_weapon(d, weapon, weapon_anchor, pal, True)
+    elif celebrating:
+        px(d, tx + 8, 6, pal["body_dark"], 3, 8)
+        px(d, tx + 8, 3, pal["skin"], 3, 3)
+        weapon_anchor = (tx + 9, 0)
+        draw_weapon(d, weapon, weapon_anchor, pal, True)
     else:
         px(d, tx + 8, 13, pal["body_dark"], 3, 8)
         px(d, tx + 8, 20, pal["skin"], 3, 2)
         weapon_anchor = (tx + 8, 18)
+        draw_weapon(d, weapon, weapon_anchor, pal, False)
 
-    draw_weapon(d, weapon, weapon_anchor, pal, attacking)
-
-    # Head.
-    hx, hy = 9 + lean, 2
+    # Head - idle2's only difference from walk is a 1px head bob, everything
+    # else (arms/legs/torso) stays exactly the walk pose.
+    head_lift = 1 if pose == "idle2" else 0
+    hx, hy = 9 + lean, 2 - head_lift
     px(d, hx, hy, pal["skin"], 8, 8)
     px(d, hx, hy, shade(pal["skin"], 0.2), 8, 2)
     if hurting:
@@ -470,14 +495,17 @@ def hero_down_frame(pal):
     )
 
 
+HERO_POSES = ["walk", "attack", "hurt", "idle2", "cast", "victory"]
+
+
 def main():
-    # Base hero classes - walk/attack/hurt (brief hit-recoil, ~0.18s window
-    # driven by CanvasRenderer's hitReaction lookup) / down (HeroState.
-    # isDowned, persists until the wave resets).
+    # Base hero classes - walk/attack/hurt/idle2/cast/victory (see
+    # draw_humanoid's doc comment for what each shows and what triggers it)
+    # plus down (HeroState.isDowned, its own draw_humanoid_down function -
+    # persists until the wave resets, not a brief window like the others).
     for class_id, pal in HERO_CLASSES.items():
-        save(hero_frame(pal, "walk"), f"heroes/{class_id}_walk.png")
-        save(hero_frame(pal, "attack"), f"heroes/{class_id}_attack.png")
-        save(hero_frame(pal, "hurt"), f"heroes/{class_id}_hurt.png")
+        for pose in HERO_POSES:
+            save(hero_frame(pal, pose), f"heroes/{class_id}_{pose}.png")
         save(hero_down_frame(pal), f"heroes/{class_id}_down.png")
 
     # Evolution branches - inherit any key not overridden from their base class.
@@ -485,9 +513,8 @@ def main():
         pal = dict(HERO_CLASSES[overrides["base"]])
         pal.update(overrides)
         file_id = branch_id.replace("-", "_")
-        save(hero_frame(pal, "walk"), f"heroes/evolved/{file_id}_walk.png")
-        save(hero_frame(pal, "attack"), f"heroes/evolved/{file_id}_attack.png")
-        save(hero_frame(pal, "hurt"), f"heroes/evolved/{file_id}_hurt.png")
+        for pose in HERO_POSES:
+            save(hero_frame(pal, pose), f"heroes/evolved/{file_id}_{pose}.png")
         save(hero_down_frame(pal), f"heroes/evolved/{file_id}_down.png")
 
     # Enemies - base pose unchanged (still the single file every archetype

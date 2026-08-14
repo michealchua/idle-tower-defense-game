@@ -154,15 +154,20 @@ export function getBackgroundImage(src: string): HTMLImageElement | undefined {
   return undefined;
 }
 
-// Hero art is a set of static illustrations per class/branch (walk/attack/
-// hurt/down), not a 32x32 frame sheet - see CanvasRenderer's drawEntitySprite
-// for how these get swapped. 'hurt' is a brief flinch shown for the same
-// short window as CanvasRenderer's hitReaction flash/squash (see
-// scripts/pixel_sprites.py's 'hurt' pose); 'down' is HeroState.isDowned's
-// dedicated collapsed pose, replacing the old grayscale-filter-over-walk
-// placeholder. 'state' defaults to 'walk' so existing call sites that only
-// need the idle pose don't have to pass it.
-export type HeroSpriteState = 'walk' | 'attack' | 'hurt' | 'down';
+// Hero art is a set of static illustrations per class/branch, not a 32x32
+// frame sheet - see CanvasRenderer's drawEntitySprite for how these get
+// swapped. 'hurt' is a brief flinch shown for the same short window as
+// CanvasRenderer's hitReaction flash/squash; 'down' is HeroState.isDowned's
+// dedicated collapsed pose (replacing the old grayscale-filter-over-walk
+// placeholder); 'cast' shows for a moment on a successful SkillSystem cast;
+// 'victory' shows on every deployed hero for a few seconds after a wave
+// clears; 'idle2' alternates with 'walk' on a slow cycle (see
+// CanvasRenderer's IDLE_BREATHE_CYCLE_SECONDS) for a subtle breathing idle
+// instead of one static frame the whole time - see scripts/pixel_sprites.py's
+// draw_humanoid doc comment for what each pose actually looks like. 'state'
+// defaults to 'walk' so existing call sites that only need the idle pose
+// don't have to pass it.
+export type HeroSpriteState = 'walk' | 'attack' | 'hurt' | 'down' | 'cast' | 'victory' | 'idle2';
 
 // Single source of truth for the sprite directory convention - CanvasRenderer
 // calls these instead of building paths inline, so every entity type looks

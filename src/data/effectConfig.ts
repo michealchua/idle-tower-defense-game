@@ -14,6 +14,15 @@ export const effectLifetimes = {
   waveClear: 1.5,
   hitReaction: 0.18,
   particleBurst: 0.55,
+  // Longer than hitReaction's window - a skill cast should read as a
+  // deliberate pose, not a flinch-length blip.
+  castPose: 0.35,
+} as const;
+
+// How long GameState.victoryPoseRemaining holds every deployed hero in its
+// 'victory' sprite pose after a wave clears.
+export const victoryPoseConfig = {
+  seconds: 1.8,
 } as const;
 
 // Hard cap on state.visualEffects - a busy horde fight (spawnConfig's late

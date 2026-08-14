@@ -97,6 +97,7 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
   const visualEffects = useGameStore((state) => state.visualEffects);
   const screenShakeIntensity = useGameStore((state) => state.screenShakeIntensity);
   const bossIntroRemaining = useGameStore((state) => state.bossIntroRemaining);
+  const victoryPoseRemaining = useGameStore((state) => state.victoryPoseRemaining);
   const isGameOver = useGameStore((state) => state.isGameOver);
   const wave = useGameStore((state) => state.wave);
   const dragPreviewKind = useGameStore((state) => state.dragPreviewKind);
@@ -289,7 +290,7 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
     const offsetY = (pixelHeight - CANVAS_HEIGHT * scale) / 2;
     ctx.setTransform(scale, 0, 0, scale, offsetX, offsetY);
 
-    renderScene(ctx, heroes, pets, enemies, visualEffects, screenShakeIntensity);
+    renderScene(ctx, heroes, pets, enemies, visualEffects, screenShakeIntensity, victoryPoseRemaining > 0);
 
     // Grid shown for both drag flavors: dragging a fresh unit in from the
     // roster panel (dragPreviewKind), or repositioning an already-deployed
@@ -312,7 +313,7 @@ function BattleScreen({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
       }
       drawSwapGhost(ctx, canvasDrag.kind, canvasDrag.pointerX, canvasDrag.pointerY);
     }
-  }, [heroes, pets, enemies, visualEffects, screenShakeIntensity, displaySize, biome, dragPreviewKind, wave, canvasDrag, slotPositions, occupiedSlotIndices]);
+  }, [heroes, pets, enemies, visualEffects, screenShakeIntensity, victoryPoseRemaining, displaySize, biome, dragPreviewKind, wave, canvasDrag, slotPositions, occupiedSlotIndices]);
 
   const aliveHeroCount = heroes.filter((hero) => !hero.isDowned).length;
 

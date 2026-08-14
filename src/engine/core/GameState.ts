@@ -79,6 +79,7 @@ export function createInitialGameState(): GameState {
     hitStopRemaining: 0,
     bossIntroRemaining: 0,
     pendingSfxEvents: [],
+    victoryPoseRemaining: 0,
     inventory: [],
     nextEquipmentInstanceId: 1,
     equipmentDropFeed: [],

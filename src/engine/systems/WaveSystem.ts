@@ -1,5 +1,5 @@
 import { getBossKindForWave, getBossTimeLimit, getNormalWaveEnemyCount, waveConfig } from '../../data/waveConfig';
-import { effectLifetimes } from '../../data/effectConfig';
+import { effectLifetimes, victoryPoseConfig } from '../../data/effectConfig';
 import { getDiamondChapterClearReward } from '../../data/diamondConfig';
 import { getBiomeForChapter } from '../../data/biomeConfig';
 import { storyScripts } from '../../data/storyConfig';
@@ -100,6 +100,7 @@ export function advanceToNextWave(state: GameState): void {
     lifetime: effectLifetimes.waveClear,
   });
   queueSfx(state, 'waveClear');
+  state.victoryPoseRemaining = victoryPoseConfig.seconds;
 }
 
 // What a failed wave (timer expired without clearing, or the whole squad

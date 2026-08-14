@@ -4,7 +4,7 @@ import { tickMovement, tickHeroMovement } from '../systems/MovementSystem';
 import { tickEnemyAbilities } from '../systems/EnemyAbilitySystem';
 import { tickSkills } from '../systems/SkillSystem';
 import { tickLevelUp } from '../systems/LevelSystem';
-import { tickEffects, tickScreenShake } from '../systems/EffectsSystem';
+import { tickEffects, tickScreenShake, tickVictoryPose } from '../systems/EffectsSystem';
 import { tickEquipmentDropFeed } from '../systems/EquipmentSystem';
 import { tickWaveProgress, tickTutorialStoryTrigger } from '../systems/WaveSystem';
 import { tickGachaWelcomeBonus, tickDailyLoginReward } from '../systems/GachaSystem';
@@ -92,6 +92,7 @@ export class GameLoop {
       }
       tickEffects(this.state, FIXED_TIMESTEP_SECONDS);
       tickScreenShake(this.state, FIXED_TIMESTEP_SECONDS);
+      tickVictoryPose(this.state, FIXED_TIMESTEP_SECONDS);
       tickEquipmentDropFeed(this.state, FIXED_TIMESTEP_SECONDS);
       this.accumulatorSeconds -= FIXED_TIMESTEP_SECONDS;
     }

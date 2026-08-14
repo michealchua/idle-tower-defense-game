@@ -117,6 +117,7 @@ function snapshotGameState(state: GameState) {
     screenShakeIntensity: state.screenShakeIntensity,
     bossIntroRemaining: state.bossIntroRemaining,
     pendingSfxEvents: [...state.pendingSfxEvents],
+    victoryPoseRemaining: state.victoryPoseRemaining,
     gold: state.gold,
     isGameOver: state.isGameOver,
     difficultyScore: getDifficultyScore(state),
@@ -168,6 +169,7 @@ interface GameStore {
   screenShakeIntensity: number;
   bossIntroRemaining: number;
   pendingSfxEvents: SfxEventId[];
+  victoryPoseRemaining: number;
   gold: number;
   isGameOver: boolean;
   difficultyScore: number;
@@ -513,6 +515,7 @@ export const useGameStore = create<GameStore>()(
     gameState.hitStopRemaining = 0;
     gameState.bossIntroRemaining = 0;
     gameState.pendingSfxEvents = [];
+    gameState.victoryPoseRemaining = 0;
     gameState.isGameOver = false;
     gameState.pendingStoryId = null;
     recomputeHeroStats(gameState);
