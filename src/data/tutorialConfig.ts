@@ -1,6 +1,6 @@
 import { waveConfig } from './waveConfig';
 import { panelUnlockWave } from './unlockConditionConfig';
-import { heroEvolutionConfig } from './heroConfig';
+import { PROTAGONIST_FIRST_EVOLUTION_LEVEL } from './heroRosterConfig';
 import type { EquipmentSlot } from './equipmentConfig';
 
 // Minimal duck-typed view of the store's state - only the fields a step's
@@ -15,7 +15,7 @@ export interface TutorialContext {
   unlockedHeroIds: string[];
   unlockedPetIds: string[];
   inventory: unknown[];
-  heroes: { level: number; evolutionBranchId: string | null; equipment: Partial<Record<EquipmentSlot, unknown | null>> }[];
+  heroes: { level: number; evolutionPath: string[]; equipment: Partial<Record<EquipmentSlot, unknown | null>> }[];
   wave: { chapter: number; waveInChapter: number; isBossWave: boolean; bossKind?: string };
 }
 
@@ -92,7 +92,7 @@ export const tutorialSteps: TutorialStep[] = [
     id: 'evolutionReady',
     messageKey: 'tutorialStep.evolutionReady',
     targetSelector: 'nav-hero',
-    isEligible: (ctx) => ctx.heroes.some((hero) => hero.level >= heroEvolutionConfig.unlockLevel && hero.evolutionBranchId === null),
+    isEligible: (ctx) => ctx.heroes.some((hero) => hero.level >= PROTAGONIST_FIRST_EVOLUTION_LEVEL && hero.evolutionPath.length === 0),
   },
   {
     id: 'petUnlocked',

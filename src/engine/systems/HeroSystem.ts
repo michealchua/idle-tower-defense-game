@@ -2,8 +2,8 @@ import { createHero } from '../entities/Hero';
 import { layoutSlotPositions } from '../../data/mapConfig';
 import { getMaxDeployedHeroes } from '../../data/squadConfig';
 import { equipmentSlots, getEquipmentScore, type EquipmentSlot } from '../../data/equipmentConfig';
-import { heroEvolutionConfig, type HeroClass } from '../../data/heroConfig';
-import { getHeroDefinition } from '../../data/heroRosterConfig';
+import type { HeroClass } from '../../data/heroConfig';
+import { getHeroDefinition, type HeroEvolutionBranch } from '../../data/heroRosterConfig';
 import { recomputeHeroStats } from './HeroStatsSystem';
 import { getGlobalWaveNumber } from './WaveSystem';
 import type { GameState, HeroState } from '../types';
@@ -233,31 +233,45 @@ export function unequipAllForHero(state: GameState, heroId: string): boolean {
   return changed;
 }
 
-// 分支进化 gate - level-only (no gold/material cost, same precedent as the
-// existing visual-tier evolution), and one-shot: once a branch is chosen
-// there's no re-picking, see evolveHero below.
-export function canEvolveHero(hero: HeroState): boolean {
-  return !hero.evolutionBranchId && hero.level >= heroEvolutionConfig.unlockLevel;
+// The tier-N+1 nodes reachable from wherever this hero currently sits in its
+// evolution tree - whatever HeroEvolutionBranch.parentBranchId matches the
+// last entry of evolutionPath (or null, for a hero that hasn't evolved yet).
+// Returned regardless of level - callers filter by unlockLevel themselves
+// (canEvolveHero below; HeroPanel additionally wants to *show* the locked
+// next tier with its required level rather than hide it entirely).
+export function getAvailableEvolutionBranches(hero: HeroState): HeroEvolutionBranch[] {
+  const definition = getHeroDefinition(hero.id);
+  const parentBranchId = hero.evolutionPath.length > 0 ? hero.evolutionPath[hero.evolutionPath.length - 1] : null;
+  return definition.evolutionBranches.filter((branch) => branch.parentBranchId === parentBranchId);
 }
 
-// Commits one of the hero's heroRosterConfig.evolutionBranches choices -
-// permanent (never reset by AscensionSystem.ascend, see HeroState.
-// evolutionBranchId's doc comment). Grants the branch's exclusive skill
-// immediately (no separate level gate) and recomputes stats so the
+// 分支进化 gate - level-only (no gold/material cost, same precedent as the
+// existing visual-tier evolution). Each tier is one-shot (evolveHero below
+// only ever appends to evolutionPath, never replaces), but the tree itself
+// has multiple tiers - a hero that's already evolved can evolve again once
+// it reaches the next tier's own unlockLevel.
+export function canEvolveHero(hero: HeroState): boolean {
+  return getAvailableEvolutionBranches(hero).some((branch) => hero.level >= branch.unlockLevel);
+}
+
+// Commits one of getAvailableEvolutionBranches(hero)'s choices, appending it
+// to evolutionPath - permanent (never reset by AscensionSystem.ascend, see
+// HeroState.evolutionPath's doc comment). Grants the branch's exclusive
+// skill immediately (no separate level gate) and recomputes stats so the
 // statMultiplier boost (HeroStatsSystem.getEffectiveStatMultiplier) takes
 // effect the same tick.
 export function evolveHero(state: GameState, heroId: string, branchId: string): boolean {
   const hero = state.heroes.find((candidate) => candidate.id === heroId);
-  if (!hero || !canEvolveHero(hero)) {
+  if (!hero) {
     return false;
   }
 
-  const branch = getHeroDefinition(heroId).evolutionBranches.find((candidate) => candidate.id === branchId);
-  if (!branch) {
+  const branch = getAvailableEvolutionBranches(hero).find((candidate) => candidate.id === branchId);
+  if (!branch || hero.level < branch.unlockLevel) {
     return false;
   }
 
-  hero.evolutionBranchId = branchId;
+  hero.evolutionPath.push(branchId);
   if (!hero.ownedSkillIds.includes(branch.skillUnlock.skillId)) {
     hero.ownedSkillIds.push(branch.skillUnlock.skillId);
   }
@@ -315,14 +329,15 @@ export function unequipSkill(state: GameState, heroId: string, skillId: string):
   return true;
 }
 
-// Base class until evolved, then whatever class the chosen branch results
-// in (see HeroEvolutionBranch.resultClass) - drives HeroPanel's class
-// icon/label so it visibly changes the moment a hero evolves.
+// Base class until evolved, then whatever class the most recently chosen
+// branch results in (see HeroEvolutionBranch.resultClass) - drives
+// HeroPanel's class icon/label so it visibly changes with every tier evolved.
 export function getEffectiveHeroClass(hero: HeroState): HeroClass {
   const definition = getHeroDefinition(hero.id);
-  if (!hero.evolutionBranchId) {
+  const lastBranchId = hero.evolutionPath[hero.evolutionPath.length - 1];
+  if (!lastBranchId) {
     return definition.class;
   }
-  const branch = definition.evolutionBranches.find((candidate) => candidate.id === hero.evolutionBranchId);
+  const branch = definition.evolutionBranches.find((candidate) => candidate.id === lastBranchId);
   return branch?.resultClass ?? definition.class;
 }

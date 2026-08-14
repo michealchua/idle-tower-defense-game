@@ -88,23 +88,27 @@ function getStarMultiplier(stars: Record<string, number>, id: string): number {
   return 1 + (stars[id] ?? 0) * starBonusPerStar;
 }
 
-// A hero's base statMultiplier, boosted by its chosen 分支进化 branch (if
-// any) - see heroRosterConfig.ts's HeroEvolutionBranch.statMultiplier doc
-// comment. Still just the base multiplier for a hero that hasn't evolved
-// yet (evolutionBranchId null), so this is safe to call unconditionally.
+// A hero's base statMultiplier, boosted by every 分支进化 branch chosen so
+// far (see heroRosterConfig.ts's HeroEvolutionBranch.statMultiplier doc
+// comment) - folded in tier order along evolutionPath, so a 3-tier chain
+// compounds all three nodes' multipliers rather than just the latest one.
+// Still just the base multiplier for a hero that hasn't evolved yet (empty
+// evolutionPath), so this is safe to call unconditionally.
 function getEffectiveStatMultiplier(definition: HeroDefinition, hero: HeroState): Record<UpgradeableStat, number> {
-  const branch = hero.evolutionBranchId
-    ? definition.evolutionBranches.find((candidate) => candidate.id === hero.evolutionBranchId)
-    : undefined;
-  if (!branch) {
-    return definition.statMultiplier;
+  let result = definition.statMultiplier;
+  for (const branchId of hero.evolutionPath) {
+    const branch = definition.evolutionBranches.find((candidate) => candidate.id === branchId);
+    if (!branch) {
+      continue;
+    }
+    result = {
+      attackDamage: result.attackDamage * branch.statMultiplier.attackDamage,
+      maxHp: result.maxHp * branch.statMultiplier.maxHp,
+      attackSpeed: result.attackSpeed * branch.statMultiplier.attackSpeed,
+      criticalChance: result.criticalChance * branch.statMultiplier.criticalChance,
+    };
   }
-  return {
-    attackDamage: definition.statMultiplier.attackDamage * branch.statMultiplier.attackDamage,
-    maxHp: definition.statMultiplier.maxHp * branch.statMultiplier.maxHp,
-    attackSpeed: definition.statMultiplier.attackSpeed * branch.statMultiplier.attackSpeed,
-    criticalChance: definition.statMultiplier.criticalChance * branch.statMultiplier.criticalChance,
-  };
+  return result;
 }
 
 // The single place hero combat/HP stats are written. Called after any input

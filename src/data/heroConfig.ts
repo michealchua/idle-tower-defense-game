@@ -67,10 +67,9 @@ export function getExpToNextLevel(level: number): number {
   return computeScaledValue(heroLevelConfig.baseExpToNextLevel, heroLevelConfig.expGrowth, level - 1);
 }
 
-// Archetype tag every hero carries from heroRosterConfig.ts - orthogonal to
-// bondId (bondConfig.ts): bond drives squad-composition synergy bonuses,
-// class drives branch evolution (see heroEvolutionConfig/HeroDefinition.
-// evolutionBranches below) and is purely flavor/UI otherwise.
+// Archetype tag every hero carries from heroRosterConfig.ts - drives branch
+// evolution (see HeroDefinition.evolutionBranches, heroRosterConfig.ts's
+// HeroEvolutionBranch) and is otherwise purely flavor/UI.
 export type HeroClass = 'warrior' | 'mage' | 'paladin' | 'summoner' | 'archer' | 'assassin' | 'priest' | 'special';
 
 // 8 classes matching the plan's 战士/法师/圣骑士/召唤师/弓箭手/刺客/牧师/特殊职业 spread -
@@ -87,12 +86,3 @@ export const heroClasses: HeroClass[] = [
   'special',
 ];
 
-// 分支进化 - gacha pulls only ever produce a hero's base form (see
-// heroRosterConfig.ts's generator); once a hero reaches this level it can
-// pick one of its two evolutionBranches (HeroSystem.evolveHero), applying a
-// large permanent statMultiplier boost and an exclusive skill. Unlike level/
-// exp/upgrades, the chosen branch survives ascension - see AscensionSystem.
-// ascend, which deliberately doesn't touch hero.evolutionBranchId.
-export const heroEvolutionConfig = {
-  unlockLevel: 30,
-};

@@ -4,10 +4,10 @@ import { heroRosterConfig, type HeroDefinition } from '../data/heroRosterConfig'
 import { skillDefinitions } from '../data/skillConfig';
 import { getMaxDeployedHeroes } from '../data/squadConfig';
 import { getGlobalWaveNumber } from '../engine/systems/WaveSystem';
-import { heroEvolutionConfig, heroUpgradeConfig, type HeroClass, type UpgradeableStat } from '../data/heroConfig';
+import { heroUpgradeConfig, type HeroClass, type UpgradeableStat } from '../data/heroConfig';
 import { MAX_STAR_LEVEL, gachaRarityConfig, getStarUpCost, type GachaRarity } from '../data/gachaConfig';
 import { isHeroUpgradeMaxed, previewHeroUpgradeBulk } from '../engine/systems/UpgradeSystem';
-import { canEvolveHero, getEffectiveHeroClass, MAX_EQUIPPED_SKILLS } from '../engine/systems/HeroSystem';
+import { canEvolveHero, getAvailableEvolutionBranches, getEffectiveHeroClass, MAX_EQUIPPED_SKILLS } from '../engine/systems/HeroSystem';
 import { formatBigNumber } from '../utils/scaling';
 import type { HeroState } from '../engine/types';
 import { t } from '../locales/i18n';
@@ -356,80 +356,94 @@ function HeroEvolutionSection({ definition, hero }: { definition: HeroDefinition
   const [choosing, setChoosing] = useState(false);
   const [pendingBranchId, setPendingBranchId] = useState<string | null>(null);
 
-  if (hero.evolutionBranchId) {
-    const branch = definition.evolutionBranches.find((candidate) => candidate.id === hero.evolutionBranchId);
-    return (
-      <div className="item-detail" style={{ marginTop: 8 }}>
-        <IconStar /> {t('hero.evolved')}: {branch ? t(branch.nameKey) : hero.evolutionBranchId}
-      </div>
-    );
-  }
+  // History breadcrumb - every tier already committed to, oldest first (see
+  // HeroState.evolutionPath's doc comment). Shown above whatever the next
+  // tier's status is (locked/ready/maxed), not instead of it - unlike the
+  // old flat one-shot tree, reaching tier 1 doesn't end the section anymore.
+  const chosenBranches = hero.evolutionPath
+    .map((branchId) => definition.evolutionBranches.find((candidate) => candidate.id === branchId))
+    .filter((branch): branch is (typeof definition.evolutionBranches)[number] => !!branch);
 
-  if (!canEvolveHero(hero)) {
-    return (
-      <div className="text-faint" style={{ marginTop: 8 }}>
-        {t('hero.evolutionLocked')} Lv.{heroEvolutionConfig.unlockLevel}
-      </div>
-    );
-  }
-
-  if (!choosing) {
-    return (
-      <button type="button" className="btn btn-evolve btn-block" style={{ marginTop: 8 }} onClick={() => setChoosing(true)}>
-        <IconStar /> {t('hero.evolveButton')} <IconStar />
-      </button>
-    );
-  }
+  const nextBranches = getAvailableEvolutionBranches(hero);
+  const reachedMaxTier = nextBranches.length === 0;
+  const nextTierReady = canEvolveHero(hero);
+  const nextTierUnlockLevel = nextBranches.length > 0 ? Math.min(...nextBranches.map((branch) => branch.unlockLevel)) : null;
 
   return (
-    <div className="evolve-picker">
-      <div className="evolve-picker-title">{t('hero.evolveButton')}</div>
-      <div className="card-grid-sm">
-        {definition.evolutionBranches.map((branch) => {
-          const BranchIcon = CLASS_ICON[branch.resultClass];
-          return (
-          <button
-            key={branch.id}
-            type="button"
-            className={`mini-card selectable${pendingBranchId === branch.id ? ' active' : ''}`}
-            onClick={() => setPendingBranchId(branch.id)}
-          >
-            <div className="mini-card-name">
-              <BranchIcon /> {t(branch.nameKey)}
-            </div>
-            <div className="mini-card-sub">{t(CLASS_LABEL_KEYS[branch.resultClass])}</div>
-            <div className="mini-card-sub">
-              {t('hero.attackDamage')} ×{branch.statMultiplier.attackDamage} · {t('hero.maxHp')} ×{branch.statMultiplier.maxHp}
-            </div>
-          </button>
-          );
-        })}
-      </div>
-      <div className="item-actions" style={{ marginTop: 8 }}>
-        <button
-          type="button"
-          className="btn btn-sm"
-          onClick={() => {
-            setChoosing(false);
-            setPendingBranchId(null);
-          }}
-        >
-          {t('hero.evolveCancel')}
+    <div>
+      {chosenBranches.length > 0 && (
+        <div className="item-detail" style={{ marginTop: 8 }}>
+          <IconStar /> {t('hero.evolved')}: {chosenBranches.map((branch) => t(branch.nameKey)).join(' → ')}
+        </div>
+      )}
+
+      {reachedMaxTier ? (
+        chosenBranches.length > 0 && (
+          <div className="text-faint" style={{ marginTop: 8 }}>
+            {t('hero.evolutionMaxed')}
+          </div>
+        )
+      ) : !nextTierReady ? (
+        <div className="text-faint" style={{ marginTop: 8 }}>
+          {t('hero.evolutionLocked')} Lv.{nextTierUnlockLevel}
+        </div>
+      ) : !choosing ? (
+        <button type="button" className="btn btn-evolve btn-block" style={{ marginTop: 8 }} onClick={() => setChoosing(true)}>
+          <IconStar /> {t('hero.evolveButton')} <IconStar />
         </button>
-        <button
-          type="button"
-          className="btn btn-sm btn-evolve"
-          disabled={!pendingBranchId}
-          onClick={() => {
-            if (pendingBranchId && evolveHero(definition.id, pendingBranchId)) {
-              setChoosing(false);
-              setPendingBranchId(null);
-            }
-          }}
-        >
-          {t('hero.evolveConfirm')}
-        </button>
-      </div>
+      ) : (
+        <div className="evolve-picker">
+          <div className="evolve-picker-title">{t('hero.evolveButton')}</div>
+          <div className="card-grid-sm">
+            {nextBranches
+              .filter((branch) => hero.level >= branch.unlockLevel)
+              .map((branch) => {
+                const BranchIcon = CLASS_ICON[branch.resultClass];
+                return (
+                  <button
+                    key={branch.id}
+                    type="button"
+                    className={`mini-card selectable${pendingBranchId === branch.id ? ' active' : ''}`}
+                    onClick={() => setPendingBranchId(branch.id)}
+                  >
+                    <div className="mini-card-name">
+                      <BranchIcon /> {t(branch.nameKey)}
+                    </div>
+                    <div className="mini-card-sub">{t(CLASS_LABEL_KEYS[branch.resultClass])}</div>
+                    <div className="mini-card-sub">
+                      {t('hero.attackDamage')} ×{branch.statMultiplier.attackDamage} · {t('hero.maxHp')} ×{branch.statMultiplier.maxHp}
+                    </div>
+                  </button>
+                );
+              })}
+          </div>
+          <div className="item-actions" style={{ marginTop: 8 }}>
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={() => {
+                setChoosing(false);
+                setPendingBranchId(null);
+              }}
+            >
+              {t('hero.evolveCancel')}
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm btn-evolve"
+              disabled={!pendingBranchId}
+              onClick={() => {
+                if (pendingBranchId && evolveHero(definition.id, pendingBranchId)) {
+                  setChoosing(false);
+                  setPendingBranchId(null);
+                }
+              }}
+            >
+              {t('hero.evolveConfirm')}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -474,7 +488,7 @@ function HeroDetail({
     <div className={`detail-card ${RARITY_BORDER_CLASS[definition.rarity]}`}>
       <div className={`detail-title ${RARITY_CLASS[definition.rarity]}`} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <SpriteAvatar
-          src={heroAvatarSrc(effectiveClass, hero.evolutionBranchId)}
+          src={heroAvatarSrc(effectiveClass, hero.evolutionPath[hero.evolutionPath.length - 1] ?? null)}
           size={48}
           fallback={<HeroClassIcon />}
         />
@@ -592,7 +606,8 @@ const HeroRosterList = memo(function HeroRosterList({
           return '';
         }
         const star = state.heroStars[id] ?? 0;
-        return `${hero.level}|${Math.round(hero.attackDamage)}|${hero.name}|${hero.evolutionBranchId ?? ''}|${star}`;
+        const currentBranchId = hero.evolutionPath[hero.evolutionPath.length - 1] ?? '';
+        return `${hero.level}|${Math.round(hero.attackDamage)}|${hero.name}|${currentBranchId}|${star}`;
       }),
     ),
   );

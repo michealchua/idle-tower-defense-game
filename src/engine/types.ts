@@ -93,12 +93,12 @@ export interface HeroState {
   // EquipmentSystem.ts/HeroSystem.ts). Set on createHero, mutated only by
   // HeroSystem.equipItemToHero/unequipHeroSlot.
   equipment: Record<EquipmentSlot, EquipmentItem | null>;
-  // Which of heroRosterConfig's HeroDefinition.evolutionBranches this hero
-  // has chosen - null until HeroSystem.evolveHero fires (requires
-  // heroConfig.heroEvolutionConfig.unlockLevel). Unlike level/exp/upgrades,
-  // this is never reset by AscensionSystem.ascend - it's permanent
-  // collection progress, same as equipment/stars.
-  evolutionBranchId: string | null;
+  // Ordered chain of heroRosterConfig HeroEvolutionBranch ids this hero has
+  // chosen, tier by tier (see HeroSystem.evolveHero/
+  // getAvailableEvolutionBranches) - empty until the first evolve fires.
+  // Unlike level/exp/upgrades, this is never reset by AscensionSystem.ascend
+  // - it's permanent collection progress, same as equipment/stars.
+  evolutionPath: string[];
   // True once currentHp has been driven to 0 this wave attempt (see
   // DamageSystem.applyDamageToHero) - a downed hero stays in
   // heroes/deployedHeroIds (never removed) but stops attacking/moving/

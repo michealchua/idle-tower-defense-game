@@ -1041,12 +1041,12 @@ function drawHero(
   // gets the right *base* sprite as a fallback below.
   const heroClass = getEffectiveHeroClass(hero);
 
-  // Evolution-aware: a hero that's committed to a branch (HeroSystem.
-  // evolveHero, permanent, see HeroState.evolutionBranchId) prefers its own
-  // evolved art over the plain class one - falls back to the base class
-  // sprite if the evolved file isn't there yet, so evolving doesn't
-  // regress a hero from "real sprite" back to "geometric shape" just because
-  // its specific evolved art hasn't been dropped in.
+  // Evolution-aware: a hero that's committed to at least one branch
+  // (HeroSystem.evolveHero, permanent, see HeroState.evolutionPath) prefers
+  // its current tier's evolved art over the plain class one - falls back to
+  // the base class sprite if the evolved file isn't there yet, so evolving
+  // doesn't regress a hero from "real sprite" back to "geometric shape" just
+  // because its specific evolved art hasn't been dropped in.
   //
   // Hero art is a walk/attack/hurt/down set of static illustrations, not a
   // frame sheet (see getHeroSpriteSrc's doc comment) - the animation state
@@ -1060,8 +1060,9 @@ function drawHero(
   const isHurting = !!hitEffect;
   const isCasting = castPoseByEntity.has(heroEntityKey(hero.id));
   const animState = getHeroAnimationState(hero, isHurting, isCasting, isVictoryActive, nowSeconds);
-  const evolvedSprite = hero.evolutionBranchId
-    ? (getImage(getHeroEvolvedSpriteSrc(hero.evolutionBranchId, animState)) ?? getImage(getHeroEvolvedSpriteSrc(hero.evolutionBranchId, 'walk')))
+  const currentEvolutionBranchId = hero.evolutionPath[hero.evolutionPath.length - 1];
+  const evolvedSprite = currentEvolutionBranchId
+    ? (getImage(getHeroEvolvedSpriteSrc(currentEvolutionBranchId, animState)) ?? getImage(getHeroEvolvedSpriteSrc(currentEvolutionBranchId, 'walk')))
     : undefined;
   const sprite = evolvedSprite ?? getImage(getHeroSpriteSrc(heroClass, animState)) ?? getImage(getHeroSpriteSrc(heroClass, 'walk'));
 
