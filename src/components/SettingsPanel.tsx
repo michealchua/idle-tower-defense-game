@@ -37,6 +37,7 @@ function SettingsPanel({ onClose, onReturnToTitle }: SettingsPanelProps) {
   const [sfxMuted, setSfxMuted] = useState(sfxManager.isMuted());
   const [bgmMuted, setBgmMuted] = useState(audioManager.isMuted());
   const [bgmVolume, setBgmVolume] = useState(audioManager.getVolume());
+  const [sfxVolume, setSfxVolume] = useState(sfxManager.getVolume());
 
   const metadata = activeSlot !== null ? getSaveMetadata(activeSlot) : null;
 
@@ -52,6 +53,12 @@ function SettingsPanel({ onClose, onReturnToTitle }: SettingsPanelProps) {
     const next = Number(event.target.value);
     audioManager.setVolume(next);
     setBgmVolume(next);
+  }
+
+  function handleSfxVolumeChange(event: ChangeEvent<HTMLInputElement>): void {
+    const next = Number(event.target.value);
+    sfxManager.setVolume(next);
+    setSfxVolume(next);
   }
 
   // No automatic check-on-launch anymore (see electron/main.cjs's
@@ -130,10 +137,25 @@ function SettingsPanel({ onClose, onReturnToTitle }: SettingsPanelProps) {
                 onChange={handleBgmVolumeChange}
                 className="settings-volume-slider"
               />
+              <span className="item-detail settings-volume-pct">{Math.round(bgmVolume * 100)}%</span>
             </div>
             <button className="btn btn-sm" onClick={handleToggleSfx}>
               {t(sfxMuted ? 'settings.sfxOff' : 'settings.sfxOn')}
             </button>
+            <div className="settings-volume-row">
+              <span className="item-detail">{t('settings.sfxVolume')}</span>
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={sfxVolume}
+                disabled={sfxMuted}
+                onChange={handleSfxVolumeChange}
+                className="settings-volume-slider"
+              />
+              <span className="item-detail settings-volume-pct">{Math.round(sfxVolume * 100)}%</span>
+            </div>
           </div>
 
           <div className="settings-section">

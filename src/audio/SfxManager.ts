@@ -9,17 +9,36 @@ import type { SfxEventId } from '../engine/types';
 // this ships now instead of waiting on that.
 class SfxManager {
   private ctx: AudioContext | null = null;
+  private masterGain: GainNode | null = null;
   private muted = false;
   private unlocked = false;
+  private volume = 0.7;
 
+  // Every tone() routes through this single master gain node instead of
+  // straight to ctx.destination, so setVolume can scale every sfx at once
+  // (live, mid-playback) without touching each tone's own peakGain.
   private ensureContext(): AudioContext | null {
     if (typeof window === 'undefined' || typeof AudioContext === 'undefined') {
       return null;
     }
     if (!this.ctx) {
       this.ctx = new AudioContext();
+      this.masterGain = this.ctx.createGain();
+      this.masterGain.gain.value = this.volume;
+      this.masterGain.connect(this.ctx.destination);
     }
     return this.ctx;
+  }
+
+  setVolume(volume: number): void {
+    this.volume = Math.max(0, Math.min(1, volume));
+    if (this.masterGain) {
+      this.masterGain.gain.value = this.volume;
+    }
+  }
+
+  getVolume(): number {
+    return this.volume;
   }
 
   // Browsers block audio.start() before a user gesture happens anywhere on
@@ -78,7 +97,7 @@ class SfxManager {
     gainNode.gain.exponentialRampToValueAtTime(peak, startAt + Math.min(0.02, durationSeconds * 0.3));
     gainNode.gain.exponentialRampToValueAtTime(0.0001, startAt + durationSeconds);
     osc.connect(gainNode);
-    gainNode.connect(ctx.destination);
+    gainNode.connect(this.masterGain ?? ctx.destination);
     osc.start(startAt);
     osc.stop(startAt + durationSeconds + 0.02);
   }

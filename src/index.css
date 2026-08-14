@@ -155,6 +155,18 @@ select {
   flex-direction: column;
   gap: 8px;
   pointer-events: auto;
+  /* Matches .hud-layer's own z-index (15) - needed here too because
+     BattleScreen.tsx's top-center combat-status widget renders this class
+     standalone (not nested inside App.tsx's .hud-layer), as a sibling of
+     .canvas-stage. Both are position:absolute with no z-index of their
+     own, so without this, plain DOM order painting rules put the canvas
+     (a later sibling, and fully opaque - drawBackground fills every
+     pixel) on top of the widget, hiding it completely despite the widget
+     itself rendering correctly - confirmed via getComputedStyle, which
+     only reports declared styles and doesn't reflect paint order, so this
+     bug didn't show up under DOM/CSS inspection, only in an actual
+     screenshot. */
+  z-index: 15;
 }
 
 .hud-corner.top-left {
@@ -2142,4 +2154,9 @@ select {
 
 .settings-volume-slider:disabled {
   opacity: 0.4;
+}
+
+.settings-volume-pct {
+  min-width: 34px;
+  text-align: right;
 }
