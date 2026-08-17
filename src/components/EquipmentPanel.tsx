@@ -180,7 +180,7 @@ export const ItemCard = memo(function ItemCard({ item, actions, labelPrefix }: {
         </div>
       )}
 
-      <div className="item-actions" style={{ marginTop: 6 }}>
+      <div className="item-card-actions">
         <button className="btn btn-sm" onClick={() => starUpEquipment(item.instanceId)} disabled={!nextStarCost || !canStarUp}>
           {nextStarCost ? `${t('star.upgrade')} (${nextStarCost}${t('battle.gold')})` : t('star.maxed')}
         </button>
@@ -238,6 +238,10 @@ function EquipmentPanel() {
     () => filteredInventory.reduce((sum, item) => sum + equipmentRarities[item.rarity].sellValue, 0),
     [filteredInventory],
   );
+  const salvageFilteredDust = useMemo(
+    () => filteredInventory.reduce((sum, item) => sum + equipmentRarities[item.rarity].reforgeDustValue, 0),
+    [filteredInventory],
+  );
 
   const lowRarityItems = useMemo(() => inventory.filter((item) => LOW_RARITIES.includes(item.rarity)), [inventory]);
   const lowRarityDust = useMemo(
@@ -248,6 +252,17 @@ function EquipmentPanel() {
   function sellFiltered() {
     for (const item of filteredInventory) {
       sellItem(item.instanceId);
+    }
+  }
+
+  // General filter-driven bulk salvage (any slot/rarity combination the
+  // filter bar above is set to) - separate from salvageLowRarity below,
+  // which stays as a fixed one-tap white+green shortcut (a single rarity
+  // dropdown can't express "white AND green" at once). This is the "let me
+  // filter first, then salvage whatever matches" the fixed button couldn't do.
+  function salvageFiltered() {
+    for (const item of filteredInventory) {
+      salvageEquipment(item.instanceId);
     }
   }
 
@@ -315,7 +330,7 @@ function EquipmentPanel() {
               <div className="empty-state">{t('equipment.noMatch')}</div>
             ) : (
               <>
-                <div className="card-grid" style={{ maxHeight: 420, overflowY: 'auto', paddingRight: 2 }}>
+                <div className="equipment-card-grid" style={{ maxHeight: 420, overflowY: 'auto', paddingRight: 2 }}>
                   {filteredInventory.map((item) => (
                     <ItemCard
                       key={item.instanceId}
@@ -333,9 +348,14 @@ function EquipmentPanel() {
                     />
                   ))}
                 </div>
-                <button className="btn btn-danger btn-block" style={{ marginTop: 8 }} onClick={sellFiltered}>
-                  {t('equipment.sellFiltered')} ({filteredInventory.length} · {sellFilteredGold} {t('battle.gold')})
-                </button>
+                <div className="item-actions" style={{ marginTop: 8 }}>
+                  <button className="btn btn-danger" onClick={sellFiltered}>
+                    {t('equipment.sellFiltered')} ({filteredInventory.length} · {sellFilteredGold} {t('battle.gold')})
+                  </button>
+                  <button className="btn btn-danger" onClick={salvageFiltered}>
+                    {t('equipment.salvageFiltered')} ({filteredInventory.length} · +{salvageFilteredDust} {t('equipment.reforgeDustShort')})
+                  </button>
+                </div>
               </>
             )}
           </>

@@ -9,11 +9,28 @@ export const enemyScalingConfig = {
   stage: {
     weight: 0.15,
   },
-  level: {
-    weight: 0.05,
+  // DifficultySystem.overperformance's weight - multiplies "how many times
+  // over the stage-recommended team power is the player right now" (0 at or
+  // under the intended pace). Replaces the old separate level/upgrades
+  // weights, which only taxed two of the game's several permanent power
+  // sources and left equipment/talents/ascension-shop completely free -
+  // see DifficultySystem.ts's doc comment on that contributor for why. 12
+  // means a player sitting at 2x the recommended power (ratio 1) adds +12 to
+  // the difficulty score outright - roughly the same order of magnitude as
+  // clearing 5+ extra chapters (each chapter ≈ 10*stage.weight = 1.5 score),
+  // so meaningfully out-gearing the curve is now something enemies actually
+  // respond to instead of a free pass.
+  overperformance: {
+    weight: 12,
   },
-  upgrades: {
-    weight: 0.02,
+  // DifficultySystem.skillDps's weight - multiplies the sum of every
+  // equipped skill's approximate sustained single-target DPS multiplier.
+  // 4 well-rolled equipped skills sum to roughly 1.5-3 by that measure, so
+  // this adds roughly +9 to +18 score for a fully skill-equipped hero -
+  // comparable to overperformance's contribution, since skill damage is
+  // otherwise invisible to it (see DifficultySystem.ts).
+  skillDps: {
+    weight: 6,
   },
   // Four-phase difficulty curve, keyed off the combined difficultyScore
   // (dominated by stage.weight, so "score" and "stage" move together for a
@@ -32,21 +49,24 @@ export const enemyScalingConfig = {
     phase1EndScore: 22.5,
     phase2EndScore: 60,
     phase3EndScore: 105,
-    // Phase 1 (0..phase1EndScore): linear growth. Raised from 0.1 (which
-    // left chapters 1-15 feeling nearly flat, on top of enemyConfig.ts's
-    // base stats also being low) - still clearable by spending gold on
-    // upgrades as it comes in, just noticeably steeper: by phase1EndScore
-    // (chapter ~15) enemies are now ~6x tougher instead of ~3.25x.
-    linearRate: 0.22,
+    // Phase 1 (0..phase1EndScore): linear growth. Raised twice now - 0.1
+    // originally, then 0.22 (left chapters 1-15 feeling nearly flat on top
+    // of enemyConfig.ts's base stats also being low), still reported as too
+    // easy once equipment/skills entered the picture (see overperformance/
+    // skillDps above, the real fix for that specific complaint) - raised
+    // again to 0.28 alongside them so the plain wave-progression pace itself
+    // is also tighter: by phase1EndScore (chapter ~15) enemies are now ~7.3x
+    // tougher instead of ~6x.
+    linearRate: 0.28,
     // Phase 2 (phase1EndScore..phase2EndScore): light exponential per score
     // point - upgrades alone start falling behind, targeted play helps.
-    phase2Growth: 1.06,
+    phase2Growth: 1.07,
     // The wall: an instant multiplier spike the moment score crosses
     // phase2EndScore, deliberately too big to out-upgrade in one sitting.
     wallJumpMultiplier: 5,
     // Phase 3 (phase2EndScore..phase3EndScore): continued exponential climb
     // after the wall, while the player pushes toward the ascension gate.
-    phase3Growth: 1.09,
+    phase3Growth: 1.1,
     // Phase 4 (phase3EndScore..): steep compound growth - exponential times
     // a linearly-growing factor, so it keeps accelerating rather than
     // settling into a fixed exponential rate. This is what makes builds/

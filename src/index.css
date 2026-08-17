@@ -634,6 +634,24 @@ select {
   flex-wrap: wrap;
 }
 
+/* ItemCard's star-up/reforge/sell/salvage row - a fixed 2-column grid
+   instead of .item-actions' flex-wrap. Four differently-sized buttons
+   (some with a cost suffix like "分解 (+15尘)") wrapping unpredictably at
+   .item-actions' flex-wrap was exactly what read as "messy" in the
+   Equipment panel - a 2-col grid gives every button a fixed, predictable
+   slot (text wraps *inside* the button instead of the button jumping row)
+   regardless of how narrow the card is. */
+.item-card-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.item-card-actions .btn {
+  width: 100%;
+}
+
 /* Buttons */
 .btn {
   background: var(--surface-hover);
@@ -1438,6 +1456,18 @@ select {
 .card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+/* EquipmentPanel's main inventory grid specifically - wider minimum column
+   than the generic .card-grid (150px) since each ItemCard here packs a set
+   name, main stat, substats, and now a 2-col action button grid
+   (.item-card-actions) - 150px squeezed that into a cramped, wrapping mess.
+   200px gives the 2-col button grid enough room to read as two clean
+   columns instead of each button wrapping its own text. */
+.equipment-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 8px;
 }
 

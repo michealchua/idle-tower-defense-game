@@ -232,6 +232,7 @@ const zhCN = {
     sortStar: '星级优先',
     itemCount: '件',
     sellFiltered: '出售当前筛选',
+    salvageFiltered: '分解当前筛选',
     noMatch: '没有符合条件的装备',
     details: '详情',
     setPieceSuffix: '件套',
