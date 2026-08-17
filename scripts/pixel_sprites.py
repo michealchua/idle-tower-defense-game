@@ -671,40 +671,36 @@ HERO_CLASSES = {
                       trim=(230, 190, 70, 255), weapon=(230, 190, 70, 255), weapon_kind="orb", headwear="halo"),
 }
 
-# --- Evolution branches (2 per class) ---------------------------------------
+# --- Evolution branches: single protagonist's 3-tier tree (see
+# heroRosterConfig.ts's protagonistEvolutionTree - keys here must match its
+# HeroEvolutionBranch.id values exactly, since getHeroEvolvedSpriteSrc in
+# assetLoader.ts builds the sprite filename straight from that id) ----------
 EVOLUTION_BRANCHES = {
+    # --- Tier 1 (off base warrior) ---
     "warrior-berserker": dict(base="warrior", body=(190, 60, 30, 255), body_dark=(80, 40, 30, 255),
                                 trim=(255, 120, 30, 255), weapon=(230, 230, 230, 255), weapon_kind="sword", headwear="horns"),
     "warrior-guardian": dict(base="warrior", body=(60, 90, 150, 255), body_dark=(50, 60, 80, 255),
                                trim=(190, 200, 220, 255), weapon=(210, 210, 220, 255), weapon_kind="sword", headwear="helmet", cape=True),
-    "mage-pyromancer": dict(base="mage", body=(180, 60, 30, 255), body_dark=(90, 30, 20, 255),
-                              trim=(255, 150, 40, 255), weapon=(255, 140, 40, 255), weapon_kind="orb", headwear="wizard_hat"),
-    "mage-cryomancer": dict(base="mage", body=(60, 130, 200, 255), body_dark=(35, 80, 130, 255),
-                              trim=(190, 230, 250, 255), weapon=(150, 220, 250, 255), weapon_kind="orb", headwear="wizard_hat"),
-    "paladin-lightbringer": dict(base="paladin", body=(250, 240, 210, 255), body_dark=(230, 200, 100, 255),
-                                   trim=(255, 215, 90, 255), weapon=(255, 235, 150, 255), weapon_kind="holy_symbol", headwear="halo"),
-    "paladin-inquisitor": dict(base="paladin", body=(70, 30, 35, 255), body_dark=(35, 18, 20, 255),
-                                 trim=(160, 30, 40, 255), weapon=(210, 210, 220, 255), weapon_kind="sword", headwear="helmet"),
-    "summoner-soul": dict(base="summoner", body=(35, 55, 45, 255), body_dark=(20, 35, 28, 255),
-                            trim=(120, 220, 170, 255), weapon=(140, 230, 190, 255), weapon_kind="orb", headwear="hood"),
-    "summoner-elemental": dict(base="summoner", body=(150, 70, 30, 255), body_dark=(80, 45, 25, 255),
-                                 trim=(250, 160, 60, 255), weapon=(250, 170, 60, 255), weapon_kind="orb", headwear="horns"),
-    "archer-windrunner": dict(base="archer", body=(40, 140, 130, 255), body_dark=(30, 90, 85, 255),
-                                trim=(160, 230, 220, 255), weapon=(140, 100, 60, 255), weapon_kind="bow", headwear="cap", cape=True),
-    "archer-deadeye": dict(base="archer", body=(60, 40, 40, 255), body_dark=(35, 22, 22, 255),
-                             trim=(160, 30, 40, 255), weapon=(90, 70, 45, 255), weapon_kind="bow", headwear="cap"),
-    "assassin-shadowfang": dict(base="assassin", body=(30, 20, 45, 255), body_dark=(18, 12, 28, 255),
-                                  trim=(140, 60, 200, 255), weapon=(190, 150, 230, 255), weapon_kind="dagger", headwear="hood"),
-    "assassin-executioner": dict(base="assassin", body=(30, 25, 28, 255), body_dark=(15, 12, 14, 255),
-                                   trim=(160, 20, 30, 255), weapon=(210, 210, 210, 255), weapon_kind="dagger", headwear="hood", cape=True),
-    "priest-lightweaver": dict(base="priest", body=(255, 245, 220, 255), body_dark=(230, 200, 110, 255),
-                                 trim=(255, 215, 100, 255), weapon=(255, 230, 140, 255), weapon_kind="holy_symbol", headwear="halo"),
-    "priest-oracle": dict(base="priest", body=(80, 60, 120, 255), body_dark=(50, 35, 80, 255),
-                            trim=(120, 200, 210, 255), weapon=(150, 220, 220, 255), weapon_kind="holy_symbol", headwear="hood"),
-    "special-warden": dict(base="special", body=(90, 100, 95, 255), body_dark=(55, 65, 60, 255),
-                             trim=(150, 200, 160, 255), weapon=(180, 190, 200, 255), weapon_kind="staff", headwear="helmet"),
-    "special-arbiter": dict(base="special", body=(80, 40, 110, 255), body_dark=(45, 22, 65, 255),
-                              trim=(230, 190, 70, 255), weapon=(230, 190, 90, 255), weapon_kind="staff", headwear="halo"),
+
+    # --- Tier 2 ---
+    "berserker-warlord": dict(base="warrior", body=(140, 30, 20, 255), body_dark=(60, 20, 18, 255),
+                                trim=(255, 90, 20, 255), weapon=(220, 200, 160, 255), weapon_kind="sword", headwear="horns", cape=True),
+    "berserker-bloodmage": dict(base="mage", body=(120, 20, 30, 255), body_dark=(60, 15, 22, 255),
+                                  trim=(230, 60, 80, 255), weapon=(230, 80, 90, 255), weapon_kind="orb", headwear="horns"),
+    "guardian-paladin": dict(base="paladin", body=(210, 220, 235, 255), body_dark=(140, 155, 180, 255),
+                               trim=(230, 200, 90, 255), weapon=(230, 200, 90, 255), weapon_kind="holy_symbol", headwear="helmet", cape=True),
+    "guardian-sentinel": dict(base="special", body=(60, 120, 150, 255), body_dark=(35, 75, 95, 255),
+                                trim=(180, 220, 230, 255), weapon=(200, 220, 230, 255), weapon_kind="orb", headwear="helmet"),
+
+    # --- Tier 3 (capstones) ---
+    "warlord-titan": dict(base="warrior", body=(90, 20, 15, 255), body_dark=(40, 12, 12, 255),
+                            trim=(255, 150, 30, 255), weapon=(255, 200, 90, 255), weapon_kind="sword", headwear="horns", cape=True),
+    "bloodmage-archmage": dict(base="mage", body=(70, 15, 60, 255), body_dark=(35, 10, 30, 255),
+                                 trim=(220, 60, 160, 255), weapon=(240, 100, 200, 255), weapon_kind="orb", headwear="wizard_hat"),
+    "paladin-highlord": dict(base="paladin", body=(255, 245, 215, 255), body_dark=(220, 190, 110, 255),
+                               trim=(255, 220, 90, 255), weapon=(255, 235, 150, 255), weapon_kind="holy_symbol", headwear="halo", cape=True),
+    "sentinel-warden": dict(base="special", body=(40, 150, 110, 255), body_dark=(25, 95, 70, 255),
+                              trim=(160, 230, 190, 255), weapon=(190, 230, 210, 255), weapon_kind="staff", headwear="halo"),
 }
 
 # --- Enemies -----------------------------------------------------------

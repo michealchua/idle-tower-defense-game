@@ -5,6 +5,7 @@ release/
 *.tsbuildinfo
 .DS_Store
 *.local
+__pycache__/
 
 # scripts/pixel_sprites.py's 2048-class master source art + optional 256/
 # 128/64 variant exports - regenerable locally via the script, not shipped
