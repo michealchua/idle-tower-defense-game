@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { heroRosterConfig, type HeroDefinition } from '../data/heroRosterConfig';
 import { skillDefinitions } from '../data/skillConfig';
+import { getSkillIcon } from './SkillIcon';
 import { heroUpgradeConfig, type HeroClass, type UpgradeableStat } from '../data/heroConfig';
 import { MAX_STAR_LEVEL, gachaRarityConfig, getStarUpCost, type GachaRarity } from '../data/gachaConfig';
 import { isHeroUpgradeMaxed, previewHeroUpgradeBulk } from '../engine/systems/UpgradeSystem';
@@ -121,9 +122,11 @@ function SkillBagSection({ hero }: { hero: HeroState }) {
       return null;
     }
     const cooldownRemaining = hero.skills[skillId]?.cooldownRemaining ?? 0;
+    const SkillIcon = getSkillIcon(skillId);
     return (
       <div key={skillId} className="item-actions" style={{ alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
-        <span className="text-faint" style={{ color: skillDef.color }}>
+        <span className="text-faint" style={{ color: skillDef.color, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <SkillIcon />
           {t(skillDef.nameKey)}
           {equipped && (
             <span className="text-faint">

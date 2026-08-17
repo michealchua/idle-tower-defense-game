@@ -13,6 +13,7 @@ import { getPetSpriteSrc } from '../render/assetLoader';
 import { sfxManager } from '../audio/SfxManager';
 import { skillDefinitions } from '../data/skillConfig';
 import { petRosterConfig } from '../data/petRosterConfig';
+import { getSkillIcon } from './SkillIcon';
 
 // A pull result's id is unique to exactly one roster (skill ids are
 // `skill-*`, pet ids are `pet-N` - see skillConfig.ts/petRosterConfig.ts, no
@@ -36,11 +37,15 @@ function gachaResultAvatarSrc(result: GachaPullResult): string {
 // fallback needed - SpriteAvatar's canvas resolves before ever needing one).
 function gachaResultFallback(result: GachaPullResult) {
   const skillDefinition = skillDefinitions[result.id];
-  return skillDefinition ? (
+  if (!skillDefinition) {
+    return undefined;
+  }
+  const SkillIcon = getSkillIcon(result.id);
+  return (
     <span style={{ color: skillDefinition.color, fontSize: 20 }}>
-      <IconOrb />
+      <SkillIcon />
     </span>
-  ) : undefined;
+  );
 }
 
 const RARITY_LABEL_KEYS: Record<GachaRarity, string> = {

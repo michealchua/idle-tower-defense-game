@@ -257,6 +257,258 @@ function colorWithAlpha(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+// --- Per-skill impact/beam/pulse geometry -----------------------------
+// Every skill used to share just 3 shapes (one plain ring/beam/pulse per
+// effectType, distinguished only by color) - these read effect.shape
+// (SkillDefinition.shape, threaded through by SkillSystem's three cast
+// functions) to draw genuinely different geometry per skill instead.
+
+// Shared radiating-spike primitive - a ring of short lines from
+// radius*innerRatio out to radius, used by several of the shapes below
+// (crystalline bursts, cracks, star spikes, flame licks) at different
+// count/width/innerRatio combinations rather than each reimplementing the
+// same loop.
+function drawAoeSpikes(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  radius: number,
+  count: number,
+  color: string,
+  alpha: number,
+  lineWidth: number,
+  innerRatio: number,
+): void {
+  ctx.strokeStyle = colorWithAlpha(color, alpha);
+  ctx.lineWidth = lineWidth;
+  for (let i = 0; i < count; i += 1) {
+    const angle = (i / count) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(x + Math.cos(angle) * radius * innerRatio, y + Math.sin(angle) * radius * innerRatio);
+    ctx.lineTo(x + Math.cos(angle) * radius, y + Math.sin(angle) * radius);
+    ctx.stroke();
+  }
+}
+
+// aoeDamage skills' impact point - see skillConfig.ts's SkillVisualShape
+// union for which skill maps to which shape.
+function drawAoeDamageShape(ctx: CanvasRenderingContext2D, effect: VisualEffect, progress: number, fadeAlpha: number): void {
+  const maxRadius = effect.radius ?? 40;
+  const radius = maxRadius * progress;
+  const color = effect.color ?? '#ff9800';
+  const { x, y } = effect;
+
+  switch (effect.shape) {
+    case 'iceShards':
+      drawAoeSpikes(ctx, x, y, radius, 7, color, fadeAlpha, 2.5, 0.1);
+      return;
+    case 'crack':
+      drawAoeSpikes(ctx, x, y, radius, 5, color, fadeAlpha, 4, 0.05);
+      return;
+    case 'novaSpikes':
+      drawAoeSpikes(ctx, x, y, radius, 8, color, fadeAlpha, 2, 0.2);
+      drawAoeSpikes(ctx, x, y, radius * 0.65, 8, color, fadeAlpha * 0.7, 1.5, 0.15);
+      return;
+    case 'flameBurst':
+      drawAoeSpikes(ctx, x, y, radius, 6, color, fadeAlpha, 3.5, 0.25);
+      ctx.fillStyle = colorWithAlpha(color, fadeAlpha * 0.3);
+      ctx.beginPath();
+      ctx.arc(x, y, radius * 0.4, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    case 'meteorImpact':
+      ctx.strokeStyle = colorWithAlpha(color, fadeAlpha);
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = colorWithAlpha(color, fadeAlpha * 0.6);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x, y, radius * 0.6, 0, Math.PI * 2);
+      ctx.stroke();
+      drawAoeSpikes(ctx, x, y, radius * 0.9, 5, color, fadeAlpha * 0.8, 2, 0.5);
+      return;
+    default:
+      // 'ring' (fireball) - the original two-tone fill+stroke ring every
+      // aoeDamage skill used to share.
+      ctx.fillStyle = colorWithAlpha(color, fadeAlpha * 0.5);
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = colorWithAlpha(color, fadeAlpha);
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.stroke();
+      return;
+  }
+}
+
+// chainDamage skills' hero-to-target line.
+function drawChainDamageShape(ctx: CanvasRenderingContext2D, effect: VisualEffect, fadeAlpha: number): void {
+  if (effect.targetX === undefined || effect.targetY === undefined) {
+    return;
+  }
+  const color = effect.color ?? '#ffeb3b';
+  const { x, y, targetX, targetY } = effect;
+
+  switch (effect.shape) {
+    case 'arrowStreak': {
+      const startY = targetY - 55;
+      ctx.strokeStyle = colorWithAlpha(color, fadeAlpha);
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(targetX, startY);
+      ctx.lineTo(targetX, targetY);
+      ctx.moveTo(targetX - 4, targetY - 6);
+      ctx.lineTo(targetX, targetY);
+      ctx.lineTo(targetX + 4, targetY - 6);
+      ctx.stroke();
+      return;
+    }
+    case 'slash': {
+      const dx = targetX - x;
+      const dy = targetY - y;
+      const len = Math.hypot(dx, dy) || 1;
+      const nx = (-dy / len) * 2.5;
+      const ny = (dx / len) * 2.5;
+      ctx.strokeStyle = colorWithAlpha(color, fadeAlpha);
+      ctx.lineWidth = 2.2;
+      for (const sign of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(x + nx * sign, y + ny * sign);
+        ctx.lineTo(targetX + nx * sign, targetY + ny * sign);
+        ctx.stroke();
+      }
+      return;
+    }
+    case 'whipCurve': {
+      const midX = (x + targetX) / 2 + (y - targetY) * 0.15;
+      const midY = (y + targetY) / 2 + (targetX - x) * 0.15;
+      ctx.strokeStyle = colorWithAlpha(color, fadeAlpha);
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.quadraticCurveTo(midX, midY, targetX, targetY);
+      ctx.stroke();
+      return;
+    }
+    case 'spiritDots': {
+      const steps = 6;
+      ctx.fillStyle = colorWithAlpha(color, fadeAlpha);
+      for (let i = 1; i <= steps; i += 1) {
+        const t = i / (steps + 1);
+        ctx.beginPath();
+        ctx.arc(x + (targetX - x) * t, y + (targetY - y) * t, 1.8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      return;
+    }
+    case 'voidRing': {
+      ctx.strokeStyle = colorWithAlpha(color, fadeAlpha * 0.7);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(targetX, targetY);
+      ctx.stroke();
+      ctx.strokeStyle = colorWithAlpha(color, fadeAlpha);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(targetX, targetY, 8, 0, Math.PI * 2);
+      ctx.stroke();
+      return;
+    }
+    case 'bolt': {
+      const segments = 4;
+      ctx.strokeStyle = colorWithAlpha(color, fadeAlpha);
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      for (let i = 1; i < segments; i += 1) {
+        const t = i / segments;
+        const jitter = Math.sin(i * 91.7 + x) * 7;
+        ctx.lineTo(x + (targetX - x) * t + jitter, y + (targetY - y) * t);
+      }
+      ctx.lineTo(targetX, targetY);
+      ctx.stroke();
+      return;
+    }
+    default:
+      ctx.strokeStyle = colorWithAlpha(color, fadeAlpha);
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(targetX, targetY);
+      ctx.stroke();
+      return;
+  }
+}
+
+// healAlly skills' pulse on the healed target.
+function drawHealShape(ctx: CanvasRenderingContext2D, effect: VisualEffect, progress: number, fadeAlpha: number): void {
+  const maxRadius = effect.radius ?? 40;
+  const radius = maxRadius * progress;
+  const color = effect.color ?? '#69f0ae';
+  const { x, y } = effect;
+
+  switch (effect.shape) {
+    case 'leafRise':
+    case 'dropletRise': {
+      const count = 4;
+      ctx.fillStyle = colorWithAlpha(color, fadeAlpha);
+      for (let i = 0; i < count; i += 1) {
+        const angle = (i / count) * Math.PI * 2;
+        const px = x + Math.cos(angle) * 6;
+        const py = y - progress * 22 + Math.sin(angle) * 3;
+        ctx.beginPath();
+        ctx.arc(px, py, 2.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      return;
+    }
+    case 'domePulse':
+    case 'shieldRings': {
+      const ringCount = effect.shape === 'shieldRings' ? 3 : 2;
+      for (let i = 0; i < ringCount; i += 1) {
+        const ringRadius = Math.max(2, radius * (1 - i * 0.22));
+        ctx.strokeStyle = colorWithAlpha(color, fadeAlpha * (1 - i * 0.25));
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x, y, ringRadius, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      return;
+    }
+    case 'phoenixBurst':
+      drawAoeSpikes(ctx, x, y, radius, 6, color, fadeAlpha, 2, 0.3);
+      ctx.strokeStyle = colorWithAlpha(color, fadeAlpha);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x, y, radius * 0.5, 0, Math.PI * 2);
+      ctx.stroke();
+      return;
+    default: {
+      // 'radiant' (healingLight) - the original plain ring, plus a small
+      // cross of rays so it doesn't collapse back to looking identical to
+      // domePulse/shieldRings at a glance.
+      ctx.strokeStyle = colorWithAlpha(color, fadeAlpha);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.stroke();
+      const rayLen = radius * 0.5;
+      ctx.beginPath();
+      ctx.moveTo(x - rayLen, y);
+      ctx.lineTo(x + rayLen, y);
+      ctx.moveTo(x, y - rayLen);
+      ctx.lineTo(x, y + rayLen);
+      ctx.stroke();
+      return;
+    }
+  }
+}
+
 // Upper-left-lit radial gradient from a single base color - this one call is
 // what turns every flat-fill silhouette below into something that reads as
 // shaded/rendered instead of a paint-bucket fill.
@@ -874,51 +1126,23 @@ function drawVisualEffect(ctx: CanvasRenderingContext2D, effect: VisualEffect): 
       ctx.fillText(t('hero.milestoneUnlock'), effect.x, y);
       return;
     }
-    case 'skillImpact': {
-      // Per-skill color (SkillDefinition.color, see SkillSystem.
-      // castAoeDamage) - 6 skills used to all burst the same orange/amber
-      // regardless of whether it was Fireball or Earthquake. Falls back to
-      // that original two-tone orange/amber if a caller ever omits color.
-      const maxRadius = effect.radius ?? 40;
-      const radius = maxRadius * progress;
-      ctx.fillStyle = effect.color ? colorWithAlpha(effect.color, fadeAlpha * 0.5) : `rgba(255, 87, 34, ${fadeAlpha * 0.5})`;
-      ctx.beginPath();
-      ctx.arc(effect.x, effect.y, radius, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = effect.color ? colorWithAlpha(effect.color, fadeAlpha) : `rgba(255, 193, 7, ${fadeAlpha})`;
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(effect.x, effect.y, radius, 0, Math.PI * 2);
-      ctx.stroke();
+    case 'skillImpact':
+      // Per-skill shape+color (SkillDefinition.shape/color, see
+      // SkillSystem.castAoeDamage) - see drawAoeDamageShape's doc comment.
+      drawAoeDamageShape(ctx, effect, progress, fadeAlpha);
       return;
-    }
-    case 'lightningBolt': {
-      if (effect.targetX === undefined || effect.targetY === undefined) {
-        return;
-      }
-      // Per-skill color, same as skillImpact - see SkillSystem.castChainDamage.
-      ctx.strokeStyle = effect.color ? colorWithAlpha(effect.color, fadeAlpha) : `rgba(255, 235, 59, ${fadeAlpha})`;
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(effect.x, effect.y);
-      ctx.lineTo(effect.targetX, effect.targetY);
-      ctx.stroke();
+    case 'lightningBolt':
+      // Per-skill shape+color - see SkillSystem.castChainDamage /
+      // drawChainDamageShape.
+      drawChainDamageShape(ctx, effect, fadeAlpha);
       return;
-    }
-    case 'healPulse': {
-      // Per-skill color, same as skillImpact - see SkillSystem.castHealAlly.
-      // Deliberately NOT applied to healNumber (stays a fixed green) so a
-      // "+123" reads as "healing" at a glance regardless of which heal
-      // skill produced it.
-      const maxRadius = effect.radius ?? 40;
-      const radius = maxRadius * progress;
-      ctx.strokeStyle = effect.color ? colorWithAlpha(effect.color, fadeAlpha) : `rgba(105, 240, 174, ${fadeAlpha})`;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(effect.x, effect.y, radius, 0, Math.PI * 2);
-      ctx.stroke();
+    case 'healPulse':
+      // Per-skill shape+color - see SkillSystem.castHealAlly /
+      // drawHealShape. Deliberately NOT applied to healNumber (stays a
+      // fixed green) so a "+123" reads as "healing" at a glance regardless
+      // of which heal skill produced it.
+      drawHealShape(ctx, effect, progress, fadeAlpha);
       return;
-    }
     case 'shieldBreak': {
       const radius = ENEMY_RADIUS + progress * 12;
       ctx.strokeStyle = `rgba(64, 196, 255, ${fadeAlpha})`;

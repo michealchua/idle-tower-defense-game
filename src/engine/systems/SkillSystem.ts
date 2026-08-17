@@ -97,6 +97,7 @@ function castAoeDamage(state: GameState, hero: HeroState, definition: SkillDefin
     y: impactTarget.position.y,
     radius: aoeRadius,
     color: definition.color,
+    shape: definition.shape,
     lifetime: effectLifetimes.skillImpact,
   });
   // Skill's own color (definition.color), not the fixed
@@ -132,6 +133,7 @@ function castChainDamage(state: GameState, hero: HeroState, definition: SkillDef
       targetX: target.position.x,
       targetY: target.position.y,
       color: definition.color,
+      shape: definition.shape,
       lifetime: effectLifetimes.lightningBolt,
     });
     spawnParticleBurst(state, target.position.x, target.position.y, { ...particleBurstConfig.skillImpact, color: definition.color });
@@ -169,6 +171,7 @@ function castHealAlly(state: GameState, hero: HeroState, definition: SkillDefini
       y: target.position.y,
       radius: 30,
       color: definition.color,
+      shape: definition.shape,
       lifetime: effectLifetimes.healPulse,
     });
     spawnVisualEffect(state, {

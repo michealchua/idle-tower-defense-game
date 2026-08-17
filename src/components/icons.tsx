@@ -339,3 +339,188 @@ export function IconHeart(props: IconProps) {
     </Base>
   );
 }
+
+// --- Skill icons -----------------------------------------------------------
+// One per skillConfig.ts entry (18 total) - replaces the single shared
+// IconOrb every skill used to render (tinted by color alone) in HeroPanel's
+// skill bag, GachaPanel's reveal cards, and CodexPanel's skill tab. See
+// skillConfig.ts's `icon` field for the id->component mapping.
+
+export function IconFireball(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path d="M12 2C9 6 7 9 7 13A5 5 0 0 0 17 13C17 10.5 15.5 9 14.5 7.5C14.7 9 13.8 9.8 13 9C13.6 6.5 12.8 4 12 2Z" />
+    </Base>
+  );
+}
+
+export function IconMeteor(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path d="M3 3L11 11" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" opacity="0.55" />
+      <path d="M6 6L11 11" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" opacity="0.8" />
+      <circle cx="15" cy="15" r="6" />
+    </Base>
+  );
+}
+
+export function IconFlameRing(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path d="M12 3L13.6 7L12 9L10.4 7Z" />
+      <path d="M19.8 8.2L18.5 12.4L16 12.7L17 10.1Z" />
+      <path d="M17.5 18.7L13.6 16.9L14.4 14.5L16.6 16Z" />
+      <path d="M6.5 18.7L9.6 16L7.4 14.5L6.2 16.9Z" />
+      <path d="M4.2 8.2L8.5 10.1L7 12.7L4.5 12.4Z" />
+      <circle cx="12" cy="12.5" r="2.6" opacity="0.6" />
+    </Base>
+  );
+}
+
+export function IconIceCrystal(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path d="M12 2L16 9L12 22L8 9Z" />
+      <path d="M4 9L20 9" fill="none" stroke="currentColor" strokeWidth="1.4" opacity="0.6" />
+    </Base>
+  );
+}
+
+export function IconEarthquake(props: IconProps) {
+  return (
+    <Base {...props}>
+      <rect x="3" y="17" width="18" height="3" rx="0.5" opacity="0.5" />
+      <path
+        d="M4 16L9 10L11.5 13L14 7L16.5 11L20 5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Base>
+  );
+}
+
+export function IconNovaBurst(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path d="M12 1L13.5 8L20 5L14.5 10L22 12L14.5 14L20 19L13.5 16L12 23L10.5 16L4 19L9.5 14L2 12L9.5 10L4 5L10.5 8Z" />
+    </Base>
+  );
+}
+
+export function IconLightningBolt(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path d="M13 2L5 14H11L10 22L19 9H13Z" />
+    </Base>
+  );
+}
+
+export function IconArrowRain(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path d="M6 2V13M6 13L3 10M6 13L9 10" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" opacity="0.55" />
+      <path d="M12 1V15M12 15L8.5 11.5M12 15L15.5 11.5" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M18 2V13M18 13L15 10M18 13L21 10" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" opacity="0.55" />
+      <rect x="2" y="20" width="20" height="2" rx="1" opacity="0.4" />
+    </Base>
+  );
+}
+
+export function IconChainBlade(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path d="M4 4L20 20M8 4L4 8" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M20 4L4 20M16 4L20 8" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.6" />
+    </Base>
+  );
+}
+
+export function IconThornVine(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path d="M4 20C4 12 8 10 6 4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M6 16L9.5 15M5 12L8.5 10.5M5.5 8L9 7.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <circle cx="6" cy="4" r="1.6" />
+    </Base>
+  );
+}
+
+export function IconSpiritLink(props: IconProps) {
+  return (
+    <Base {...props}>
+      <circle cx="6" cy="7" r="3.5" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <circle cx="18" cy="17" r="3.5" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <circle cx="10.5" cy="11" r="1.1" />
+      <circle cx="13.5" cy="14" r="1.1" opacity="0.7" />
+    </Base>
+  );
+}
+
+export function IconVoidChain(props: IconProps) {
+  return (
+    <Base {...props}>
+      <circle cx="12" cy="12" r="4.5" />
+      <ellipse cx="5.5" cy="12" rx="3" ry="4" fill="none" stroke="currentColor" strokeWidth="1.7" />
+      <ellipse cx="18.5" cy="12" rx="3" ry="4" fill="none" stroke="currentColor" strokeWidth="1.7" />
+    </Base>
+  );
+}
+
+export function IconRadiantCross(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path d="M12 2V22M2 12H22" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" opacity="0.9" />
+      <path d="M5 5L19 19M19 5L5 19" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" opacity="0.45" />
+      <circle cx="12" cy="12" r="2.6" />
+    </Base>
+  );
+}
+
+export function IconLeaf(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path d="M4 20C4 10 11 3 21 3C21 13 14 20 4 20Z" />
+      <path d="M4 20L15 9" fill="none" stroke="var(--bg, #0f1117)" strokeWidth="1.3" opacity="0.55" />
+    </Base>
+  );
+}
+
+export function IconSanctuaryDome(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path d="M4 20C4 12 7.5 6 12 6C16.5 6 20 12 20 20Z" fill="none" stroke="currentColor" strokeWidth="2" />
+      <path d="M4 20H20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M12 2L13 5H11Z" opacity="0.8" />
+    </Base>
+  );
+}
+
+export function IconDroplet(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path d="M12 2C8 8 5 12 5 15.5A7 7 0 0 0 19 15.5C19 12 16 8 12 2Z" />
+    </Base>
+  );
+}
+
+export function IconPulseRings(props: IconProps) {
+  return (
+    <Base {...props}>
+      <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.4" />
+      <circle cx="12" cy="12" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.8" opacity="0.7" />
+      <circle cx="12" cy="12" r="2.2" />
+    </Base>
+  );
+}
+
+export function IconPhoenixWing(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path d="M12 21C12 21 4 17 4 9C4 5 7 3 12 3C17 3 20 5 20 9C20 17 12 21 12 21Z" fill="none" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M12 3V17M8 8L12 11L16 8M7 13L12 16L17 13" fill="none" stroke="currentColor" strokeWidth="1.3" opacity="0.75" />
+    </Base>
+  );
+}

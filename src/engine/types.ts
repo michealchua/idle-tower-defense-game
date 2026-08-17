@@ -298,6 +298,13 @@ export interface VisualEffect {
   // boss-kill/skill-impact/hero-down each get their own, see
   // effectConfig.particleBurstConfig).
   color?: string;
+  // skillImpact/lightningBolt/healPulse only - selects which distinct
+  // geometry CanvasRenderer draws for this specific skill (see
+  // SkillDefinition.shape in skillConfig.ts, threaded through by
+  // SkillSystem's three cast functions) instead of one shared shape per
+  // effectType. Undefined falls back to each kind's original plain
+  // ring/line/pulse shape.
+  shape?: string;
   age: number;
   lifetime: number;
 }

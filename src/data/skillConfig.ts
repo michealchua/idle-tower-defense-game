@@ -22,6 +22,35 @@ export type SkillTargetingStrategyKey =
   | 'strongest'
   | 'random';
 
+// Per-skill visual geometry CanvasRenderer draws for the skillImpact/
+// lightningBolt/healPulse effect kinds - see its drawSkillImpactShape/
+// drawChainDamageShape/drawHealShape. One value per skill (18 total, none
+// shared) so every skill reads as visually distinct beyond just its color,
+// not only the 3 identical shapes (one per effectType) every skill used to
+// share. Grouped by which effectType's draw case reads it.
+export type SkillVisualShape =
+  // aoeDamage (skillImpact)
+  | 'ring'
+  | 'meteorImpact'
+  | 'flameBurst'
+  | 'iceShards'
+  | 'crack'
+  | 'novaSpikes'
+  // chainDamage (lightningBolt)
+  | 'bolt'
+  | 'arrowStreak'
+  | 'slash'
+  | 'whipCurve'
+  | 'spiritDots'
+  | 'voidRing'
+  // healAlly (healPulse)
+  | 'radiant'
+  | 'leafRise'
+  | 'domePulse'
+  | 'dropletRise'
+  | 'shieldRings'
+  | 'phoenixBurst';
+
 export interface SkillDefinition {
   id: string;
   // i18n key for the skill's display name - looked up directly by
@@ -50,6 +79,8 @@ export interface SkillDefinition {
   // Earthquake looked identical mid-cast. Themed per skill's flavor, not its
   // effectType, so skills sharing an effectType still read as distinct.
   color: string;
+  // See SkillVisualShape's doc comment.
+  shape: SkillVisualShape;
   // Gacha pool tier (GachaSystem.pullSkill) - spread across all 7 rarities
   // so every tier of the skill gacha has at least one hit, same intent as
   // heroRosterConfig's rarity spread had before the single-protagonist
@@ -70,6 +101,7 @@ export const skillDefinitions: Record<string, SkillDefinition> = {
     aoeRadius: 60,
     damageMultiplier: 1.5,
     color: '#ff7043',
+    shape: 'ring',
     rarity: 'green',
   },
   // Same effectType as Fireball - a bigger, slower-cooling nuke. Zero new
@@ -86,6 +118,7 @@ export const skillDefinitions: Record<string, SkillDefinition> = {
     aoeRadius: 100,
     damageMultiplier: 3,
     color: '#ff3d00',
+    shape: 'meteorImpact',
     rarity: 'gold',
   },
   'skill-flameNova': {
@@ -99,6 +132,7 @@ export const skillDefinitions: Record<string, SkillDefinition> = {
     aoeRadius: 70,
     damageMultiplier: 1.2,
     color: '#ffab40',
+    shape: 'flameBurst',
     rarity: 'blue',
   },
   'skill-iceBurst': {
@@ -112,6 +146,7 @@ export const skillDefinitions: Record<string, SkillDefinition> = {
     aoeRadius: 80,
     damageMultiplier: 1.7,
     color: '#4fc3f7',
+    shape: 'iceShards',
     rarity: 'blue',
   },
   'skill-earthquake': {
@@ -125,6 +160,7 @@ export const skillDefinitions: Record<string, SkillDefinition> = {
     aoeRadius: 120,
     damageMultiplier: 3.4,
     color: '#8d6e63',
+    shape: 'crack',
     rarity: 'red',
   },
   'skill-novaBlast': {
@@ -138,6 +174,7 @@ export const skillDefinitions: Record<string, SkillDefinition> = {
     aoeRadius: 55,
     damageMultiplier: 1.4,
     color: '#ba68c8',
+    shape: 'novaSpikes',
     rarity: 'purple',
   },
 
@@ -156,6 +193,7 @@ export const skillDefinitions: Record<string, SkillDefinition> = {
     targetCount: 3,
     damageMultiplier: 0.8,
     color: '#ffee58',
+    shape: 'bolt',
     rarity: 'gold',
   },
   'skill-arrowRain': {
@@ -169,6 +207,7 @@ export const skillDefinitions: Record<string, SkillDefinition> = {
     targetCount: 4,
     damageMultiplier: 0.6,
     color: '#9ccc65',
+    shape: 'arrowStreak',
     rarity: 'blue',
   },
   'skill-chainBlade': {
@@ -182,6 +221,7 @@ export const skillDefinitions: Record<string, SkillDefinition> = {
     targetCount: 2,
     damageMultiplier: 1.1,
     color: '#b0bec5',
+    shape: 'slash',
     rarity: 'white',
   },
   'skill-thornWhip': {
@@ -195,6 +235,7 @@ export const skillDefinitions: Record<string, SkillDefinition> = {
     targetCount: 2,
     damageMultiplier: 1.3,
     color: '#66bb6a',
+    shape: 'whipCurve',
     rarity: 'green',
   },
   'skill-spiritLink': {
@@ -208,6 +249,7 @@ export const skillDefinitions: Record<string, SkillDefinition> = {
     targetCount: 3,
     damageMultiplier: 1,
     color: '#4db6ac',
+    shape: 'spiritDots',
     rarity: 'purple',
   },
   'skill-voidChain': {
@@ -221,6 +263,7 @@ export const skillDefinitions: Record<string, SkillDefinition> = {
     targetCount: 5,
     damageMultiplier: 0.7,
     color: '#7c4dff',
+    shape: 'voidRing',
     rarity: 'rainbow',
   },
 
@@ -238,6 +281,7 @@ export const skillDefinitions: Record<string, SkillDefinition> = {
     targetCount: 1,
     damageMultiplier: 1.2,
     color: '#ffd54f',
+    shape: 'radiant',
     rarity: 'purple',
   },
   'skill-natureBlessing': {
@@ -251,6 +295,7 @@ export const skillDefinitions: Record<string, SkillDefinition> = {
     targetCount: 2,
     damageMultiplier: 0.9,
     color: '#aed581',
+    shape: 'leafRise',
     rarity: 'blue',
   },
   'skill-sanctuary': {
@@ -264,6 +309,7 @@ export const skillDefinitions: Record<string, SkillDefinition> = {
     targetCount: 5,
     damageMultiplier: 0.6,
     color: '#fff59d',
+    shape: 'domePulse',
     rarity: 'gold',
   },
   'skill-lifeSpring': {
@@ -277,6 +323,7 @@ export const skillDefinitions: Record<string, SkillDefinition> = {
     targetCount: 1,
     damageMultiplier: 1.6,
     color: '#81d4fa',
+    shape: 'dropletRise',
     rarity: 'white',
   },
   'skill-guardianPulse': {
@@ -290,6 +337,7 @@ export const skillDefinitions: Record<string, SkillDefinition> = {
     targetCount: 3,
     damageMultiplier: 0.8,
     color: '#90a4ae',
+    shape: 'shieldRings',
     rarity: 'green',
   },
   'skill-phoenixGrace': {
@@ -303,6 +351,7 @@ export const skillDefinitions: Record<string, SkillDefinition> = {
     targetCount: 9,
     damageMultiplier: 0.5,
     color: '#ffca28',
+    shape: 'phoenixBurst',
     rarity: 'rainbow',
   },
 };

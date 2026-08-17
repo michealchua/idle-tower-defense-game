@@ -15,7 +15,8 @@ import { useGameStore } from '../store/useGameStore';
 import SpriteAvatar from './SpriteAvatar';
 import { getPetSpriteSrc, getEnemySpriteSrc } from '../render/assetLoader';
 import { ENEMY_SPRITE_TYPE } from '../render/CanvasRenderer';
-import { IconOrb, IconStar } from './icons';
+import { IconStar } from './icons';
+import { getSkillIcon } from './SkillIcon';
 
 const ENEMY_ARCHETYPE_IDS = Object.keys(enemyArchetypes) as EnemyArchetypeId[];
 // Single-protagonist redesign: the old 'hero' tab (100-entry roster, locked
@@ -186,6 +187,7 @@ function CodexPanel() {
   function renderSkillGridItem(definition: SkillDefinition) {
     const isOwned = ownedSkillIds.has(definition.id);
     const isSelected = definition.id === effectiveSkillId;
+    const SkillIcon = getSkillIcon(definition.id);
 
     return (
       <button
@@ -195,7 +197,7 @@ function CodexPanel() {
         onClick={() => setSelectedSkillId(definition.id)}
       >
         <span style={{ color: definition.color, fontSize: 24 }}>
-          <IconOrb />
+          <SkillIcon />
         </span>
         <div className={`roster-grid-item-name ${RARITY_CLASS[definition.rarity]}`}>{t(definition.nameKey)}</div>
         <div className="roster-grid-item-sub">{isOwned ? t('codex.obtained') : t('petRoster.locked')}</div>
@@ -205,9 +207,15 @@ function CodexPanel() {
 
   function renderSkillDetail(definition: SkillDefinition) {
     const isOwned = ownedSkillIds.has(definition.id);
+    const SkillIcon = getSkillIcon(definition.id);
     return (
       <div className={`detail-card ${RARITY_BORDER_CLASS[definition.rarity]}${isOwned ? '' : ' locked'}`}>
-        <div className={`detail-title ${RARITY_CLASS[definition.rarity]}`}>{t(definition.nameKey)}</div>
+        <div className={`detail-title ${RARITY_CLASS[definition.rarity]}`} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ color: definition.color }}>
+            <SkillIcon />
+          </span>
+          {t(definition.nameKey)}
+        </div>
         <div className="item-detail">
           {t(RARITY_LABEL_KEYS[definition.rarity])} · {isOwned ? t('codex.obtained') : t('codex.gachaSource')}
         </div>
