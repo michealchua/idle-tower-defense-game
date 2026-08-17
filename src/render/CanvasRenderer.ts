@@ -1299,11 +1299,13 @@ function drawHero(
   drawEntityWithHitReaction(ctx, hitEffect, hero.position.x, hero.position.y, () => {
     if (sprite) {
       const size = heroRadius * 2;
-      // smooth=false (not true) - hero art is pixel art now (see
-      // scripts/pixel_sprites.py), so it wants the same crisp nearest-
-      // neighbor scaling as every other sprite category, not the bilinear
-      // smoothing a hi-res illustration would've wanted.
-      drawEntitySprite(ctx, sprite, animState, nowSeconds, hero.position.x, hero.position.y, size, needsFlip('hero'), false);
+      // smooth=true - hero art is gradient-shaded stylized 2D art now (see
+      // scripts/pixel_sprites.py's v2 rewrite: rounded panels, rim light,
+      // anti-aliased outline), not flat-color pixel art, so it wants the
+      // same bilinear/bicubic downscaling a hi-res illustration would want
+      // instead of nearest-neighbor (which would alias the gradients/AA
+      // edges into visible noise at non-integer scale factors).
+      drawEntitySprite(ctx, sprite, animState, nowSeconds, hero.position.x, hero.position.y, size, needsFlip('hero'), true);
     } else {
       drawHeroSilhouette(ctx, heroClass, hero.position.x, hero.position.y, heroRadius, heroStyle.color);
       drawFallbackGlyph(ctx, hero.position.x, hero.position.y, heroClass.charAt(0).toUpperCase(), heroRadius * 0.75);
@@ -1340,8 +1342,9 @@ function drawPet(ctx: CanvasRenderingContext2D, pet: PetState, bobSeed: number, 
     const size = PET_RADIUS * 2;
     // Pets never attack (PetSystem.ts - no combat AI), so this is always
     // 'walk' - the bob above is the only motion a pet ever needs on top of
-    // its own walk-cycle frames.
-    drawEntitySprite(ctx, sprite, 'walk', nowSeconds, pet.position.x, bobY, size, needsFlip('pet'));
+    // its own walk-cycle frames. smooth=true - see drawHero's identical
+    // comment on why gradient-shaded art wants bilinear scaling now.
+    drawEntitySprite(ctx, sprite, 'walk', nowSeconds, pet.position.x, bobY, size, needsFlip('pet'), true);
     return;
   }
 
@@ -1403,7 +1406,9 @@ function drawEnemy(
   drawEntityWithHitReaction(ctx, hitEffect, enemy.position.x, enemy.position.y, () => {
     if (sprite) {
       const size = enemyRadius * 2;
-      drawEntitySprite(ctx, sprite, getEnemyAnimationState(enemy, isHurting), nowSeconds, enemy.position.x, enemy.position.y, size, needsFlip('enemy'));
+      // smooth=true - see drawHero's identical comment on why gradient-
+      // shaded art wants bilinear scaling now.
+      drawEntitySprite(ctx, sprite, getEnemyAnimationState(enemy, isHurting), nowSeconds, enemy.position.x, enemy.position.y, size, needsFlip('enemy'), true);
     } else {
       drawProceduralEnemySilhouette(ctx, spriteType, enemy.position.x, enemy.position.y, enemyRadius, enemyStyle.color);
       drawFallbackGlyph(ctx, enemy.position.x, enemy.position.y, enemy.archetypeId.charAt(0).toUpperCase(), enemyRadius * 0.75);

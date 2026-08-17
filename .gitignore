@@ -5,3 +5,10 @@ release/
 *.tsbuildinfo
 .DS_Store
 *.local
+
+# scripts/pixel_sprites.py's 2048-class master source art + optional 256/
+# 128/64 variant exports - regenerable locally via the script, not shipped
+# (outside public/, Vite never bundles it) and too large to commit (~190
+# files x multiple resolution tiers).
+art/sprite_master/
+art/sprite_variants/

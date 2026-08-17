@@ -1,45 +1,61 @@
-"""Procedural pixel-art sprite generator for tataKAI.
+"""Procedural stylized-2D character-art generator for tataKAI.
 
-Draws every character/creature/structure sprite on a small logical pixel
-grid (chibi-proportioned humanoid template + separate creature/structure
-templates), then upscales with nearest-neighbor to keep hard pixel edges.
-Output dimensions are deliberately kept outside CanvasRenderer's frame-sheet
-size heuristic (see SPRITE_SHEET_CONFIG in src/render/CanvasRenderer.ts -
-width 32-384 AND height 32-192 both in range means "treat as an animated
-sheet") so every file here is drawn as a single static pose, matching how
-the existing hand-illustrated sprites already work - no renderer code needs
-to change for these to "just work" once dropped into public/sprites/.
+v2 rewrite: same chibi humanoid / slime / pet / castle pose geometry as the
+original flat-color generator (identical logical-grid anchors, so every
+silhouette and animation pose reads exactly the same), but every shape is now
+rendered with layered shading instead of a single flat fill - vertical
+gradients, rim/ambient light, specular sheen on metal, cloth folds, soft
+contact-shadow AO at limb joints, face detail (brows/eyes/blush/mouth),
+layered hair, weapon detail (gradient blade + tip glint + hilt wraps), and a
+soft anti-aliased outline (dilation-based, not the old hard 1px neighbor
+ring).
+
+Resolution strategy: every pose is drawn ONCE at a ~2048px-long-edge "master"
+resolution (all the shading above is generated at that resolution so detail
+and AA quality is baked in), then that single master buffer is downsampled
+with Lanczos resampling to every other tier - no re-drawing per tier.
+
+  - art/sprite_master/<same path>.png   2048-class long edge, NOT shipped
+    (not under public/, vite never bundles it) - the actual "source art",
+    kept locally for reference/future re-export at other sizes.
+  - public/sprites/<same path>.png      ~320px-long-edge "production" tier -
+    what CanvasRenderer.ts actually loads. Deliberately sized several times
+    larger than any on-screen entity radius (see CanvasRenderer's
+    HERO_RADIUS/ENEMY_RADIUS/PET_RADIUS - max on-screen size is roughly
+    100-120px even for a 3.5x boss) for HiDPI headroom, while staying well
+    outside isFrameSheet's width[64,384]-AND-height[64,192] frame-sheet
+    detection range (long edge 320 > 192 keeps every one of these safely
+    treated as a static illustration, never mis-sliced as an animation
+    sheet).
+  - art/sprite_variants/{256,128,64}/<same path>.png  optional smaller
+    export tiers, NOT wired into the renderer today (this project has no
+    multi-resolution/mipmap asset selection) - kept as available downsized
+    assets for a possible future low-quality/mobile mode. 128 and 64 in
+    particular MUST NOT be dropped into public/sprites/ as-is: those long
+    edges land inside isFrameSheet's frame-sheet detection window and would
+    get mis-sliced as a 32x32 animation sheet by CanvasRenderer.
 
 Run: python scripts/pixel_sprites.py
 """
 
 import os
-from PIL import Image, ImageDraw
+import random
+from PIL import Image, ImageDraw, ImageFilter, ImageChops
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SPRITES = os.path.join(ROOT, "public", "sprites")
+MASTER_DIR = os.path.join(ROOT, "art", "sprite_master")
+VARIANTS_DIR = os.path.join(ROOT, "art", "sprite_variants")
 
-SCALE = 10
-OUTLINE = (20, 16, 24, 255)
+MASTER_LONG_EDGE = 2048
+PRODUCTION_LONG_EDGE = 320
+VARIANT_LONG_EDGES = (256, 128, 64)
 
+OUTLINE = (18, 14, 20, 255)
 
-def new_grid(w, h):
-    return Image.new("RGBA", (w, h), (0, 0, 0, 0))
-
-
-def px(draw, x, y, color, w=1, h=1):
-    """Fill a w x h block of *grid* pixels starting at (x, y)."""
-    if color is None:
-        return
-    draw.rectangle([x, y, x + w - 1, y + h - 1], fill=color)
-
-
-def save(img, path):
-    full = os.path.join(SPRITES, path)
-    os.makedirs(os.path.dirname(full), exist_ok=True)
-    big = img.resize((img.width * SCALE, img.height * SCALE), Image.NEAREST)
-    big.save(full)
-    print("wrote", path, big.size)
+# Deterministic noise/texture across runs - a re-run of this script should
+# reproduce byte-identical output, not shuffle every file's grain pattern.
+random.seed(20260818)
 
 
 def shade(color, amount):
@@ -55,240 +71,482 @@ def shade(color, amount):
     )
 
 
+def with_alpha(color, alpha):
+    return (color[0], color[1], color[2], alpha)
+
+
+# --- low-level rendering primitives -----------------------------------------
+
+_mask_cache = {}
+
+
+def _rounded_mask(w, h, radius_frac):
+    key = (w, h, round(radius_frac, 3))
+    cached = _mask_cache.get(key)
+    if cached is not None:
+        return cached
+    mask = Image.new("L", (w, h), 0)
+    md = ImageDraw.Draw(mask)
+    radius = max(0, int(min(w, h) * radius_frac))
+    md.rounded_rectangle([0, 0, w - 1, h - 1], radius=radius, fill=255)
+    _mask_cache[key] = mask
+    return mask
+
+
+def _vgradient(w, h, top, bottom, steps=None):
+    """Smooth vertical gradient of size (w, h) - built as a tiny N-row strip
+    and stretched with a fast C-side resize instead of a per-row Python
+    loop, so this stays cheap even at master (2048px-class) resolution."""
+    steps = steps or max(2, min(48, h))
+    strip = Image.new("RGBA", (1, steps))
+    for i in range(steps):
+        t = i / (steps - 1) if steps > 1 else 0.0
+        strip.putpixel((0, i), tuple(int(top[k] + (bottom[k] - top[k]) * t) for k in range(4)))
+    return strip.resize((max(1, w), max(1, h)), Image.BILINEAR)
+
+
+def _noise_tile(w, h, base_alpha):
+    """Small random speckle tile stretched to size - cheap stand-in for
+    fabric/stone grain ("材质区分"/"局部纹理") without a per-pixel Python
+    loop at full resolution."""
+    tw, th = 24, 24
+    tile = Image.new("L", (tw, th))
+    px = tile.load()
+    for y in range(th):
+        for x in range(tw):
+            px[x, y] = base_alpha + random.randint(-base_alpha, base_alpha)
+    return tile.resize((max(1, w), max(1, h)), Image.BILINEAR)
+
+
+class Canvas:
+    """Draws in *logical* grid units (the same 26x34/22x20/etc. coordinate
+    space the original flat generator used) against a backing image sized at
+    `scale` pixels per logical unit. Every existing pose's hand-tuned anchor
+    numbers keep working unchanged - only the fill primitives changed."""
+
+    def __init__(self, logical_w, logical_h, scale):
+        self.lw, self.lh = logical_w, logical_h
+        self.scale = scale
+        self.w = max(1, round(logical_w * scale))
+        self.h = max(1, round(logical_h * scale))
+        self.img = Image.new("RGBA", (self.w, self.h), (0, 0, 0, 0))
+        self.draw = ImageDraw.Draw(self.img, "RGBA")
+
+    def _rect_px(self, x, y, w, h):
+        x0 = int(round(x * self.scale))
+        y0 = int(round(y * self.scale))
+        x1 = int(round((x + w) * self.scale))
+        y1 = int(round((y + h) * self.scale))
+        return x0, y0, max(x0 + 1, x1), max(y0 + 1, y1)
+
+    def panel(self, x, y, w, h, color, mode="body", radius_frac=0.22, light_amount=0.32, dark_amount=-0.30):
+        """Gradient-filled rounded panel with rim light and an optional
+        material pass (cloth folds / metal sheen). Replaces the old flat
+        px() rectangle - this is the single workhorse every body part,
+        garment, and armor plate is built from."""
+        x0, y0, x1, y1 = self._rect_px(x, y, w, h)
+        ww, hh = x1 - x0, y1 - y0
+        top = shade(color, light_amount)
+        bottom = shade(color, dark_amount)
+        grad = _vgradient(ww, hh, top, bottom)
+        mask = _rounded_mask(ww, hh, radius_frac)
+        self.img.paste(grad, (x0, y0), mask)
+
+        if mode == "cloth":
+            self._texture(x0, y0, ww, hh, mask, alpha=14)
+            self._folds(x0, y0, ww, hh, color)
+        elif mode == "metal":
+            self._texture(x0, y0, ww, hh, mask, alpha=8)
+            self._sheen(x0, y0, ww, hh)
+        elif mode == "skin":
+            pass
+        elif mode == "stone":
+            self._texture(x0, y0, ww, hh, mask, alpha=20)
+
+        self._rim(x0, y0, ww, hh, color, mask)
+        self._seam(x0, y0, x1 - 1, y1 - 1, radius_frac)
+        return x0, y0, ww, hh
+
+    def _seam(self, x0, y0, x1, y1, radius_frac):
+        """Thin dark stroke around every panel's own boundary - the old flat
+        generator got part-to-part separation for free from hard-edged flat
+        colors; gradient-shaded panels need an explicit seam so an arm
+        overlapping a torso (etc.) still reads as two distinct pieces
+        instead of blurring into one shape."""
+        radius = max(0, int(min(x1 - x0, y1 - y0) * radius_frac))
+        self.draw.rounded_rectangle([x0, y0, x1, y1], radius=radius, outline=with_alpha(OUTLINE, 150), width=max(1, int(min(x1 - x0, y1 - y0) * 0.025)))
+
+    def _rim(self, x0, y0, w, h, base_color, mask):
+        """Soft light-source streak along the upper-left inner edge -
+        cheap stand-in for ambient/rim lighting on every panel."""
+        rim_color = shade(base_color, 0.6)
+        band = max(1, int(min(w, h) * 0.16))
+        overlay = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        od = ImageDraw.Draw(overlay, "RGBA")
+        od.rounded_rectangle([0, 0, w - 1, band], radius=max(1, band // 2), fill=with_alpha(rim_color, 95))
+        od.rounded_rectangle([0, 0, band, h - 1], radius=max(1, band // 2), fill=with_alpha(rim_color, 55))
+        overlay.putalpha(ImageChops.multiply(overlay.split()[3], mask))
+        self.img.paste(overlay, (x0, y0), overlay)
+
+    def _texture(self, x0, y0, w, h, mask, alpha):
+        tile = _noise_tile(w, h, alpha)
+        tile = ImageChops.multiply(tile, mask)
+        layer = Image.new("RGBA", (w, h), (0, 0, 0, 255))
+        layer.putalpha(tile)
+        self.img.paste(layer, (x0, y0), layer)
+
+    def _folds(self, x0, y0, w, h, base_color):
+        fold_color = with_alpha(shade(base_color, -0.4), 80)
+        width = max(1, int(min(w, h) * 0.035))
+        for i in (1, 2):
+            yy = y0 + int(h * (i / 3.0))
+            self.draw.line(
+                [(x0 + w * 0.14, yy), (x0 + w * 0.82, yy + h * 0.08)],
+                fill=fold_color,
+                width=width,
+            )
+
+    def _sheen(self, x0, y0, w, h):
+        sheen = with_alpha((255, 255, 255, 255), 45)
+        width = max(1, int(w * 0.09))
+        self.draw.line(
+            [(x0 + w * 0.24, y0 + h * 0.12), (x0 + w * 0.36, y0 + h * 0.5)],
+            fill=sheen,
+            width=width,
+        )
+
+    def rivets(self, x, y, w, h, color, count=2):
+        rivet_color = shade(color, -0.5)
+        x0, y0, x1, y1 = self._rect_px(x, y, w, h)
+        ww = x1 - x0
+        r = max(1, int(min(x1 - x0, y1 - y0) * 0.08))
+        for i in range(count):
+            cx = x0 + int(ww * (i + 1) / (count + 1))
+            cy = y0 + int((y1 - y0) * 0.5)
+            self.draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=rivet_color)
+            self.draw.ellipse([cx - r // 2, cy - r // 2, cx + 1, cy + 1], fill=shade(color, 0.4))
+
+    def blob(self, x, y, w, h, color, mode="skin"):
+        return self.panel(x, y, w, h, color, mode=mode, radius_frac=0.5, light_amount=0.28, dark_amount=-0.22)
+
+    def soft_shadow(self, x, y, w, h, alpha=90):
+        """Soft translucent contact-shadow ellipse - used at limb/torso
+        joints for ambient occlusion ("深度和立体感") instead of a hard
+        seam line."""
+        x0, y0, x1, y1 = self._rect_px(x, y, w, h)
+        layer = Image.new("RGBA", self.img.size, (0, 0, 0, 0))
+        ld = ImageDraw.Draw(layer, "RGBA")
+        ld.ellipse([x0, y0, x1, y1], fill=(0, 0, 0, alpha))
+        blur_radius = max(1, int((x1 - x0) * 0.35))
+        layer = layer.filter(ImageFilter.GaussianBlur(radius=blur_radius))
+        self.img.paste(layer, (0, 0), layer)
+
+    def glow(self, x, y, r, color, alpha=140):
+        x0, y0, x1, y1 = self._rect_px(x - r, y - r, r * 2, r * 2)
+        layer = Image.new("RGBA", self.img.size, (0, 0, 0, 0))
+        ld = ImageDraw.Draw(layer, "RGBA")
+        ld.ellipse([x0, y0, x1, y1], fill=with_alpha(color, alpha))
+        blur_radius = max(1, int((x1 - x0) * 0.3))
+        layer = layer.filter(ImageFilter.GaussianBlur(radius=blur_radius))
+        self.img.paste(layer, (0, 0), layer)
+        core_r = max(1, int((x1 - x0) * 0.28))
+        cx, cy = (x0 + x1) // 2, (y0 + y1) // 2
+        self.draw.ellipse([cx - core_r, cy - core_r, cx + core_r, cy + core_r], fill=shade(color, 0.5))
+
+    def line(self, x0, y0, x1, y1, color, width_frac=0.05, alpha=255):
+        _, _, w_px, h_px = self._rect_px(0, 0, self.lw, self.lh)
+        width = max(1, int(min(w_px, h_px) * width_frac / max(self.lw, self.lh)))
+        sx0, sy0 = x0 * self.scale, y0 * self.scale
+        sx1, sy1 = x1 * self.scale, y1 * self.scale
+        self.draw.line([(sx0, sy0), (sx1, sy1)], fill=with_alpha(color, alpha), width=width)
+
+    def dot(self, x, y, w, h, color, alpha=255):
+        x0, y0, x1, y1 = self._rect_px(x, y, w, h)
+        self.draw.ellipse([x0, y0, x1, y1], fill=with_alpha(color, alpha))
+
+    def apply_outline(self, thickness_frac=0.006):
+        """Dilation-based outline: fast (C-side MaxFilter, not a per-pixel
+        Python loop) regardless of master resolution, and reads as smoothly
+        anti-aliased once the whole image is later Lanczos-downsampled to
+        production size - no explicit AA math needed here."""
+        thickness = max(2, int(max(self.w, self.h) * thickness_frac))
+        if thickness % 2 == 0:
+            thickness += 1
+        alpha = self.img.split()[3]
+        dilated = alpha.filter(ImageFilter.MaxFilter(thickness))
+        ring = ImageChops.subtract(dilated, alpha)
+        layer = Image.new("RGBA", self.img.size, OUTLINE)
+        layer.putalpha(ring)
+        self.img = Image.alpha_composite(layer, self.img)
+        self.draw = ImageDraw.Draw(self.img, "RGBA")
+
+
+# --- multi-tier export -------------------------------------------------------
+
+def _resize_long_edge(img, target_long_edge):
+    w, h = img.size
+    scale = target_long_edge / max(w, h)
+    nw, nh = max(1, round(w * scale)), max(1, round(h * scale))
+    return img.resize((nw, nh), Image.LANCZOS)
+
+
+def _save_png(img, full_path, optimize=False):
+    os.makedirs(os.path.dirname(full_path), exist_ok=True)
+    img.save(full_path, optimize=optimize)
+
+
+def save_all_tiers(master_img, relpath):
+    # optimize=True only for the production tier (what actually ships in
+    # public/sprites and affects repo/bundle size) - master/variants are
+    # local build artifacts, not worth the extra compression-search time.
+    _save_png(master_img, os.path.join(MASTER_DIR, relpath))
+
+    production = _resize_long_edge(master_img, PRODUCTION_LONG_EDGE)
+    _save_png(production, os.path.join(SPRITES, relpath), optimize=True)
+
+    for edge in VARIANT_LONG_EDGES:
+        variant = _resize_long_edge(master_img, edge)
+        _save_png(variant, os.path.join(VARIANTS_DIR, str(edge), relpath))
+
+    print("wrote", relpath, "master", master_img.size, "prod", production.size, flush=True)
+
+
+def master_scale(logical_w, logical_h):
+    return MASTER_LONG_EDGE / max(logical_w, logical_h)
+
+
 # --- Humanoid template ----------------------------------------------------
-# 26 wide x 34 tall logical grid. Chibi proportions (big head, short body) -
-# forgiving to draw well by hand-placed rectangles and reads clearly at
-# small on-screen sizes.
+# Same 26 wide x 34 tall logical grid and chibi proportions as the original
+# generator - every anchor number below is unchanged, only the fill calls are
+# richer.
 GW, GH = 26, 34
 
 
-def draw_humanoid(pal, pose, weapon, headwear, cape=False):
-    """pal: dict with keys body, body_dark, skin, trim, weapon, weapon_dark,
-    hair. pose: 'walk', 'attack', 'hurt' (brief recoil/flinch - see
-    DamageSystem.spawnHitReaction on the TS side, triggered for a short
-    window on every hit, not just crits), 'cast' (SkillSystem successfully
-    casting - one arm raised with a small glowing spark, weapon left
-    resting), 'victory' (wave-clear celebration - both arms raised, weapon
-    held high), or 'idle2' (a subtle head-bob alternated with 'walk' every
-    ~1.6s for a breathing idle instead of one static frame the whole time -
-    see CanvasRenderer's IDLE_BREATHE_CYCLE_SECONDS)."""
-    img = new_grid(GW, GH)
-    d = ImageDraw.Draw(img)
+def hair_color_for(pal):
+    """No hero palette hand-authors a hair color - derive one from the
+    existing trim/body_dark tones so every class/evolution automatically
+    gets a plausible, thematically-matching hair tone instead of needing 24
+    new palette entries."""
+    base = pal.get("trim") or pal["body_dark"]
+    return shade(base, -0.35)
+
+
+def draw_face(c, hx, hy, pal, hurting):
+    """Eyebrows, eyes (iris + glint), blush, mouth - all cheap single draws
+    layered on top of the head panel."""
+    brow_color = shade(pal["skin"], -0.55)
+    if hurting:
+        c.line(hx + 1, hy + 3, hx + 2.4, hy + 3, brow_color, width_frac=0.14, alpha=220)
+        c.line(hx + 5, hy + 3, hx + 6.4, hy + 3, brow_color, width_frac=0.14, alpha=220)
+        c.dot(hx + 3.4, hy + 5.4, 1.2, 0.5, shade(pal["skin"], -0.4), alpha=200)
+        return
+
+    c.line(hx + 1, hy + 2.3, hx + 2.6, hy + 2, brow_color, width_frac=0.12, alpha=210)
+    c.line(hx + 5.4, hy + 2, hx + 7, hy + 2.3, brow_color, width_frac=0.12, alpha=210)
+
+    eye_dark = (32, 24, 30, 255)
+    c.dot(hx + 1, hy + 3, 1.4, 1.4, eye_dark)
+    c.dot(hx + 5.6, hy + 3, 1.4, 1.4, eye_dark)
+    c.dot(hx + 1.5, hy + 3.1, 0.5, 0.5, (255, 255, 255, 230))
+    c.dot(hx + 6.1, hy + 3.1, 0.5, 0.5, (255, 255, 255, 230))
+
+    blush = with_alpha(shade(pal["skin"], -0.15), 90)
+    c.dot(hx + 0.4, hy + 4.6, 1.3, 0.8, blush, alpha=90)
+    c.dot(hx + 6.3, hy + 4.6, 1.3, 0.8, blush, alpha=90)
+
+    c.line(hx + 3.2, hy + 5.6, hx + 4.8, hy + 5.6, shade(pal["skin"], -0.35), width_frac=0.08, alpha=160)
+
+
+def draw_hair(c, hx, hy, pal, headwear):
+    """Layered hair patch drawn before headwear - fully covered by
+    hood/helmet, peeks out for cap/halo/horns/no-headwear so every class
+    still reads as having actual hair, not a bald color block."""
+    hair = hair_color_for(pal)
+    if headwear in ("hood", "helmet"):
+        return
+    c.panel(hx - 0.6, hy - 1.2, 9.2, 3.2, hair, mode="body", radius_frac=0.55, light_amount=0.22, dark_amount=-0.3)
+    c.panel(hx - 1.1, hy + 0.5, 1.8, 3.4, hair, mode="body", radius_frac=0.6, light_amount=0.15, dark_amount=-0.25)
+    c.panel(hx + 7.3, hy + 0.5, 1.8, 3.4, hair, mode="body", radius_frac=0.6, light_amount=0.15, dark_amount=-0.25)
+    c.line(hx + 0.6, hy - 0.6, hx + 2.6, hy - 1.0, shade(hair, 0.4), width_frac=0.05, alpha=140)
+
+
+def draw_humanoid(pal, pose, weapon, headwear, cape=False, armored=False):
+    """pal: dict with keys body, body_dark, skin, trim, weapon, weapon_dark.
+    pose/weapon/headwear/cape: identical contract to the original generator
+    (see git history) - 'walk'/'attack'/'hurt'/'cast'/'victory'/'idle2'.
+    armored: True paints torso/arms/legs with the 'metal' material pass
+    (sheen + rivets) instead of 'cloth' (folds) - derived by callers from
+    headwear='helmet' rather than a new palette key, so no palette table
+    needed edits."""
+    scale = master_scale(GW, GH)
+    c = Canvas(GW, GH, scale)
 
     attacking = pose == "attack"
     hurting = pose == "hurt"
     casting = pose == "cast"
     celebrating = pose == "victory"
     lean = 1 if attacking else (-1 if hurting else 0)
+    body_mode = "metal" if armored else "cloth"
 
-    # Cape (drawn first, behind everything else) - derived from body_dark
-    # rather than a separate palette entry, so callers just pass cape=True
-    # without needing to also supply a dedicated cape color.
     if cape:
         cape_color = pal["body_dark"]
-        px(d, 7 - lean, 12, cape_color, 12, 11)
-        px(d, 7 - lean, 12, shade(cape_color, -0.3), 2, 11)
+        c.panel(7 - lean, 12, 12, 11, cape_color, mode="cloth", radius_frac=0.12)
 
-    # Legs.
+    # Legs + boots.
     leg_y = 23
-    px(d, 9 + lean, leg_y, pal["body_dark"], 4, 9)
-    px(d, 13 - lean, leg_y, pal["body_dark"], 4, 9)
-    px(d, 9 + lean, leg_y + 7, (30, 26, 24, 255), 4, 2)
-    px(d, 13 - lean, leg_y + 7, (30, 26, 24, 255), 4, 2)
+    c.panel(9 + lean, leg_y, 4, 9, pal["body_dark"], mode=body_mode, radius_frac=0.28)
+    c.panel(13 - lean, leg_y, 4, 9, pal["body_dark"], mode=body_mode, radius_frac=0.28)
+    c.panel(9 + lean, leg_y + 7, 4, 2, (30, 26, 24, 255), mode="metal", radius_frac=0.3)
+    c.panel(13 - lean, leg_y + 7, 4, 2, (30, 26, 24, 255), mode="metal", radius_frac=0.3)
+    c.soft_shadow(9 + lean, leg_y - 1, 8 - 2 * lean, 2.4, alpha=70)
 
     # Torso.
     tx = 8 + lean
-    px(d, tx, 12, pal["body"], 10, 11)
-    px(d, tx, 12, shade(pal["body"], 0.25), 10, 2)
-    px(d, tx + 7, 14, pal["body_dark"], 3, 9)
+    c.panel(tx, 12, 10, 11, pal["body"], mode=body_mode, radius_frac=0.22)
     if pal.get("trim"):
-        px(d, tx, 20, pal["trim"], 10, 2)
+        c.panel(tx, 20, 10, 2, pal["trim"], mode="metal", radius_frac=0.3)
+    if armored:
+        c.rivets(tx + 1, 14, 8, 1, pal["trim"] or pal["body"], count=3)
+    c.soft_shadow(tx + 1, 20.5, 8, 2, alpha=55)
 
-    # Off-hand arm (left) - raised defensively in front of the face when
-    # hurting, raised overhead with a glowing spark when casting, raised
-    # overhead (no spark - the weapon arm carries the flourish instead) when
-    # celebrating, static at the side otherwise.
+    # Off-hand arm.
     if hurting:
-        px(d, 4 - lean, 6, pal["body_dark"], 3, 8)
-        px(d, 4 - lean, 4, pal["skin"], 3, 3)
+        c.panel(4 - lean, 6, 3, 8, pal["body_dark"], mode=body_mode, radius_frac=0.4)
+        c.blob(4 - lean, 4, 3, 3, pal["skin"])
     elif casting:
-        px(d, 5 - lean, 6, pal["body_dark"], 3, 8)
-        px(d, 5 - lean, 3, pal["skin"], 3, 3)
+        c.panel(5 - lean, 6, 3, 8, pal["body_dark"], mode=body_mode, radius_frac=0.4)
+        c.blob(5 - lean, 3, 3, 3, pal["skin"])
         spark_color = pal.get("trim") or pal["weapon"]
-        px(d, 5 - lean, 0, spark_color, 3, 3)
+        c.glow(6.5 - lean, 1, 1.6, spark_color, alpha=170)
     elif celebrating:
-        px(d, 5 - lean, 6, pal["body_dark"], 3, 8)
-        px(d, 5 - lean, 3, pal["skin"], 3, 3)
+        c.panel(5 - lean, 6, 3, 8, pal["body_dark"], mode=body_mode, radius_frac=0.4)
+        c.blob(5 - lean, 3, 3, 3, pal["skin"])
     else:
-        px(d, 5 - lean, 13, pal["body_dark"], 3, 8)
-        px(d, 5 - lean, 20, pal["skin"], 3, 2)
+        c.panel(5 - lean, 13, 3, 8, pal["body_dark"], mode=body_mode, radius_frac=0.4)
+        c.blob(5 - lean, 20, 3, 2, pal["skin"])
 
-    # Weapon arm (right) - raised for attack (mid-swing) and victory (held
-    # high, longer/fuller weapon variant same as attack's), lowered/relaxed
-    # for everything else including cast (the free hand carries that pose's
-    # flourish, not the weapon arm).
+    # Weapon arm.
     if attacking:
-        px(d, tx + 8, 9, pal["body_dark"], 3, 7)
-        px(d, tx + 8, 9, pal["skin"], 3, 2)
-        weapon_anchor = (tx + 9, 3)
-        draw_weapon(d, weapon, weapon_anchor, pal, True)
+        c.panel(tx + 8, 9, 3, 7, pal["body_dark"], mode=body_mode, radius_frac=0.4)
+        c.blob(tx + 8, 9, 3, 2, pal["skin"])
+        draw_weapon(c, weapon, (tx + 9, 3), pal, True)
     elif celebrating:
-        px(d, tx + 8, 6, pal["body_dark"], 3, 8)
-        px(d, tx + 8, 3, pal["skin"], 3, 3)
-        weapon_anchor = (tx + 9, 0)
-        draw_weapon(d, weapon, weapon_anchor, pal, True)
+        c.panel(tx + 8, 6, 3, 8, pal["body_dark"], mode=body_mode, radius_frac=0.4)
+        c.blob(tx + 8, 3, 3, 3, pal["skin"])
+        draw_weapon(c, weapon, (tx + 9, 0), pal, True)
     else:
-        px(d, tx + 8, 13, pal["body_dark"], 3, 8)
-        px(d, tx + 8, 20, pal["skin"], 3, 2)
-        weapon_anchor = (tx + 8, 18)
-        draw_weapon(d, weapon, weapon_anchor, pal, False)
+        c.panel(tx + 8, 13, 3, 8, pal["body_dark"], mode=body_mode, radius_frac=0.4)
+        c.blob(tx + 8, 20, 3, 2, pal["skin"])
+        draw_weapon(c, weapon, (tx + 8, 18), pal, False)
 
-    # Head - idle2's only difference from walk is a 1px head bob, everything
-    # else (arms/legs/torso) stays exactly the walk pose.
+    # Head.
     head_lift = 1 if pose == "idle2" else 0
     hx, hy = 9 + lean, 2 - head_lift
-    px(d, hx, hy, pal["skin"], 8, 8)
-    px(d, hx, hy, shade(pal["skin"], 0.2), 8, 2)
-    if hurting:
-        # Wincing - flat closed-eye lines instead of the calm round dots,
-        # same "closed eye" language draw_humanoid_down uses for its
-        # collapsed pose.
-        px(d, hx + 1, hy + 3, (40, 30, 30, 255), 2, 1)
-        px(d, hx + 5, hy + 3, (40, 30, 30, 255), 2, 1)
-    else:
-        px(d, hx + 1, hy + 3, (40, 30, 30, 255), 1, 1)
-        px(d, hx + 6, hy + 3, (40, 30, 30, 255), 1, 1)
+    draw_hair(c, hx, hy, pal, headwear)
+    c.blob(hx, hy, 8, 8, pal["skin"], mode="skin")
+    draw_face(c, hx, hy, pal, hurting)
+    draw_headwear(c, headwear, hx, hy, pal)
 
-    draw_headwear(d, headwear, hx, hy, pal)
-
-    outline(img)
-    return img
+    c.apply_outline()
+    return c.img
 
 
-def draw_humanoid_down(pal, headwear, cape=False):
-    """Collapsed/kneeling pose for a hero that's been downed
-    (HeroState.isDowned) - structurally distinct from draw_humanoid rather
-    than another lean variant, since "on the ground" needs a genuinely
-    different silhouette (bent legs, slumped torso, lowered head), not just
-    a repositioned upright figure. No weapon drawn - dropped."""
-    img = new_grid(GW, GH)
-    d = ImageDraw.Draw(img)
+def draw_humanoid_down(pal, headwear, cape=False, armored=False):
+    """Collapsed/kneeling pose for a downed hero - structurally distinct
+    silhouette (bent legs, slumped torso, lowered head), no weapon drawn."""
+    scale = master_scale(GW, GH)
+    c = Canvas(GW, GH, scale)
+    body_mode = "metal" if armored else "cloth"
 
-    # Legs - bent/kneeling, shorter and wider-set than the standing pose.
     leg_y = 27
-    px(d, 6, leg_y, pal["body_dark"], 6, 5)
-    px(d, 15, leg_y, pal["body_dark"], 6, 5)
-    px(d, 6, leg_y + 4, (30, 26, 24, 255), 6, 2)
-    px(d, 15, leg_y + 4, (30, 26, 24, 255), 6, 2)
+    c.panel(6, leg_y, 6, 5, pal["body_dark"], mode=body_mode, radius_frac=0.3)
+    c.panel(15, leg_y, 6, 5, pal["body_dark"], mode=body_mode, radius_frac=0.3)
+    c.panel(6, leg_y + 4, 6, 2, (30, 26, 24, 255), mode="metal", radius_frac=0.3)
+    c.panel(15, leg_y + 4, 6, 2, (30, 26, 24, 255), mode="metal", radius_frac=0.3)
 
     if cape:
-        cape_color = pal["body_dark"]
-        px(d, 6, 16, cape_color, 14, 10)
-        px(d, 6, 16, shade(cape_color, -0.3), 2, 10)
+        c.panel(6, 16, 14, 10, pal["body_dark"], mode="cloth", radius_frac=0.12)
 
-    # Torso - lower and shorter than standing (y=16..26 vs y=12..23), reads
-    # as slumped forward.
-    px(d, 7, 16, pal["body"], 12, 10)
-    px(d, 7, 16, shade(pal["body"], -0.15), 12, 3)
+    c.panel(7, 16, 12, 10, pal["body"], mode=body_mode, radius_frac=0.2, dark_amount=-0.4)
     if pal.get("trim"):
-        px(d, 7, 23, pal["trim"], 12, 2)
+        c.panel(7, 23, 12, 2, pal["trim"], mode="metal", radius_frac=0.3)
+    c.soft_shadow(9, 25.5, 8, 2.2, alpha=80)
 
-    # Arms hanging limp at the sides.
-    px(d, 4, 18, pal["body_dark"], 3, 8)
-    px(d, 19, 18, pal["body_dark"], 3, 8)
-    px(d, 4, 25, pal["skin"], 3, 2)
-    px(d, 19, 25, pal["skin"], 3, 2)
+    c.panel(4, 18, 3, 8, pal["body_dark"], mode=body_mode, radius_frac=0.4)
+    c.panel(19, 18, 3, 8, pal["body_dark"], mode=body_mode, radius_frac=0.4)
+    c.blob(4, 25, 3, 2, pal["skin"])
+    c.blob(19, 25, 3, 2, pal["skin"])
 
-    # Head - tilted down, drawn lower than the standing pose's hy=2.
     hx, hy = 9, 8
-    px(d, hx, hy, pal["skin"], 8, 8)
-    px(d, hx, hy, shade(pal["skin"], 0.2), 8, 2)
-    px(d, hx + 1, hy + 4, (40, 30, 30, 255), 2, 1)
-    px(d, hx + 5, hy + 4, (40, 30, 30, 255), 2, 1)
+    draw_hair(c, hx, hy, pal, headwear)
+    c.blob(hx, hy, 8, 8, pal["skin"], mode="skin")
+    eye_dark = (40, 30, 30, 255)
+    c.line(hx + 1, hy + 4, hx + 2.4, hy + 4, eye_dark, width_frac=0.1, alpha=220)
+    c.line(hx + 5, hy + 4, hx + 6.4, hy + 4, eye_dark, width_frac=0.1, alpha=220)
+    draw_headwear(c, headwear, hx, hy, pal)
 
-    draw_headwear(d, headwear, hx, hy, pal)
-
-    outline(img)
-    return img
+    c.apply_outline()
+    return c.img
 
 
-def draw_weapon(d, kind, anchor, pal, attacking):
+def draw_weapon(c, kind, anchor, pal, attacking):
+    if kind is None:
+        return
     ax, ay = anchor
     wcol = pal["weapon"]
     wdark = pal.get("weapon_dark", shade(wcol, -0.3))
 
     if kind == "sword":
         length = 14 if attacking else 11
-        px(d, ax, ay, wcol, 2, length)
-        px(d, ax, ay + length, wdark, 2, 2)
-        px(d, ax - 2, ay + length, wdark, 6, 1)
-        px(d, ax, ay + length + 1, (60, 45, 30, 255), 2, 3)
+        c.panel(ax, ay, 2, length, wcol, mode="metal", radius_frac=0.15)
+        c.panel(ax, ay + length, 2, 2, wdark, mode="metal", radius_frac=0.15)
+        c.panel(ax - 2, ay + length, 6, 1, wdark, mode="metal", radius_frac=0.4)
+        c.panel(ax, ay + length + 1, 2, 3, (60, 45, 30, 255), mode="body", radius_frac=0.2)
+        c.dot(ax + 0.6, ay - 0.6, 0.7, 0.7, (255, 255, 255, 255), alpha=200)
     elif kind == "dagger":
         length = 8 if attacking else 6
-        px(d, ax, ay, wcol, 2, length)
-        px(d, ax - 1, ay + length, wdark, 4, 1)
-        px(d, ax, ay + length + 1, (60, 45, 30, 255), 2, 2)
+        c.panel(ax, ay, 2, length, wcol, mode="metal", radius_frac=0.2)
+        c.panel(ax - 1, ay + length, 4, 1, wdark, mode="metal", radius_frac=0.4)
+        c.panel(ax, ay + length + 1, 2, 2, (60, 45, 30, 255), mode="body", radius_frac=0.2)
     elif kind == "staff":
-        px(d, ax, ay - 2, wdark, 2, 20)
-        px(d, ax - 2, ay - 5, wcol, 6, 6)
-        px(d, ax - 1, ay - 4, shade(wcol, 0.3), 4, 2)
+        c.panel(ax, ay - 2, 2, 20, wdark, mode="metal", radius_frac=0.4)
+        c.blob(ax - 2, ay - 5, 6, 6, wcol)
+        c.glow(ax + 1, ay - 2, 1.6, shade(wcol, 0.3), alpha=150)
     elif kind == "bow":
-        for i in range(14):
-            offset = int(3 * abs((i - 6.5) / 6.5))
-            px(d, ax + 3 - offset, ay - 3 + i, wcol, 2, 1)
-        px(d, ax + 1, ay - 2, (230, 230, 230, 255), 1, 16)
+        pts = []
+        for i in range(15):
+            offset = 3 * abs((i - 7) / 7)
+            pts.append((ax + 3 - offset, ay - 3 + i))
+        for i in range(len(pts) - 1):
+            c.line(pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1], wcol, width_frac=0.09)
+        c.line(ax + 1.5, ay - 2, ax + 1.5, ay + 12, (230, 230, 230, 255), width_frac=0.03, alpha=220)
     elif kind == "holy_symbol":
-        px(d, ax - 1, ay, wdark, 2, 12)
-        px(d, ax - 3, ay + 3, wdark, 6, 2)
-        px(d, ax - 2, ay - 2, wcol, 4, 4)
+        c.panel(ax - 1, ay, 2, 12, wdark, mode="metal", radius_frac=0.3)
+        c.panel(ax - 3, ay + 3, 6, 2, wdark, mode="metal", radius_frac=0.3)
+        c.glow(ax, ay - 1, 2.2, wcol, alpha=160)
     elif kind == "orb":
-        px(d, ax - 2, ay, wdark, 2, 12)
-        px(d, ax - 4, ay - 5, wcol, 6, 6)
-        px(d, ax - 3, ay - 4, shade(wcol, 0.35), 3, 2)
+        c.panel(ax - 2, ay, 2, 12, wdark, mode="metal", radius_frac=0.3)
+        c.glow(ax - 1, ay - 2, 1.9, wcol, alpha=130)
 
 
-def draw_headwear(d, kind, hx, hy, pal):
+def draw_headwear(c, kind, hx, hy, pal):
     if kind == "helmet":
-        px(d, hx - 1, hy - 1, pal["trim"], 10, 4)
-        px(d, hx - 1, hy - 1, shade(pal["trim"], 0.3), 10, 1)
+        c.panel(hx - 1, hy - 1, 10, 4, pal["trim"], mode="metal", radius_frac=0.35)
+        c.rivets(hx, hy + 1, 8, 1, pal["trim"], count=2)
     elif kind == "hood":
-        px(d, hx - 1, hy - 2, pal["body"], 10, 5)
-        px(d, hx, hy + 1, (10, 8, 12, 255), 8, 4)
+        c.panel(hx - 1, hy - 2, 10, 5, pal["body"], mode="cloth", radius_frac=0.4)
+        c.panel(hx, hy + 1, 8, 4, (10, 8, 12, 255), mode="body", radius_frac=0.3, light_amount=0.05, dark_amount=-0.15)
     elif kind == "wizard_hat":
-        px(d, hx + 1, hy - 8, pal["trim"], 6, 8)
-        px(d, hx - 2, hy - 1, pal["trim"], 12, 2)
+        c.panel(hx + 1, hy - 8, 6, 8, pal["trim"], mode="cloth", radius_frac=0.25)
+        c.panel(hx - 2, hy - 1, 12, 2, pal["trim"], mode="metal", radius_frac=0.4)
     elif kind == "halo":
-        # hy is already near the canvas's top edge (head starts at y=2) -
-        # a halo floating further above it would clip off-canvas entirely,
-        # so this sits directly on the head's top edge instead of hovering.
-        px(d, hx - 2, hy - 2, pal["weapon"], 12, 2)
+        c.glow(hx + 4, hy - 1.5, 4.5, pal["weapon"], alpha=150)
+        c.panel(hx - 2, hy - 2, 12, 1.4, shade(pal["weapon"], 0.3), mode="metal", radius_frac=0.5)
     elif kind == "horns":
-        px(d, hx - 2, hy - 1, pal["trim"], 2, 4)
-        px(d, hx + 8, hy - 1, pal["trim"], 2, 4)
+        c.panel(hx - 2, hy - 1, 2, 4, pal["trim"], mode="metal", radius_frac=0.3)
+        c.panel(hx + 8, hy - 1, 2, 4, pal["trim"], mode="metal", radius_frac=0.3)
     elif kind == "cap":
-        px(d, hx - 1, hy - 2, pal["trim"], 10, 3)
-
-
-def outline(img):
-    """1px dark outline around every opaque region - the single detail that
-    makes flat color blocks read as "pixel art" instead of "blocky shapes"."""
-    w, h = img.size
-    src = img.load()
-    out = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    dst = out.load()
-    for y in range(h):
-        for x in range(w):
-            if src[x, y][3] == 0:
-                continue
-            dst[x, y] = src[x, y]
-    for y in range(h):
-        for x in range(w):
-            if src[x, y][3] != 0:
-                continue
-            neighbors = [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)]
-            if any(0 <= nx < w and 0 <= ny < h and src[nx, ny][3] != 0 for nx, ny in neighbors):
-                dst[x, y] = OUTLINE
-    img.paste(out, (0, 0))
+        c.panel(hx - 1, hy - 2, 10, 3, pal["trim"], mode="cloth", radius_frac=0.4)
 
 
 # --- Slime template --------------------------------------------------------
@@ -296,35 +554,30 @@ SW, SH = 22, 20
 
 
 def draw_slime(pal):
-    img = new_grid(SW, SH)
-    d = ImageDraw.Draw(img)
-    px(d, 3, 6, pal["body"], 16, 12)
-    px(d, 5, 4, pal["body"], 12, 3)
-    px(d, 3, 6, shade(pal["body"], 0.3), 5, 4)
-    px(d, 14, 14, pal["body_dark"], 5, 4)
-    px(d, 6, 8, (255, 255, 255, 160), 3, 2)
-    px(d, 8, 12, pal["body_dark"], 1, 1)
-    px(d, 13, 12, pal["body_dark"], 1, 1)
-    outline(img)
-    return img
+    scale = master_scale(SW, SH)
+    c = Canvas(SW, SH, scale)
+    c.panel(3, 6, 16, 12, pal["body"], mode="body", radius_frac=0.5, light_amount=0.15)
+    c.panel(5, 4, 12, 3, pal["body"], mode="body", radius_frac=0.6, light_amount=0.15)
+    c.panel(14, 14, 5, 4, pal["body_dark"], mode="body", radius_frac=0.5)
+    c.glow(7.5, 8.5, 2, (255, 255, 255, 255), alpha=90)
+    c.dot(8, 12, 1, 1, pal["body_dark"])
+    c.dot(13, 12, 1, 1, pal["body_dark"])
+    c.soft_shadow(6, 15, 12, 2, alpha=50)
+    c.apply_outline()
+    return c.img
 
 
 def draw_slime_hurt(pal):
-    """Squashed flatter/wider than the normal pose plus wincing (flat-line)
-    eyes instead of the calm dots - same brief hit-recoil moment
-    draw_humanoid's 'hurt' pose covers for the biped enemies, just built
-    from the slime's own blob primitives instead of shared humanoid limbs."""
-    img = new_grid(SW, SH)
-    d = ImageDraw.Draw(img)
-    px(d, 1, 10, pal["body"], 20, 8)
-    px(d, 4, 8, pal["body"], 14, 3)
-    px(d, 1, 10, shade(pal["body"], 0.3), 6, 3)
-    px(d, 16, 16, pal["body_dark"], 5, 3)
-    px(d, 5, 12, (255, 255, 255, 160), 3, 2)
-    px(d, 7, 15, pal["body_dark"], 2, 1)
-    px(d, 13, 15, pal["body_dark"], 2, 1)
-    outline(img)
-    return img
+    scale = master_scale(SW, SH)
+    c = Canvas(SW, SH, scale)
+    c.panel(1, 10, 20, 8, pal["body"], mode="body", radius_frac=0.45, light_amount=0.15)
+    c.panel(4, 8, 14, 3, pal["body"], mode="body", radius_frac=0.55, light_amount=0.15)
+    c.panel(16, 16, 5, 3, pal["body_dark"], mode="body", radius_frac=0.5)
+    c.glow(6.5, 12.5, 1.7, (255, 255, 255, 255), alpha=90)
+    c.line(7, 15, 8.4, 15, pal["body_dark"], width_frac=0.14, alpha=220)
+    c.line(13, 15, 14.4, 15, pal["body_dark"], width_frac=0.14, alpha=220)
+    c.apply_outline()
+    return c.img
 
 
 # --- Pet (small creature) template -----------------------------------------
@@ -332,31 +585,36 @@ PW, PH = 20, 20
 
 
 def draw_pet(pal, ears="round"):
-    img = new_grid(PW, PH)
-    d = ImageDraw.Draw(img)
-    px(d, 15, 14, pal["body"], 4, 3)
-    px(d, 17, 12, pal["body"], 3, 3)
-    px(d, 3, 15, pal["body_dark"], 3, 2)
-    px(d, 5, 8, pal["body"], 11, 9)
-    px(d, 5, 8, shade(pal["body"], 0.3), 11, 2)
+    scale = master_scale(PW, PH)
+    c = Canvas(PW, PH, scale)
+
+    c.panel(15, 14, 4, 3, pal["body"], mode="body", radius_frac=0.4)
+    c.panel(17, 12, 3, 3, pal["body"], mode="body", radius_frac=0.4)
+    c.panel(3, 15, 3, 2, pal["body_dark"], mode="body", radius_frac=0.4)
+    c.panel(5, 8, 11, 9, pal["body"], mode="body", radius_frac=0.42, light_amount=0.2)
+
     if ears == "round":
-        px(d, 4, 4, pal["body"], 4, 5)
-        px(d, 13, 4, pal["body"], 4, 5)
+        c.blob(4, 4, 4, 5, pal["body"])
+        c.blob(13, 4, 4, 5, pal["body"])
     elif ears == "pointy":
-        px(d, 4, 3, pal["body"], 3, 6)
-        px(d, 14, 3, pal["body"], 3, 6)
+        c.panel(4, 3, 3, 6, pal["body"], mode="body", radius_frac=0.3)
+        c.panel(14, 3, 3, 6, pal["body"], mode="body", radius_frac=0.3)
     elif ears == "wing":
-        px(d, 1, 8, pal["trim"], 4, 6)
-        px(d, 16, 8, pal["trim"], 4, 6)
-        px(d, 2, 7, pal["trim"], 2, 2)
-        px(d, 17, 7, pal["trim"], 2, 2)
+        c.panel(1, 8, 4, 6, pal["trim"], mode="metal", radius_frac=0.35)
+        c.panel(16, 8, 4, 6, pal["trim"], mode="metal", radius_frac=0.35)
+        c.panel(2, 7, 2, 2, pal["trim"], mode="metal", radius_frac=0.4)
+        c.panel(17, 7, 2, 2, pal["trim"], mode="metal", radius_frac=0.4)
     elif ears == "none":
         pass
-    px(d, 7, 12, (20, 16, 24, 255), 2, 2)
-    px(d, 12, 12, (20, 16, 24, 255), 2, 2)
-    px(d, 15, 10, pal["trim"], 3, 3)
-    outline(img)
-    return img
+
+    c.dot(7, 12, 2, 2, (20, 16, 24, 255))
+    c.dot(12, 12, 2, 2, (20, 16, 24, 255))
+    c.dot(7.5, 12.3, 0.6, 0.6, (255, 255, 255, 220))
+    c.dot(12.5, 12.3, 0.6, 0.6, (255, 255, 255, 220))
+    c.panel(15, 10, 3, 3, pal["trim"], mode="metal", radius_frac=0.4)
+    c.soft_shadow(6, 15.5, 9, 1.6, alpha=50)
+    c.apply_outline()
+    return c.img
 
 
 # --- Castle template ---------------------------------------------------
@@ -364,33 +622,30 @@ CW, CH = 32, 30
 
 
 def draw_castle():
-    img = new_grid(CW, CH)
-    d = ImageDraw.Draw(img)
+    scale = master_scale(CW, CH)
+    c = Canvas(CW, CH, scale)
     stone = (150, 145, 138, 255)
-    stone_dark = shade(stone, -0.35)
-    stone_light = shade(stone, 0.2)
     roof = (150, 40, 40, 255)
 
-    px(d, 4, 12, stone, 24, 16)
+    c.panel(4, 12, 24, 16, stone, mode="stone", radius_frac=0.06)
     for ty in range(13, 27, 3):
-        px(d, 4, ty, stone_dark, 24, 1)
+        c.line(4, ty, 28, ty, shade(stone, -0.3), width_frac=0.015, alpha=140)
 
     for tower_x in (2, 24):
-        px(d, tower_x, 6, stone, 6, 22)
-        px(d, tower_x, 6, stone_light, 6, 2)
-        px(d, tower_x - 1, 2, roof, 8, 5)
-        px(d, tower_x + 2, 0, (230, 230, 230, 255), 1, 3)
+        c.panel(tower_x, 6, 6, 22, stone, mode="stone", radius_frac=0.08)
+        c.panel(tower_x - 1, 2, 8, 5, roof, mode="metal", radius_frac=0.2)
+        c.dot(tower_x + 2.5, 1, 1, 3, (230, 230, 230, 255))
 
-    px(d, 10, 8, stone, 12, 4)
-    px(d, 10, 8, stone_light, 12, 1)
-    px(d, 12, 4, (120, 30, 30, 255), 2, 5)
-    px(d, 18, 4, (120, 30, 30, 255), 2, 5)
+    c.panel(10, 8, 12, 4, stone, mode="stone", radius_frac=0.1)
+    c.panel(12, 4, 2, 5, (120, 30, 30, 255), mode="metal", radius_frac=0.2)
+    c.panel(18, 4, 2, 5, (120, 30, 30, 255), mode="metal", radius_frac=0.2)
 
-    px(d, 12, 19, (60, 45, 35, 255), 8, 9)
-    px(d, 13, 21, (30, 22, 18, 255), 6, 7)
+    c.panel(12, 19, 8, 9, (60, 45, 35, 255), mode="cloth", radius_frac=0.1)
+    c.panel(13, 21, 6, 7, (30, 22, 18, 255), mode="body", radius_frac=0.1, light_amount=0.05, dark_amount=-0.15)
 
-    outline(img)
-    return img
+    c.soft_shadow(8, 27, 18, 2, alpha=70)
+    c.apply_outline()
+    return c.img
 
 
 SKIN_HUMAN = (235, 190, 150, 255)
@@ -475,23 +730,24 @@ PETS = {
 
 
 def hero_frame(pal, pose):
+    armored = pal["headwear"] == "helmet"
     return draw_humanoid(
         {k: pal[k] for k in ("body", "body_dark", "skin", "trim", "weapon") if k in pal},
         pose,
         pal["weapon_kind"],
         pal["headwear"],
         cape=pal.get("cape", False),
+        armored=armored,
     )
 
 
 def hero_down_frame(pal):
-    # Includes "weapon" even though this pose draws no weapon itself -
-    # draw_headwear's "halo" variant colors the ring from pal["weapon"], and
-    # this pose still draws headwear (helmet/halo/etc stay on a downed hero).
+    armored = pal["headwear"] == "helmet"
     return draw_humanoid_down(
         {k: pal[k] for k in ("body", "body_dark", "skin", "trim", "weapon") if k in pal},
         pal["headwear"],
         cape=pal.get("cape", False),
+        armored=armored,
     )
 
 
@@ -499,48 +755,35 @@ HERO_POSES = ["walk", "attack", "hurt", "idle2", "cast", "victory"]
 
 
 def main():
-    # Base hero classes - walk/attack/hurt/idle2/cast/victory (see
-    # draw_humanoid's doc comment for what each shows and what triggers it)
-    # plus down (HeroState.isDowned, its own draw_humanoid_down function -
-    # persists until the wave resets, not a brief window like the others).
     for class_id, pal in HERO_CLASSES.items():
         for pose in HERO_POSES:
-            save(hero_frame(pal, pose), f"heroes/{class_id}_{pose}.png")
-        save(hero_down_frame(pal), f"heroes/{class_id}_down.png")
+            save_all_tiers(hero_frame(pal, pose), f"heroes/{class_id}_{pose}.png")
+        save_all_tiers(hero_down_frame(pal), f"heroes/{class_id}_down.png")
 
-    # Evolution branches - inherit any key not overridden from their base class.
     for branch_id, overrides in EVOLUTION_BRANCHES.items():
         pal = dict(HERO_CLASSES[overrides["base"]])
         pal.update(overrides)
         file_id = branch_id.replace("-", "_")
         for pose in HERO_POSES:
-            save(hero_frame(pal, pose), f"heroes/evolved/{file_id}_{pose}.png")
-        save(hero_down_frame(pal), f"heroes/evolved/{file_id}_down.png")
+            save_all_tiers(hero_frame(pal, pose), f"heroes/evolved/{file_id}_{pose}.png")
+        save_all_tiers(hero_down_frame(pal), f"heroes/evolved/{file_id}_down.png")
 
-    # Enemies - base pose unchanged (still the single file every archetype
-    # sharing that sprite type already used), plus a new _hurt variant for
-    # the same brief hit-recoil window heroes get. No "death" pose - see
-    # scripts/pixel_sprites.py's module doc comment / ART_ASSET_CHECKLIST.md
-    # for why that was scoped out (would need delaying enemy removal from
-    # state.enemies, a bigger engine change than an art pass).
-    save(draw_humanoid(GOBLIN_PAL, "walk", "dagger", "cap"), "enemies/goblin.png")
-    save(draw_humanoid(GOBLIN_PAL, "hurt", "dagger", "cap"), "enemies/goblin_hurt.png")
+    save_all_tiers(draw_humanoid(GOBLIN_PAL, "walk", "dagger", "cap"), "enemies/goblin.png")
+    save_all_tiers(draw_humanoid(GOBLIN_PAL, "hurt", "dagger", "cap"), "enemies/goblin_hurt.png")
     slime_pal = dict(body=(90, 200, 140, 255), body_dark=(50, 150, 100, 255))
-    save(draw_slime(slime_pal), "enemies/slime.png")
-    save(draw_slime_hurt(slime_pal), "enemies/slime_hurt.png")
-    save(draw_humanoid(ZOMBIE_PAL, "attack", None, None), "enemies/zombie.png")
-    save(draw_humanoid(ZOMBIE_PAL, "hurt", None, None), "enemies/zombie_hurt.png")
-    save(draw_humanoid(WITCH_PAL, "walk", "staff", "wizard_hat"), "enemies/witch.png")
-    save(draw_humanoid(WITCH_PAL, "hurt", "staff", "wizard_hat"), "enemies/witch_hurt.png")
-    save(draw_humanoid(BOSS_PAL, "attack", "sword", "horns"), "enemies/demon_boss.png")
-    save(draw_humanoid(BOSS_PAL, "hurt", "sword", "horns"), "enemies/demon_boss_hurt.png")
+    save_all_tiers(draw_slime(slime_pal), "enemies/slime.png")
+    save_all_tiers(draw_slime_hurt(slime_pal), "enemies/slime_hurt.png")
+    save_all_tiers(draw_humanoid(ZOMBIE_PAL, "attack", None, None), "enemies/zombie.png")
+    save_all_tiers(draw_humanoid(ZOMBIE_PAL, "hurt", None, None), "enemies/zombie_hurt.png")
+    save_all_tiers(draw_humanoid(WITCH_PAL, "walk", "staff", "wizard_hat"), "enemies/witch.png")
+    save_all_tiers(draw_humanoid(WITCH_PAL, "hurt", "staff", "wizard_hat"), "enemies/witch_hurt.png")
+    save_all_tiers(draw_humanoid(BOSS_PAL, "attack", "sword", "horns", armored=True), "enemies/demon_boss.png")
+    save_all_tiers(draw_humanoid(BOSS_PAL, "hurt", "sword", "horns", armored=True), "enemies/demon_boss_hurt.png")
 
-    # Pets.
     for pet_id, pal in PETS.items():
-        save(draw_pet(pal, ears=pal["ears"]), f"pets/{pet_id}.png")
+        save_all_tiers(draw_pet(pal, ears=pal["ears"]), f"pets/{pet_id}.png")
 
-    # Castle.
-    save(draw_castle(), "towers/castle.png")
+    save_all_tiers(draw_castle(), "towers/castle.png")
 
 
 if __name__ == "__main__":
