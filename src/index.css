@@ -278,6 +278,22 @@ select {
 .hud-btn-icon {
   font-size: 18px;
   line-height: 1;
+  position: relative;
+}
+
+/* Nav-tab "you have something new here" indicator - see App.tsx's
+   handleTabClick/NotificationSystem.ts for what sets/clears each tab's
+   underlying flag. Anchored to .hud-btn-icon (not the button itself) so it
+   sits at the icon's corner regardless of the button's own padding. */
+.nav-notification-dot {
+  position: absolute;
+  top: -3px;
+  right: -5px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--danger);
+  border: 1.5px solid var(--bg);
 }
 
 .hud-gold {

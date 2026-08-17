@@ -1,6 +1,6 @@
 import { createHero } from '../entities/Hero';
 import { createBase } from '../entities/Base';
-import { heroRosterConfig } from '../../data/heroRosterConfig';
+import { heroRosterConfig, STARTER_SKILL_IDS } from '../../data/heroRosterConfig';
 import { petRosterConfig } from '../../data/petRosterConfig';
 import { skillDefinitions } from '../../data/skillConfig';
 import { layoutSlotPositions } from '../../data/mapConfig';
@@ -53,6 +53,9 @@ export function createInitialGameState(): GameState {
     deployedHeroIds: [starterHeroId],
     activePetId: null,
     petAuraCooldownRemaining: 0,
+    seenSkillIds: [...STARTER_SKILL_IDS],
+    seenPetIds: [],
+    unseenEquipmentCount: 0,
     skillPoints: 0,
     talentLevels: createInitialTalentLevels(),
     ascensionLevel: 0,

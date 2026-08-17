@@ -31,6 +31,11 @@ function pushEquipmentDropEvent(state: GameState, item: EquipmentItem): void {
     lifetime: DROP_TOAST_LIFETIME_SECONDS,
   });
   state.nextEquipmentDropEventId += 1;
+  // Nav-tab red dot (see NotificationSystem.ts) - the toast (equipmentDropFeed
+  // above) is transient and easy to miss mid-combat, this persists until the
+  // player actually opens the Equipment panel (App.tsx's handleTabClick calls
+  // markEquipmentSeen there).
+  state.unseenEquipmentCount += 1;
 }
 
 // Ages/prunes equipmentDropFeed - same shape as EffectsSystem.tickEffects,

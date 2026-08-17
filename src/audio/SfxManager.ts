@@ -11,8 +11,17 @@ class SfxManager {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
   private muted = false;
+  // Separate from `muted` (the player's own mute toggle) - see
+  // AudioManager.ts's backgroundMuted doc comment for the same rationale,
+  // set from the same App.tsx listener (window blur/visibilitychange/
+  // stealth-mode).
+  private backgroundMuted = false;
   private unlocked = false;
   private volume = 0.7;
+
+  setBackgroundMuted(muted: boolean): void {
+    this.backgroundMuted = muted;
+  }
 
   // Every tone() routes through this single master gain node instead of
   // straight to ctx.destination, so setVolume can scale every sfx at once
@@ -69,13 +78,21 @@ class SfxManager {
   // One short envelope-shaped tone. peakGain/attack/decay are tuned per call
   // site below rather than exposed as a big options bag - every sfx in this
   // file is built from one to three of these stacked at small offsets.
+  //
+  // Every tone routes through a lowpass filter now (osc -> filter -> gain),
+  // not straight into the gain node - square/sawtooth waves are harmonically
+  // rich (odd/all harmonics up to Nyquist), which read as harsh/piercing
+  // once played through a bare envelope with no filtering at all, especially
+  // playClick since it fires on every single button press. filterFreq
+  // defaults to a fairly gentle 2400Hz; individual calls can raise it for
+  // sfx that still want some bite (crits, boss kill).
   private tone(
     freq: number,
     startOffsetSeconds: number,
     durationSeconds: number,
-    options: { type?: OscillatorType; peakGain?: number; freqEnd?: number } = {},
+    options: { type?: OscillatorType; peakGain?: number; freqEnd?: number; filterFreq?: number } = {},
   ): void {
-    if (this.muted || !this.unlocked) {
+    if (this.muted || this.backgroundMuted || !this.unlocked) {
       return;
     }
     const ctx = this.ensureContext();
@@ -84,40 +101,52 @@ class SfxManager {
     }
     const startAt = ctx.currentTime + startOffsetSeconds;
     const osc = ctx.createOscillator();
+    const filter = ctx.createBiquadFilter();
     const gainNode = ctx.createGain();
     osc.type = options.type ?? 'sine';
     osc.frequency.setValueAtTime(Math.max(1, freq), startAt);
     if (options.freqEnd !== undefined) {
       osc.frequency.exponentialRampToValueAtTime(Math.max(1, options.freqEnd), startAt + durationSeconds);
     }
+    filter.type = 'lowpass';
+    filter.frequency.value = options.filterFreq ?? 2400;
+    filter.Q.value = 0.5;
     const peak = options.peakGain ?? 0.2;
     // exponentialRamp can't start from/target exactly 0 - a tiny non-zero
     // floor is the standard trick for a click-free attack/release envelope.
+    // Attack floor raised from 0.02 to 0.035s - a slightly softer onset than
+    // the near-instant snap the old value gave every tone, which read as
+    // part of the overall harshness alongside the missing filter above.
     gainNode.gain.setValueAtTime(0.0001, startAt);
-    gainNode.gain.exponentialRampToValueAtTime(peak, startAt + Math.min(0.02, durationSeconds * 0.3));
+    gainNode.gain.exponentialRampToValueAtTime(peak, startAt + Math.min(0.035, durationSeconds * 0.35));
     gainNode.gain.exponentialRampToValueAtTime(0.0001, startAt + durationSeconds);
-    osc.connect(gainNode);
+    osc.connect(filter);
+    filter.connect(gainNode);
     gainNode.connect(this.masterGain ?? ctx.destination);
     osc.start(startAt);
     osc.stop(startAt + durationSeconds + 0.02);
   }
 
   private playHit(): void {
-    this.tone(220, 0, 0.06, { type: 'square', peakGain: 0.14, freqEnd: 90 });
+    // square -> triangle: this fires on nearly every attack (the game's most
+    // frequent sfx by far), so it's the one where harshness compounds the
+    // fastest - triangle keeps the percussive downward-pitch character
+    // without square's harsh odd-harmonic buzz.
+    this.tone(220, 0, 0.06, { type: 'triangle', peakGain: 0.13, freqEnd: 90 });
   }
 
   private playCrit(): void {
-    this.tone(760, 0, 0.09, { type: 'square', peakGain: 0.2, freqEnd: 240 });
-    this.tone(1140, 0.02, 0.06, { type: 'triangle', peakGain: 0.14 });
+    this.tone(760, 0, 0.09, { type: 'square', peakGain: 0.17, freqEnd: 240, filterFreq: 3200 });
+    this.tone(1140, 0.02, 0.06, { type: 'triangle', peakGain: 0.13 });
   }
 
   private playEnemyDeath(): void {
-    this.tone(200, 0, 0.14, { type: 'sawtooth', peakGain: 0.14, freqEnd: 45 });
+    this.tone(200, 0, 0.14, { type: 'sawtooth', peakGain: 0.13, freqEnd: 45, filterFreq: 1800 });
   }
 
   private playBossKill(): void {
-    this.tone(90, 0, 0.5, { type: 'sawtooth', peakGain: 0.28, freqEnd: 30 });
-    this.tone(660, 0.02, 0.2, { type: 'square', peakGain: 0.16, freqEnd: 200 });
+    this.tone(90, 0, 0.5, { type: 'sawtooth', peakGain: 0.26, freqEnd: 30, filterFreq: 1600 });
+    this.tone(660, 0.02, 0.2, { type: 'triangle', peakGain: 0.15, freqEnd: 200 });
   }
 
   private playHeroDown(): void {
@@ -191,7 +220,11 @@ class SfxManager {
   }
 
   playClick(): void {
-    this.tone(600, 0, 0.03, { type: 'square', peakGain: 0.06 });
+    // Every .btn/.hud-btn click in the whole app routes through this (see
+    // App.tsx's global click listener) - square at 600Hz was the single
+    // most-repeated harsh sound in the game. sine has none of square's
+    // extra harmonics, so this is now just a soft, low blip.
+    this.tone(520, 0, 0.03, { type: 'sine', peakGain: 0.045 });
   }
 }
 

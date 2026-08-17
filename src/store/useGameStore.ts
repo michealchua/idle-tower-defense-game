@@ -34,6 +34,13 @@ import { unlockPet as unlockPetInEngine, deployPet as deployPetInEngine, undeplo
 import { upgradeTalent as upgradeTalentInEngine } from '../engine/systems/TalentSystem';
 import { upgradeAscensionShopNode as upgradeAscensionShopNodeInEngine } from '../engine/systems/AscensionShopSystem';
 import { ascend as ascendInEngine, canAscend } from '../engine/systems/AscensionSystem';
+import {
+  hasUnseenSkills,
+  hasUnseenPets,
+  markSkillsSeen as markSkillsSeenInEngine,
+  markPetsSeen as markPetsSeenInEngine,
+  markEquipmentSeen as markEquipmentSeenInEngine,
+} from '../engine/systems/NotificationSystem';
 import { ascensionConfig } from '../data/ascensionConfig';
 import { recomputeHeroStats, getDeployedHeroes } from '../engine/systems/HeroStatsSystem';
 import { advanceToNextWave, getGlobalWaveNumber, retryCurrentWave, tickWaveProgress } from '../engine/systems/WaveSystem';
@@ -104,6 +111,9 @@ function snapshotGameState(state: GameState) {
     ascensionShopLevels: { ...state.ascensionShopLevels },
     diamonds: state.diamonds,
     canAscend: canAscend(state),
+    hasUnseenSkills: hasUnseenSkills(state),
+    hasUnseenPets: hasUnseenPets(state),
+    unseenEquipmentCount: state.unseenEquipmentCount,
     heroShards: { ...state.heroShards },
     heroStars: { ...state.heroStars },
     petShards: { ...state.petShards },
@@ -160,6 +170,15 @@ interface GameStore {
   upgradeAscensionShopNode: (id: AscensionShopId) => void;
   diamonds: number;
   canAscend: boolean;
+  // Nav-tab red-dot flags - see NotificationSystem.ts. markSkillsSeen/
+  // markPetsSeen/markEquipmentSeen are called from App.tsx's handleTabClick
+  // when the corresponding panel opens.
+  hasUnseenSkills: boolean;
+  hasUnseenPets: boolean;
+  unseenEquipmentCount: number;
+  markSkillsSeen: () => void;
+  markPetsSeen: () => void;
+  markEquipmentSeen: () => void;
   heroShards: Record<string, number>;
   heroStars: Record<string, number>;
   petShards: Record<string, number>;
@@ -308,6 +327,18 @@ export const useGameStore = create<GameStore>()(
     if (unlockPetInEngine(gameState, petId)) {
       set(snapshotGameState(gameState));
     }
+  },
+  markSkillsSeen: () => {
+    markSkillsSeenInEngine(gameState);
+    set(snapshotGameState(gameState));
+  },
+  markPetsSeen: () => {
+    markPetsSeenInEngine(gameState);
+    set(snapshotGameState(gameState));
+  },
+  markEquipmentSeen: () => {
+    markEquipmentSeenInEngine(gameState);
+    set(snapshotGameState(gameState));
   },
   deployPet: (petId) => {
     const didDeploy = deployPetInEngine(gameState, petId);

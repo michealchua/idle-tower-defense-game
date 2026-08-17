@@ -96,6 +96,14 @@ export function advanceToNextWave(state: GameState): void {
 // went down) triggers - never isGameOver. Same chapter/waveInChapter, so
 // hero/gear/gold progress carries over but the attempt starts fresh.
 export function retryCurrentWave(state: GameState): void {
+  if (state.wave.isBossWave) {
+    // Failing a boss wave re-surfaces tutorialConfig.ts's one-shot 'bossPrep'
+    // equipment reminder even if it was already dismissed once - a lost
+    // boss fight is real evidence the player wasn't ready, worth nudging
+    // again rather than trusting the first (possibly ignored) dismissal
+    // forever. Only boss waves do this; a normal-wave retry doesn't touch it.
+    state.completedTutorialStepIds = state.completedTutorialStepIds.filter((id) => id !== 'bossPrep');
+  }
   configureWaveShape(state.wave);
   resetBattlefieldForWave(state);
 }

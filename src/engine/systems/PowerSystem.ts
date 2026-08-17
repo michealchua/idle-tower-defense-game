@@ -1,6 +1,5 @@
 import { enemyScalingConfig, getScalingMultiplier } from '../../data/enemyScalingConfig';
 import { heroBaseConfig } from '../../data/heroConfig';
-import { baselineSquadSize } from '../../data/squadConfig';
 import { getDeployedHeroes } from './HeroStatsSystem';
 import { getGlobalWaveNumber } from './WaveSystem';
 import type { GameState, HeroState, WaveState } from '../types';
@@ -24,13 +23,16 @@ export function getTeamPower(state: GameState): number {
   return getDeployedHeroes(state).reduce((sum, hero) => sum + getHeroPower(hero), 0);
 }
 
-// A full starting squad (squadConfig.baselineSquadSize) of fresh level-1
-// heroes, in getHeroPower's units - the "you're expected to have this much
-// power by stage 1" baseline every other stage's recommendation scales off.
-function getBaselineSquadPower(): number {
+// A fresh level-1 protagonist, in getHeroPower's units - the "you're
+// expected to have this much power by stage 1" baseline every other stage's
+// recommendation scales off. Single-protagonist redesign: this used to
+// multiply by squadConfig.baselineSquadSize (a full 5-hero squad), which
+// left "recommended power" reading ~5x higher than a single hero could ever
+// reach - not an intentional difficulty signal, just a leftover from the
+// old multi-hero design.
+function getBaselineHeroPower(): number {
   const dps = heroBaseConfig.attackDamage * heroBaseConfig.attackSpeed * (1 + heroBaseConfig.criticalChance);
-  const baselineHeroPower = dps * 10 + heroBaseConfig.maxHp * 0.5;
-  return baselineHeroPower * baselineSquadSize;
+  return dps * 10 + heroBaseConfig.maxHp * 0.5;
 }
 
 // Recommended team power for a given stage - deliberately stage-only (not
@@ -43,5 +45,5 @@ function getBaselineSquadPower(): number {
 export function getRecommendedPowerForStage(wave: WaveState): number {
   const stageIndex = getGlobalWaveNumber(wave);
   const stageScore = stageIndex * enemyScalingConfig.stage.weight;
-  return Math.round(getBaselineSquadPower() * getScalingMultiplier(stageScore));
+  return Math.round(getBaselineHeroPower() * getScalingMultiplier(stageScore));
 }

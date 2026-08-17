@@ -18,12 +18,14 @@ import EquipmentDropToast from './components/EquipmentDropToast';
 import { getBiomeForChapter } from './data/biomeConfig';
 import { formatBigNumber } from './utils/scaling';
 import { isPanelUnlocked, type PanelId } from './data/unlockConditionConfig';
+import { dailyQuestIds, dailyQuestConfig } from './data/dailyQuestConfig';
 import { getActiveTutorialStep } from './data/tutorialConfig';
 import { getGlobalWaveNumber } from './engine/systems/WaveSystem';
 import { setWindowMode as applyWindowMode } from './utils/windowMode';
 import { t } from './locales/i18n';
 import { useGameStore } from './store/useGameStore';
 import { sfxManager } from './audio/SfxManager';
+import { audioManager } from './audio/AudioManager';
 import { useAnimatedNumber } from './components/useAnimatedNumber';
 import {
   IconStar,
@@ -101,6 +103,30 @@ function App() {
   const pendingSfxEvents = useGameStore((state) => state.pendingSfxEvents);
   const biome = getBiomeForChapter(wave.chapter);
 
+  // Nav-tab red-dot inputs - see NotificationSystem.ts for skill/pet/
+  // equipment, otherwise a plain "is this actionable right now" read.
+  const skillPoints = useGameStore((state) => state.skillPoints);
+  const canAscendNow = useGameStore((state) => state.canAscend);
+  const hasUnseenSkills = useGameStore((state) => state.hasUnseenSkills);
+  const hasUnseenPets = useGameStore((state) => state.hasUnseenPets);
+  const unseenEquipmentCount = useGameStore((state) => state.unseenEquipmentCount);
+  const dailyQuestProgress = useGameStore((state) => state.dailyQuestProgress);
+  const dailyQuestClaimed = useGameStore((state) => state.dailyQuestClaimed);
+  const markSkillsSeen = useGameStore((state) => state.markSkillsSeen);
+  const markPetsSeen = useGameStore((state) => state.markPetsSeen);
+  const markEquipmentSeen = useGameStore((state) => state.markEquipmentSeen);
+  const hasUnclaimedDailyQuest = dailyQuestIds.some(
+    (id) => (dailyQuestProgress[id] ?? 0) >= dailyQuestConfig[id].targetAmount && !dailyQuestClaimed[id],
+  );
+  const tabNotification: Partial<Record<PanelId, boolean>> = {
+    hero: hasUnseenSkills,
+    pet: hasUnseenPets,
+    equipment: unseenEquipmentCount > 0,
+    talent: skillPoints > 0,
+    ascension: canAscendNow,
+    records: hasUnclaimedDailyQuest,
+  };
+
   // Drains GameState.pendingSfxEvents every time GameLoop's onTick produces a
   // new snapshot with a non-empty queue - the engine only ever pushes event
   // ids onto it (see EffectsSystem.queueSfx), this is the one place they
@@ -126,6 +152,31 @@ function App() {
     document.addEventListener('click', handleClickSfx, true);
     return () => document.removeEventListener('click', handleClickSfx, true);
   }, []);
+
+  // Background mute - silences BGM/SFX whenever the window isn't the one
+  // the player is actually looking at (OS-level focus lost, tab/window
+  // hidden) or the game is in stealth mode (shrunk to a corner, meant to run
+  // unobtrusively). Layered on top of, not instead of, the player's own
+  // mute toggle - see AudioManager/SfxManager's backgroundMuted doc comment.
+  // window.blur/focus and document.visibilitychange are plain DOM APIs that
+  // work the same in the packaged Electron shell (BrowserWindow's renderer
+  // is just a webpage) and the web build, so no Electron IPC is needed here.
+  useEffect(() => {
+    function applyBackgroundMuted(): void {
+      const shouldMute = document.hidden || !document.hasFocus() || windowMode === 'stealth';
+      audioManager.setBackgroundMuted(shouldMute);
+      sfxManager.setBackgroundMuted(shouldMute);
+    }
+    applyBackgroundMuted();
+    window.addEventListener('blur', applyBackgroundMuted);
+    window.addEventListener('focus', applyBackgroundMuted);
+    document.addEventListener('visibilitychange', applyBackgroundMuted);
+    return () => {
+      window.removeEventListener('blur', applyBackgroundMuted);
+      window.removeEventListener('focus', applyBackgroundMuted);
+      document.removeEventListener('visibilitychange', applyBackgroundMuted);
+    };
+  }, [windowMode]);
   // "剥洋葱" pacing (unlockConditionConfig.panelUnlockWave) - only render tab
   // buttons for panels the run has actually reached, instead of exposing
   // every system from wave 1.
@@ -182,6 +233,16 @@ function App() {
     setActivePanel(tabId);
     if (activeTutorialStep?.targetSelector === `nav-${tabId}`) {
       completeTutorialStep(activeTutorialStep.id);
+    }
+    // Clears that tab's red dot - talent/ascension/records need no explicit
+    // clear here, their dot is a direct read of actionable state that clears
+    // itself when spent/ascended/claimed (see tabNotification above).
+    if (tabId === 'hero') {
+      markSkillsSeen();
+    } else if (tabId === 'pet') {
+      markPetsSeen();
+    } else if (tabId === 'equipment') {
+      markEquipmentSeen();
     }
   }
 
@@ -299,6 +360,7 @@ function App() {
               <button key={tab.id} className="hud-btn" data-tutorial={`nav-${tab.id}`} onClick={() => handleTabClick(tab.id)}>
                 <span className="hud-btn-icon">
                   <tab.Icon />
+                  {tabNotification[tab.id] && <span className="nav-notification-dot" />}
                 </span>
                 <span>{t(tab.labelKey)}</span>
               </button>
@@ -312,6 +374,7 @@ function App() {
               <button key={tab.id} className="hud-btn" data-tutorial={`nav-${tab.id}`} onClick={() => handleTabClick(tab.id)}>
                 <span className="hud-btn-icon">
                   <tab.Icon />
+                  {tabNotification[tab.id] && <span className="nav-notification-dot" />}
                 </span>
                 <span>{t(tab.labelKey)}</span>
               </button>

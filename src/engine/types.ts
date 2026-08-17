@@ -324,6 +324,16 @@ export interface GameState {
   unlockedHeroIds: string[];
   unlockedPetIds: string[];
   deployedHeroIds: string[];
+  // Nav-tab red-dot tracking (NotificationSystem.ts) - ids the player has
+  // already looked at (opened the relevant panel since obtaining them), so
+  // the dot only shows for genuinely new items rather than every owned one
+  // forever. seenSkillIds starts pre-seeded with the protagonist's starter
+  // skills (see GameState.ts) so a fresh save doesn't open with a dot.
+  // Equipment has no stable per-item id worth tracking this way (items are
+  // consumed by equip/sell), so it's a plain unseen-drop counter instead.
+  seenSkillIds: string[];
+  seenPetIds: string[];
+  unseenEquipmentCount: number;
   // The one pet (at most) drawing its auraEffect (petRosterConfig.ts,
   // PetAuraSystem.tickPetAura) - separate from the passive-bonus split
   // above, which every owned pet participates in regardless of this. null

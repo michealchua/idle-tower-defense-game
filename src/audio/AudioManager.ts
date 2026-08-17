@@ -11,19 +11,69 @@ const BGM_ENABLED = true;
 // for the mute button, read isMuted() into local state to re-render an icon.
 class AudioManager {
   private audioEl: HTMLAudioElement | null = null;
+  private audioCtx: AudioContext | null = null;
   private currentTrack: string | null = null;
   private muted = false;
+  // Separate from `muted` (the player's own mute toggle) - App.tsx sets this
+  // from window blur/visibilitychange and stealth-mode, so backgrounding the
+  // app silences BGM without touching (or being confused with) the player's
+  // manual preference. Effective mute is muted || backgroundMuted; leaving
+  // the background window/stealth mode restores whatever `muted` already was
+  // instead of unconditionally unmuting.
+  private backgroundMuted = false;
   private unlocked = false;
   private volume = 0.4;
+
+  private applyMuted(): void {
+    if (this.audioEl) {
+      this.audioEl.muted = this.muted || this.backgroundMuted;
+    }
+  }
 
   private ensureElement(): HTMLAudioElement {
     if (!this.audioEl) {
       this.audioEl = new Audio();
       this.audioEl.loop = true;
       this.audioEl.volume = this.volume;
-      this.audioEl.muted = this.muted;
+      this.audioEl.muted = this.muted || this.backgroundMuted;
+      this.setupFilterGraph(this.audioEl);
     }
     return this.audioEl;
+  }
+
+  // Routes the element's output through a gentle lowpass filter instead of
+  // straight to the speakers - the tracks themselves (scripts/pixel_music.py,
+  // offline-rendered) lean on square/sawtooth oscillators for several biomes
+  // (boss/volcano/demon-abyss pair square+saw specifically), which read as
+  // harsh/piercing at any volume. This softens whatever's actually playing
+  // without needing to re-render the source files (this project has no
+  // Python available at runtime to do that anyway). createMediaElementSource
+  // can only ever be called once per <audio> element, hence tying this to
+  // ensureElement's one-time creation rather than calling it per track.
+  private setupFilterGraph(el: HTMLAudioElement): void {
+    if (typeof AudioContext === 'undefined') {
+      return;
+    }
+    try {
+      const ctx = new AudioContext();
+      const source = ctx.createMediaElementSource(el);
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.value = 3400;
+      filter.Q.value = 0.4;
+      source.connect(filter);
+      filter.connect(ctx.destination);
+      this.audioCtx = ctx;
+    } catch {
+      // Some environments may not support routing a media element through
+      // Web Audio at all - BGM just plays unfiltered in that case, same as
+      // before this existed.
+    }
+  }
+
+  setBackgroundMuted(muted: boolean): void {
+    this.backgroundMuted = muted;
+    this.applyMuted();
   }
 
   // Applies immediately to the live element (not just future ones) - the
@@ -65,6 +115,13 @@ class AudioManager {
       return;
     }
     this.unlocked = true;
+    // The filter graph's AudioContext starts suspended until a user gesture,
+    // same browser policy as playback itself - resume it here alongside
+    // el.play() below, or the element would play into a suspended graph and
+    // stay silent despite `unlocked` being true.
+    if (this.audioCtx?.state === 'suspended') {
+      this.audioCtx.resume().catch(() => {});
+    }
     if (this.currentTrack && !this.muted) {
       this.ensureElement().play().catch(() => {});
     }
@@ -73,7 +130,7 @@ class AudioManager {
   toggleMute(): boolean {
     this.muted = !this.muted;
     const el = this.ensureElement();
-    el.muted = this.muted;
+    this.applyMuted();
     if (!this.muted && this.unlocked && this.currentTrack) {
       el.play().catch(() => {});
     }

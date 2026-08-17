@@ -32,9 +32,12 @@ export const enemyScalingConfig = {
     phase1EndScore: 22.5,
     phase2EndScore: 60,
     phase3EndScore: 105,
-    // Phase 1 (0..phase1EndScore): flat linear growth, easy enough to clear
-    // by just spending gold on upgrades as it comes in.
-    linearRate: 0.1,
+    // Phase 1 (0..phase1EndScore): linear growth. Raised from 0.1 (which
+    // left chapters 1-15 feeling nearly flat, on top of enemyConfig.ts's
+    // base stats also being low) - still clearable by spending gold on
+    // upgrades as it comes in, just noticeably steeper: by phase1EndScore
+    // (chapter ~15) enemies are now ~6x tougher instead of ~3.25x.
+    linearRate: 0.22,
     // Phase 2 (phase1EndScore..phase2EndScore): light exponential per score
     // point - upgrades alone start falling behind, targeted play helps.
     phase2Growth: 1.06,
